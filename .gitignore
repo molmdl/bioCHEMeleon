@@ -1,0 +1,13 @@
+./Pymol-script-repo/**
+
+*.env
+*.pyc
+*.npy
+*.npz
+
+**/secrets.toml
+**/auth.json
+
+#./dev_env_note.txt
+./3rd_party_lib/**
+./tmp
