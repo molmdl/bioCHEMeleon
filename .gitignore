@@ -1,3 +1,4 @@
+Pymol-script-repo
 ./Pymol-script-repo/**
 
 *.env
@@ -10,4 +11,4 @@
 
 #./dev_env_note.txt
 ./3rd_party_lib/**
-./tmp
+tmp
