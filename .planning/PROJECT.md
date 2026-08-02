@@ -1,4 +1,4 @@
-# CHEMeleon
+# bioCHEMeleon
 
 ## What This Is
 
