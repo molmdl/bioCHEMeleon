@@ -33,10 +33,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. The user installs the plugin via PyMOL's Plugin Manager and PyMOL loads it on launch without errors (verified end-to-end via the `setenv.bat` → Windows-conda PyMOL path)
   2. A "bioCHEMeleon" item appears under the Plugins menu; clicking it opens the plugin dialog window
   3. The dialog shows a tabbed interface with "Setup" and "Game status" tabs (placeholder content is acceptable)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 01-01: TBD during planning
+- [ ] 01-01-PLAN.md — Create the biochemeleon/ package (6 files: entry point + singleton + PluginDialog with 2 placeholder tabs), WSL syntax+Pitfall-1/11 gate, then Windows-PyMOL install + smoke test
 
 ### Phase 2: Setup Tab Configuration & Bundled Demos
 **Goal**: The user can fully configure every game parameter in the Setup tab and load bundled demo molecules — the entire pre-game configuration experience.
@@ -171,7 +171,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Plugin Bootstrap & Dialog Scaffold | 0/TBD | Not started | - |
+| 1. Plugin Bootstrap & Dialog Scaffold | 0/1 | Planned | - |
 | 2. Setup Tab Configuration & Bundled Demos | 0/TBD | Not started | - |
 | 3. Mutation Safety & Hider Registry Foundation | 0/TBD | Not started | - |
 | 4. MVP Core Loop (Sphere) | 0/TBD | Not started | - |
