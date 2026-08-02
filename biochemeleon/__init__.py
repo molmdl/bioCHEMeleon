@@ -21,8 +21,8 @@ def run_plugin_gui():
     """Lazily create and show the plugin dialog (singleton).
 
     Uses dialog.show() (modeless) so the 3D viewer stays interactive while the
-    dialog is open — required by the Phase-4 click-to-find loop. NEVER use
-    dialog.exec_() (modal — blocks the PyMOL event loop and the viewer).
+    dialog is open — required by the Phase-4 click-to-find loop. NEVER use the
+    modal form (blocks the PyMOL event loop and the viewer).
     """
     global dialog
     if dialog is None:
@@ -47,7 +47,7 @@ class PluginDialog(QtWidgets.QDialog):
         self.setWindowTitle("bioCHEMeleon")
         self.setMinimumWidth(420)
 
-        # Tab widget (pattern from optimize.py:72-79 — QTabWidget replaces Pmw.NoteBook)
+        # Tab widget (pattern from optimize.py:72-79 — QTabWidget replaces the legacy notebook widget)
         self.tabs = QtWidgets.QTabWidget(self)
 
         # Lazy-import the tab widget classes inside __init__ so a bug in a
