@@ -12,7 +12,7 @@ bioCHEMeleon is a PyMOL 2.5.0 plugin that turns a loaded molecular object into a
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Plugin Bootstrap & Dialog Scaffold** - Install + menu item + empty tabbed dialog
+- [x] **Phase 1: Plugin Bootstrap & Dialog Scaffold** - Install + menu item + empty tabbed dialog
 - [ ] **Phase 2: Setup Tab Configuration & Bundled Demos** - Full Setup form + config buttons + bundled demo PDBs
 - [ ] **Phase 3: Mutation Safety & Hider Registry Foundation** - De-risk object mutation + registry (highest-risk area)
 - [ ] **Phase 4: MVP Core Loop (Sphere)** - THE core value: load → generate spheres → click-to-find → win
@@ -171,7 +171,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Plugin Bootstrap & Dialog Scaffold | 0/1 | Planned | - |
+| 1. Plugin Bootstrap & Dialog Scaffold | 1/1 | ✓ Complete | 2026-08-03 |
 | 2. Setup Tab Configuration & Bundled Demos | 0/TBD | Not started | - |
 | 3. Mutation Safety & Hider Registry Foundation | 0/TBD | Not started | - |
 | 4. MVP Core Loop (Sphere) | 0/TBD | Not started | - |

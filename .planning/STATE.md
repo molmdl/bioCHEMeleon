@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-08-02)
 
 **Core value:** The player can load a molecule, generate blended "hider" atoms that match the local representation style, and reliably find them by clicking — with a working timer and win condition.
-**Current focus:** Phase 1 — Plugin Bootstrap & Dialog Scaffold
+**Current focus:** Phase 2 — Setup Tab Configuration & Bundled Demos (next)
 
 ## Current Position
 
-Phase: 1 of 10 (Plugin Bootstrap & Dialog Scaffold)
-Plan: 1 of 1 in current phase
-Status: Phase 1 complete (pending verification)
-Last activity: 2026-08-03 — Phase 1 plan 01-01 executed (plugin shell + smoke test approved)
+Phase: 1 of 10 COMPLETE → ready for Phase 2
+Plan: 1 of 1 in Phase 1 (verified passed 5/5)
+Status: Phase 1 verified complete; ready to plan Phase 2
+Last activity: 2026-08-03 — Phase 1 verified (5/5 must-haves, PLUGIN-01/02/03 satisfied)
 
 Progress: [█░░░░░░░░░] 10%
 
@@ -62,6 +62,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-03 (Phase 1 plan 01-01 executed + smoke test approved)
-Stopped at: Phase 1 plan 01-01 SUMMARY written; pending Phase 1 verification
+Last session: 2026-08-03 (Phase 1 executed, smoke test approved, verified 5/5 passed)
+Stopped at: Phase 1 COMPLETE (verified). Ready to discuss/plan Phase 2.
 Resume file: .planning/phases/01-plugin-bootstrap-dialog-scaffold/01-01-SUMMARY.md

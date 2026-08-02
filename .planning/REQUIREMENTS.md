@@ -9,9 +9,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Plugin Installation
 
-- [ ] **PLUGIN-01**: Plugin installs as a standard PyMOL plugin via the GUI Plugin Manager (universal across platforms; works with Windows conda PyMOL accessed via setenv.bat from WSL)
-- [ ] **PLUGIN-02**: Plugin registers a menu item "bioCHEMeleon" via `__init_plugin__` + `addmenuitemqt`; when the user manually activates the plugin (clicks the menu item), the setup window pops up
-- [ ] **PLUGIN-03**: Plugin packaged as a `biochemeleon/` package directory with `__init__.py` (multi-file: gui_setup, gui_game, wizard, game, demos)
+- [x] **PLUGIN-01**: Plugin installs as a standard PyMOL plugin via the GUI Plugin Manager (universal across platforms; works with Windows conda PyMOL accessed via setenv.bat from WSL)
+- [x] **PLUGIN-02**: Plugin registers a menu item "bioCHEMeleon" via `__init_plugin__` + `addmenuitemqt`; when the user manually activates the plugin (clicks the menu item), the setup window pops up
+- [x] **PLUGIN-03**: Plugin packaged as a `biochemeleon/` package directory with `__init__.py` (multi-file: gui_setup, gui_game, wizard, game, demos)
 
 ### Setup Tab — Configuration
 
@@ -129,9 +129,9 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PLUGIN-01 | Phase 1 | Pending |
-| PLUGIN-02 | Phase 1 | Pending |
-| PLUGIN-03 | Phase 1 | Pending |
+| PLUGIN-01 | Phase 1 | Complete |
+| PLUGIN-02 | Phase 1 | Complete |
+| PLUGIN-03 | Phase 1 | Complete |
 | SETUP-01 | Phase 2 | Pending |
 | SETUP-02 | Phase 2 | Pending |
 | SETUP-03 | Phase 2 | Pending |
