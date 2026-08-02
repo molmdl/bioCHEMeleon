@@ -1,0 +1,72 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "small_model": "synthetic/hf:openai/gpt-oss-120b",
+  "agent": {
+    "gsd-planner": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-plan-checker": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-phase-researcher": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-roadmapper": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-project-researcher": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-research-synthesizer": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-codebase-mapper": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-executor": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-debugger": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-verifier": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-integration-checker": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "gsd-set-profile": { "model": "synthetic/hf:openai/gpt-oss-120b" },
+    "gsd-settings": { "model": "synthetic/hf:openai/gpt-oss-120b" },
+    "gsd-set-model": { "model": "synthetic/hf:openai/gpt-oss-120b" },
+    "cp-gsd-planner": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-plan-checker": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-phase-researcher": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-roadmapper": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-project-researcher": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-research-synthesizer": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-codebase-mapper": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-executor": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-debugger": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-verifier": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-integration-checker": { "model": "synthetic/hf:zai-org/GLM-5.2" },
+    "cp-gsd-set-profile": { "model": "synthetic/hf:openai/gpt-oss-120b" },
+    "cp-gsd-settings": { "model": "synthetic/hf:openai/gpt-oss-120b" },
+    "cp-gsd-set-model": { "model": "synthetic/hf:openai/gpt-oss-120b" }
+  },
+  "permission": {
+    "external_directory": {
+      "*": "ask",
+      "~/.local/share/opencode/tool-output/*": "allow",
+      "~/.local/share/opencode/plans/*": "allow",
+      "~/.config/opencode/get-shit-done/**": "allow"
+    },
+    "*": "ask",
+    "read": {
+      "*": "allow",
+      "*.env": "ask",
+      "*.env.*": "ask",
+      "*.env.example": "allow"
+    },
+    "bash": {
+      "*": "ask",
+      "git *": "allow",
+      "git push*": "ask",
+      "git pull*": "ask",
+      "git merge*": "ask",
+      "git rebase*": "ask",
+      "git reset*": "ask",
+      "git checkout*": "ask",
+      "npm *": "ask",
+      "rm *": "deny",
+      "pip *": "ask",
+      "pip3 *": "ask",
+      "apt *": "ask",
+      "mv *": "ask",
+      "conda *": "ask",
+      "wget *": "ask",
+      "curl *": "ask",
+      "python *": "ask"
+    },
+    "edit": {
+      "*": "ask"
+    }
+  }
+}
