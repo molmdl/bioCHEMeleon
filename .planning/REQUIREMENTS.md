@@ -125,17 +125,62 @@ Explicitly excluded. Documented to prevent scope creep.
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Which phases cover which requirements. Updated during roadmap creation (2026-08-03).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (to be populated during roadmap creation) | | |
+| PLUGIN-01 | Phase 1 | Pending |
+| PLUGIN-02 | Phase 1 | Pending |
+| PLUGIN-03 | Phase 1 | Pending |
+| SETUP-01 | Phase 2 | Pending |
+| SETUP-02 | Phase 2 | Pending |
+| SETUP-03 | Phase 2 | Pending |
+| SETUP-04 | Phase 2 | Pending |
+| SETUP-05 | Phase 2 | Pending |
+| SETUP-06 | Phase 2 | Pending |
+| DEMO-01 | Phase 2 | Pending |
+| BTN-01 | Phase 2 | Pending |
+| BTN-02 | Phase 2 | Pending |
+| BTN-03 | Phase 2 | Pending |
+| BTN-04 | Phase 2 | Pending |
+| HIDER-01 | Phase 3 | Pending |
+| HIDER-02 | Phase 3 | Pending |
+| HIDER-06 | Phase 3 | Pending |
+| LOOP-01 | Phase 4 | Pending |
+| LOOP-02 | Phase 4 | Pending |
+| LOOP-03 | Phase 4 | Pending |
+| HIDER-04 | Phase 4 | Pending |
+| BTN-07 | Phase 4 | Pending |
+| GAME-01 | Phase 4 | Pending |
+| GAME-02 | Phase 4 | Pending |
+| GAME-03 | Phase 4 | Pending |
+| HIDER-03 | Phase 5 | Pending |
+| HIDER-05 | Phase 5 | Pending |
+| GAME-05 | Phase 6 | Pending |
+| GAME-06 | Phase 6 | Pending |
+| GAME-07 | Phase 6 | Pending |
+| DIFF-01 | Phase 6 | Pending |
+| GAME-08 | Phase 7 | Pending |
+| GAME-10 | Phase 7 | Pending |
+| BTN-06 | Phase 7 | Pending |
+| DIFF-04 | Phase 7 | Pending |
+| GAME-09 | Phase 8 | Pending |
+| GAME-04 | Phase 8 | Pending |
+| BTN-05 | Phase 8 | Pending |
+| DEMO-02 | Phase 9 | Pending |
+| DEMO-03 | Phase 9 | Pending |
+| DEMO-04 | Phase 9 | Pending |
+| DIFF-05 | Phase 9 | Pending |
+| UX-01 | Phase 10 | Pending |
+| UX-02 | Phase 10 | Pending |
+| DIFF-02 | Phase 10 | Pending |
+| DIFF-03 | Phase 10 | Pending |
 
 **Coverage:**
-- v1 requirements: 41 total
-- Mapped to phases: 0
-- Unmapped: 41 ⚠️
+- v1 requirements: 46 total (previously miscounted as 41 — the DIFF section's 5 requirements were not included in the prior count; 41 + 5 = 46)
+- Mapped to phases: 46
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-08-02*
-*Last updated: 2026-08-02 after initial definition*
+*Last updated: 2026-08-03 after roadmap creation (traceability populated)*
