@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-08-02)
 ## Current Position
 
 Phase: 1 of 10 (Plugin Bootstrap & Dialog Scaffold)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-08-03 — Roadmap created (10 phases, 46 requirements mapped)
+Plan: 1 of 1 in current phase
+Status: Phase 1 complete (pending verification)
+Last activity: 2026-08-03 — Phase 1 plan 01-01 executed (plugin shell + smoke test approved)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 10%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: — min
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: ~35 min
+- Total execution time: ~0.6 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| — | 0 | — | — |
+| 1. Plugin Bootstrap & Dialog Scaffold | 1 | ~35 min | ~35 min |
 
 **Recent Trend:**
-- Last 5 plans: —
-- Trend: — (no data yet)
+- Last 5 plans: 01-01: ~35min (plugin shell)
+- Trend: baseline (1 plan)
 
 *Updated after each plan completion*
 
@@ -45,6 +45,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Roadmap]: Phase order de-risks object mutation (Phase 3) BEFORE generators, and ships the sphere MVP core loop (Phase 4) ASAP per PROJECT.md core value
 - [Roadmap]: Cartoon/ribbon generators (Phase 5) flagged as highest-risk / highest-research area
 - [Roadmap]: Hider sentinels `segi='GAME'` + `b=-999` are the cleanup-safety and session-reload mechanism
+- [Phase 1]: PluginDialog lives in `__init__.py` (Option A) — may extract to `gui_dialog.py` if it grows in Phase 2
+- [Phase 1]: Install workflow = copy `biochemeleon/` to `tmp/` + Plugin Manager (clean-source); scan-path/junction is an alternative for live-edit
+- [Phase 1]: All GUI modules use `from pymol.Qt import` (never `from PyQt5 import`); entry point is `__init_plugin__(app=None)`; dialog is modeless `.show()` (never `.exec_()`)
+- [Phase 1]: 3 stub modules (wizard.py/game.py/demos.py) created as placeholders; demos.py carries the `to_windows_path()` Phase-2 TODO
 
 ### Pending Todos
 
@@ -58,6 +62,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-03 (roadmap creation)
-Stopped at: ROADMAP.md + STATE.md written; REQUIREMENTS.md traceability updated; awaiting user approval of roadmap
-Resume file: None
+Last session: 2026-08-03 (Phase 1 plan 01-01 executed + smoke test approved)
+Stopped at: Phase 1 plan 01-01 SUMMARY written; pending Phase 1 verification
+Resume file: .planning/phases/01-plugin-bootstrap-dialog-scaffold/01-01-SUMMARY.md
