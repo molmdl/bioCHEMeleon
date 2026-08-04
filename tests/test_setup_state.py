@@ -18,7 +18,7 @@ if 'pymol' not in sys.modules:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from biochemeleon.setup_state import (
-    GAME_REPS, DEMO_MANIFEST, DEFAULTS, SETUP_FORMAT,
+    GAME_REPS, DEMO_MANIFEST, DEFAULTS, SETUP_FORMAT, PDB_POOL,
     hider_count_cap, randomize_state, validate_state,
 )
 
@@ -238,6 +238,194 @@ class TestValidateState(unittest.TestCase):
         state = {**DEFAULTS}
         result = validate_state(state)
         self.assertIsNot(result, state)
+
+
+class TestPdbPool(unittest.TestCase):
+    """Test the PDB_POOL constant (34 verified RCSB entries)."""
+
+    def test_is_list(self):
+        self.assertIsInstance(PDB_POOL, list)
+
+    def test_count_in_range(self):
+        # 34 expected; allow 30-40 for forward-compat
+        self.assertGreaterEqual(len(PDB_POOL), 30)
+        self.assertLessEqual(len(PDB_POOL), 40)
+
+    def test_all_lowercase_alnum_4char(self):
+        for pid in PDB_POOL:
+            self.assertEqual(len(pid), 4,
+                msg="PDB id %r is not 4 chars" % pid)
+            self.assertTrue(pid.isalnum(),
+                msg="PDB id %r is not alphanumeric" % pid)
+            self.assertTrue(pid.islower(),
+                msg="PDB id %r is not lowercase" % pid)
+
+    def test_no_duplicates(self):
+        self.assertEqual(len(set(PDB_POOL)), len(PDB_POOL))
+
+    def test_contains_bundled_demos(self):
+        for did in ('1znf', '1xdn', '5e54', '1k8p', '2qbz', '4wb3'):
+            self.assertIn(did, PDB_POOL, msg="bundled demo %r missing" % did)
+
+    def test_mixed_categories(self):
+        # At least one each: protein, DNA, RNA, and two different hybrid
+        # classes (protein-DNA hybrid and DNA-oligosaccharide drug hybrid).
+        self.assertIn('1ubq', PDB_POOL)   # protein
+        self.assertIn('1bna', PDB_POOL)   # DNA
+        self.assertIn('1ehz', PDB_POOL)   # RNA
+        self.assertIn('1aay', PDB_POOL)   # protein-DNA hybrid
+        self.assertIn('1ekh', PDB_POOL)   # DNA-oligosaccharide drug hybrid
+
+
+class TestDefaultsExtended(unittest.TestCase):
+    """Test the 2 new DEFAULTS keys (lock_source, pdb_pool)."""
+
+    def test_lock_source_default(self):
+        self.assertEqual(DEFAULTS["lock_source"], False)
+
+    def test_pdb_pool_default(self):
+        self.assertEqual(DEFAULTS["pdb_pool"], PDB_POOL)
+
+    def test_has_11_keys(self):
+        self.assertEqual(len(DEFAULTS), 11)
+
+    def test_new_keys_present(self):
+        self.assertIn("lock_source", DEFAULTS)
+        self.assertIn("pdb_pool", DEFAULTS)
+
+
+class TestValidateStatePerRepSum(unittest.TestCase):
+    """Test that validate_state clamps per_rep sum to <= hider_count (Gap 2 pure)."""
+
+    def test_sum_clamped_high(self):
+        result = validate_state({"hider_count": 3, "per_rep": {"spheres": 5, "cartoon": 5}})
+        self.assertLessEqual(sum(result["per_rep"].values()), 3)
+
+    def test_sum_clamped_keeps_first(self):
+        # hider_count=2, per_rep has 3 entries of 1 each: first 2 kept, 3rd dropped
+        result = validate_state({"hider_count": 2, "per_rep": {"spheres": 1, "cartoon": 1, "lines": 1}})
+        self.assertEqual(result["per_rep"], {"spheres": 1, "cartoon": 1})
+
+    def test_sum_within_budget_unchanged(self):
+        # sum=5 <= hider_count=5, unchanged
+        result = validate_state({"hider_count": 5, "per_rep": {"spheres": 2, "cartoon": 3}})
+        self.assertEqual(result["per_rep"], {"spheres": 2, "cartoon": 3})
+
+    def test_sum_clamp_after_hider_count_clamp(self):
+        # hider_count=999 clamped to cap=2 (atom_count=100), then per_rep clamped to <= 2
+        result = validate_state({"hider_count": 999, "per_rep": {"spheres": 100}}, atom_count=100)
+        cap = hider_count_cap(100)
+        self.assertLessEqual(sum(result["per_rep"].values()), cap)
+
+    def test_empty_per_rep_unchanged(self):
+        self.assertEqual(validate_state({"hider_count": 5, "per_rep": {}})["per_rep"], {})
+
+
+class TestValidateStateNewFields(unittest.TestCase):
+    """Test lock_source + pdb_pool validation in validate_state."""
+
+    def test_lock_source_bool_coercion(self):
+        self.assertEqual(validate_state({"lock_source": 1})["lock_source"], True)
+
+    def test_lock_source_default_false(self):
+        self.assertEqual(validate_state({})["lock_source"], False)
+
+    def test_pdb_pool_default(self):
+        self.assertEqual(validate_state({})["pdb_pool"], PDB_POOL)
+
+    def test_pdb_pool_filters_invalid(self):
+        # lowercase, 4-char alnum, dedupe — 1UBQ lowercased to 1ubq dupes out
+        result = validate_state({"pdb_pool": ["1ubq", "INVALID", "12", "1UBQ", "1bna"]})
+        self.assertEqual(result["pdb_pool"], ["1ubq", "1bna"])
+
+    def test_pdb_pool_bounds_to_100(self):
+        result = validate_state({"pdb_pool": ["1ubq"] * 200})
+        self.assertLessEqual(len(result["pdb_pool"]), 100)
+
+    def test_pdb_pool_non_list_defaults(self):
+        self.assertEqual(validate_state({"pdb_pool": "not a list"})["pdb_pool"], PDB_POOL)
+
+    def test_pdb_pool_empty_defaults(self):
+        # empty user input -> DEFAULTS pool (Gap 4: never produce empty pool)
+        self.assertEqual(validate_state({"pdb_pool": []})["pdb_pool"], PDB_POOL)
+
+
+class TestRandomizeLockSource(unittest.TestCase):
+    """Test lock_source preserves target mode + identifier (Gap 3)."""
+
+    def test_lock_source_preserves_fetch(self):
+        locked = {"target_mode": "fetch", "pdb_code": "1ubq",
+                  "demo_id": "1znf", "selected_object": ""}
+        result = randomize_state(seed=42, lock_source=True, locked_state=locked)
+        self.assertEqual(result["target_mode"], "fetch")
+        self.assertEqual(result["pdb_code"], "1ubq")
+
+    def test_lock_source_preserves_loaded(self):
+        locked = {"target_mode": "loaded", "selected_object": "myobj",
+                  "pdb_code": "", "demo_id": "1znf"}
+        result = randomize_state(seed=42, lock_source=True, locked_state=locked)
+        self.assertEqual(result["target_mode"], "loaded")
+        self.assertEqual(result["selected_object"], "myobj")
+
+    def test_lock_source_preserves_demo(self):
+        locked = {"target_mode": "demo", "demo_id": "5e54",
+                  "selected_object": "", "pdb_code": ""}
+        result = randomize_state(seed=42, lock_source=True, locked_state=locked)
+        self.assertEqual(result["target_mode"], "demo")
+        self.assertEqual(result["demo_id"], "5e54")
+
+    def test_lock_source_still_randomizes_hiders(self):
+        locked = {"target_mode": "demo", "demo_id": "5e54",
+                  "selected_object": "", "pdb_code": ""}
+        r1 = randomize_state(seed=42, lock_source=True, locked_state=locked)
+        r2 = randomize_state(seed=99, lock_source=True, locked_state=locked)
+        # hider composition still randomizes (count or per_rep differs)
+        self.assertTrue(r1["hider_count"] != r2["hider_count"]
+                        or r1["per_rep"] != r2["per_rep"])
+
+    def test_lock_source_without_locked_state_ignored(self):
+        # must not crash; behaves like lock_source=False
+        result = randomize_state(seed=42, lock_source=True, locked_state=None)
+        self.assertIsInstance(result, dict)
+
+
+class TestRandomizePdbPool(unittest.TestCase):
+    """Test pdb_pool drives fetch mode (Gap 4)."""
+
+    def test_fetch_picks_from_pool(self):
+        result = randomize_state(seed=42, pdb_pool=["1ubq", "1znf", "5e54"])
+        if result["target_mode"] == "fetch":
+            self.assertIn(result["pdb_code"], ["1ubq", "1znf", "5e54"])
+
+    def test_fetch_never_empty_with_pool(self):
+        for seed in range(100):
+            result = randomize_state(seed=seed, pdb_pool=["1ubq", "1bna"])
+            self.assertFalse(result["target_mode"] == "fetch" and not result["pdb_code"],
+                msg="seed %d: fetch mode with empty pdb_code" % seed)
+
+    def test_empty_pool_avoids_fetch(self):
+        # empty pool -> never fetch mode (re-rolls to demo)
+        for seed in range(100):
+            result = randomize_state(seed=seed, pdb_pool=[])
+            self.assertNotEqual(result["target_mode"], "fetch",
+                msg="seed %d: empty pool should not produce fetch mode" % seed)
+
+    def test_pool_param_none_uses_defaults(self):
+        result = randomize_state(seed=42, pdb_pool=None)
+        if result["target_mode"] == "fetch":
+            self.assertIn(result["pdb_code"], PDB_POOL)
+
+    def test_fetch_picks_from_pool_non_empty(self):
+        pool = ["1ubq", "1bna", "1ehz", "1cqw"]
+        found_fetch = False
+        for seed in range(200):
+            result = randomize_state(seed=seed, pdb_pool=pool)
+            if result["target_mode"] == "fetch":
+                found_fetch = True
+                self.assertIn(result["pdb_code"], pool,
+                    msg="seed %d: fetch pdb_code not in pool" % seed)
+        self.assertTrue(found_fetch,
+            msg="fetch mode never reached with non-empty pool across 200 seeds")
 
 
 if __name__ == '__main__':
