@@ -13,7 +13,7 @@ bioCHEMeleon is a PyMOL 2.5.0 plugin that turns a loaded molecular object into a
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Plugin Bootstrap & Dialog Scaffold** - Install + menu item + empty tabbed dialog
-- [ ] **Phase 2: Setup Tab Configuration & Bundled Demos** - Full Setup form + config buttons + bundled demo PDBs
+- [x] **Phase 2: Setup Tab Configuration & Bundled Demos** - Full Setup form + config buttons + bundled demo PDBs
 - [ ] **Phase 3: Mutation Safety & Hider Registry Foundation** - De-risk object mutation + registry (highest-risk area)
 - [ ] **Phase 4: MVP Core Loop (Sphere)** - THE core value: load → generate spheres → click-to-find → win
 - [ ] **Phase 5: Line/Stick & Cartoon Generators** - The harder blend-in generators (cartoon = L-complexity swing)
@@ -47,13 +47,16 @@ Plans:
   2. The user can set the hider count (capped to a sane max), toggle "lock current scene", assign per-rep hider counts (or leave them random), and toggle difficulty
   3. The user can Reset to defaults, Randomize the params, Save Setup to a file, and Load Setup from a file
   4. Bundled small demo PDBs (1znf, 1xdn, 5E54, 1K8P, 2QBZ, 4WB3) load and render in the viewer with sources cited
-**Plans**: 4 plans
+**Plans**: 7 plans (4 original + 3 gap closures)
 
 Plans:
 - [x] 02-01-PLAN.md — TDD the pure setup state model (DEFAULTS, hider_count_cap, randomize_state, validate_state, GAME_REPS, DEMO_MANIFEST)
 - [x] 02-02-PLAN.md — Bundle 6 demo PDBs from RCSB + write SOURCES.md citations (DEMO-01)
 - [x] 02-03-PLAN.md — Populate demos.py (cmd-coupled helpers + to_windows_path) and gui_setup.py (full SetupTab form)
-- [ ] 02-04-PLAN.md — Windows PyMOL smoke test of the 4 success criteria (human-verify checkpoint)
+- [x] 02-04-PLAN.md — Windows PyMOL smoke test of the 4 success criteria (human-verify checkpoint)
+- [x] 02-05-PLAN.md — Gap closure: enforce hider-count cap, bound per-rep sum, add lock-source + PDB-pool editor
+- [x] 02-06-PLAN.md — Gap closure: replace pool QPlainTextEdit with QListWidget + Add/Edit/Remove buttons + tighten _validate_pdb_code to 4-char
+- [x] 02-07-PLAN.md — Gap closure: add "Choose random" button to pick a random pool entry into the fetch field
 
 ### Phase 3: Mutation Safety & Hider Registry Foundation
 **Goal**: The plugin can safely insert hider atoms into an existing object and track them — de-risking the highest-uncertainty area BEFORE any generator is built on it, with a smoke test proving backup → mutate → remove → restore leaves the original structure intact.
@@ -175,7 +178,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Plugin Bootstrap & Dialog Scaffold | 1/1 | ✓ Complete | 2026-08-03 |
-| 2. Setup Tab Configuration & Bundled Demos | 3/4 | In progress | - |
+| 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
 | 3. Mutation Safety & Hider Registry Foundation | 0/TBD | Not started | - |
 | 4. MVP Core Loop (Sphere) | 0/TBD | Not started | - |
 | 5. Line/Stick & Cartoon Generators | 0/TBD | Not started | - |
