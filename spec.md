@@ -85,3 +85,5 @@ The UI should be simple, user-friendly with clear but sufficient in-game explana
 
 If a specific python library is needed other than the library required by pymol-open-source, the agent must write the list to a file and explicitly seek approval from the user. 
 In this case, the user would either install locally or let the agent to obtain a local version of library for local import in ./3rd_party_lib, note the license of the library, and state if the user should setup a linux-like env or can keep the "calling cmd from wsl" approach. The downloaded lib should also be git-ignored.
+
+Do NOT make up anything. ALL the claims and citations MUST BE VERIFIED against a source and explicitly approved by human.
