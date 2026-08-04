@@ -50,9 +50,9 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — TDD the pure setup state model (DEFAULTS, hider_count_cap, randomize_state, validate_state, GAME_REPS, DEMO_MANIFEST)
-- [ ] 02-02-PLAN.md — Bundle 6 demo PDBs from RCSB + write SOURCES.md citations (DEMO-01)
-- [ ] 02-03-PLAN.md — Populate demos.py (cmd-coupled helpers + to_windows_path) and gui_setup.py (full SetupTab form)
+- [x] 02-01-PLAN.md — TDD the pure setup state model (DEFAULTS, hider_count_cap, randomize_state, validate_state, GAME_REPS, DEMO_MANIFEST)
+- [x] 02-02-PLAN.md — Bundle 6 demo PDBs from RCSB + write SOURCES.md citations (DEMO-01)
+- [x] 02-03-PLAN.md — Populate demos.py (cmd-coupled helpers + to_windows_path) and gui_setup.py (full SetupTab form)
 - [ ] 02-04-PLAN.md — Windows PyMOL smoke test of the 4 success criteria (human-verify checkpoint)
 
 ### Phase 3: Mutation Safety & Hider Registry Foundation
@@ -175,7 +175,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Plugin Bootstrap & Dialog Scaffold | 1/1 | ✓ Complete | 2026-08-03 |
-| 2. Setup Tab Configuration & Bundled Demos | 0/4 | Not started | - |
+| 2. Setup Tab Configuration & Bundled Demos | 3/4 | In progress | - |
 | 3. Mutation Safety & Hider Registry Foundation | 0/TBD | Not started | - |
 | 4. MVP Core Loop (Sphere) | 0/TBD | Not started | - |
 | 5. Line/Stick & Cartoon Generators | 0/TBD | Not started | - |
