@@ -61,7 +61,7 @@ class TestDefaults(unittest.TestCase):
             set(DEFAULTS.keys()),
             {"format", "target_mode", "selected_object", "pdb_code",
              "demo_id", "hider_count", "lock_scene", "per_rep",
-             "difficulty_easy"},
+             "difficulty_easy", "lock_source", "pdb_pool"},
         )
 
     def test_format(self):
