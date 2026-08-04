@@ -15,19 +15,19 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Setup Tab — Configuration
 
-- [ ] **SETUP-01**: Setup window opens on launch with configurable game parameters (PyQt5 via `pymol.Qt`, `QTabWidget` with Setup + Game tabs)
-- [ ] **SETUP-02**: Object selector dropdown: pick a loaded object, fetch from PDB, or choose from the demo set (with a sub-menu for demo categories)
-- [ ] **SETUP-03**: Hider count input, capped to a reasonable maximum relative to the object's atom count
-- [ ] **SETUP-04**: "Lock current scene" checkbox — when true, generate hiders from the current representations and detect the rep list from the scene; when false, randomize representations and list all available reps
-- [ ] **SETUP-05**: Per-representation hider list with checkboxes; after ticking, a form/textbox/spinwheel sets the per-rep count (if unset, random per-rep totaling the hider count)
-- [ ] **SETUP-06**: Difficulty toggle: show only total remaining hiders (hard) vs. also show remaining per representation (easy)
+- [x] **SETUP-01**: Setup window opens on launch with configurable game parameters (PyQt5 via `pymol.Qt`, `QTabWidget` with Setup + Game tabs)
+- [x] **SETUP-02**: Object selector dropdown: pick a loaded object, fetch from PDB, or choose from the demo set (with a sub-menu for demo categories)
+- [x] **SETUP-03**: Hider count input, capped to a reasonable maximum relative to the object's atom count
+- [x] **SETUP-04**: "Lock current scene" checkbox — when true, generate hiders from the current representations and detect the rep list from the scene; when false, randomize representations and list all available reps
+- [x] **SETUP-05**: Per-representation hider list with checkboxes; after ticking, a form/textbox/spinwheel sets the per-rep count (if unset, random per-rep totaling the hider count)
+- [x] **SETUP-06**: Difficulty toggle: show only total remaining hiders (hard) vs. also show remaining per representation (easy)
 
 ### Setup Tab — 7 Buttons
 
-- [ ] **BTN-01**: Reset — restore default settings
-- [ ] **BTN-02**: Randomize — randomize the setup parameters
-- [ ] **BTN-03**: Save Setup — save game setup parameters to a file
-- [ ] **BTN-04**: Load Setup — load setup parameters from a file
+- [x] **BTN-01**: Reset — restore default settings
+- [x] **BTN-02**: Randomize — randomize the setup parameters
+- [x] **BTN-03**: Save Setup — save game setup parameters to a file
+- [x] **BTN-04**: Load Setup — load setup parameters from a file
 - [ ] **BTN-05**: Generate & export — only generate the representation of the game and save the initial state to a file for sharing or later loading
 - [ ] **BTN-06**: Cleanup model — remove all game-generated representations/atoms not in the original object (via `segi='GAME'` sentinel, never generic filters)
 - [ ] **BTN-07**: Start — store the initial state, generate hiders per setup, switch to the Game status tab, and count down 3-2-1
@@ -62,7 +62,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Demo Content
 
-- [ ] **DEMO-01**: Bundle the small demo PDBs in the repo with sources cited in documentation:
+- [x] **DEMO-01**: Bundle the small demo PDBs in the repo with sources cited in documentation:
   - Protein Easy: 1znf; Hard: 1xdn
   - Nucleic acid Easy: RNA 5E54, DNA 1K8P; Hard: 2QBZ
   - Mixed: 4WB3
@@ -132,17 +132,17 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 | PLUGIN-01 | Phase 1 | Complete |
 | PLUGIN-02 | Phase 1 | Complete |
 | PLUGIN-03 | Phase 1 | Complete |
-| SETUP-01 | Phase 2 | Pending |
-| SETUP-02 | Phase 2 | Pending |
-| SETUP-03 | Phase 2 | Pending |
-| SETUP-04 | Phase 2 | Pending |
-| SETUP-05 | Phase 2 | Pending |
-| SETUP-06 | Phase 2 | Pending |
-| DEMO-01 | Phase 2 | Pending |
-| BTN-01 | Phase 2 | Pending |
-| BTN-02 | Phase 2 | Pending |
-| BTN-03 | Phase 2 | Pending |
-| BTN-04 | Phase 2 | Pending |
+| SETUP-01 | Phase 2 | Complete |
+| SETUP-02 | Phase 2 | Complete |
+| SETUP-03 | Phase 2 | Complete |
+| SETUP-04 | Phase 2 | Complete |
+| SETUP-05 | Phase 2 | Complete |
+| SETUP-06 | Phase 2 | Complete |
+| DEMO-01 | Phase 2 | Complete |
+| BTN-01 | Phase 2 | Complete |
+| BTN-02 | Phase 2 | Complete |
+| BTN-03 | Phase 2 | Complete |
+| BTN-04 | Phase 2 | Complete |
 | HIDER-01 | Phase 3 | Pending |
 | HIDER-02 | Phase 3 | Pending |
 | HIDER-06 | Phase 3 | Pending |

@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-08-02)
 
 **Core value:** The player can load a molecule, generate blended "hider" atoms that match the local representation style, and reliably find them by clicking — with a working timer and win condition.
-**Current focus:** Phase 2 — Setup Tab Configuration & Bundled Demos (02-07 gap closure done; 02-04 smoke test re-run is the gate to Phase 2 completion)
+**Current focus:** Phase 3 — Mutation Safety & Hider Registry Foundation (next)
 
 ## Current Position
 
-Phase: 2 of 10 (in progress — 02-07 "Choose random" button gap closure done; 02-04 smoke test re-run is the gate to Phase 2 completion)
-Plan: 02-07 done (gap closure — Choose random button); 02-04 smoke test re-run is the gate to Phase 2 completion
-Status: 02-07 gap closure complete (WSL tier); awaiting user re-run of 02-04 Windows PyMOL smoke test to confirm the Choose random button + the QListWidget pool editor + tightened validator
-Last activity: 2026-08-04 — Completed 02-07-PLAN.md (1 enhancement: Choose random button next to the pool buttons that picks a random pool entry into the fetch field)
+Phase: 2 of 10 COMPLETE → ready for Phase 3
+Plan: 7 of 7 in Phase 2 (verified passed 4/4 must-haves + 11/11 requirements)
+Status: Phase 2 verified complete; ready to plan Phase 3
+Last activity: 2026-08-05 — Phase 2 verified (4/4 must-haves, 11/11 requirements satisfied; SETUP-01..06, DEMO-01, BTN-01..04 complete)
 
-Progress: [█████████░] 90% (7 concrete plans done: 01-01, 02-01, 02-02, 02-03, 02-05, 02-06, 02-07; 02-04 smoke test re-run is the gate to Phase 2 completion)
+Progress: [██████░░░░] 20%
 
 ## Performance Metrics
 
