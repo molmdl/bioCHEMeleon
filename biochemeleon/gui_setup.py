@@ -83,12 +83,24 @@ class SetupTab(QtWidgets.QWidget):
         self.obj_refresh_btn.setFixedSize(25, 25)
         self.obj_refresh_btn.setToolTip("Refresh loaded objects")
         p0l.addWidget(self.obj_combo); p0l.addWidget(self.obj_refresh_btn)
-        # page 1: PDB fetch (line edit + fetch button)
-        p1 = QtWidgets.QWidget(); p1l = QtWidgets.QHBoxLayout(p1)
+        # page 1: PDB fetch (line edit + fetch button + pool editor)
+        p1 = QtWidgets.QWidget(); p1l = QtWidgets.QVBoxLayout(p1)
+        p1l.setContentsMargins(0, 0, 0, 0)
+        fetch_row = QtWidgets.QHBoxLayout()
         self.pdb_edit = QtWidgets.QLineEdit()
         self.pdb_edit.setPlaceholderText("e.g. 1znf")
         self.fetch_btn = QtWidgets.QPushButton("Fetch")
-        p1l.addWidget(self.pdb_edit); p1l.addWidget(self.fetch_btn)
+        fetch_row.addWidget(self.pdb_edit); fetch_row.addWidget(self.fetch_btn)
+        p1l.addLayout(fetch_row)
+        # Gap 4: user-editable PDB-pool text area for Randomize fetch mode.
+        # Empty text -> [] (signals randomize_state to use the bundled
+        # PDB_POOL default; never produces an empty pdb_code box).
+        self.pool_edit = QtWidgets.QPlainTextEdit()
+        self.pool_edit.setPlaceholderText(
+            "PDB pool for Randomize (one code per line, max 100)\n"
+            "Leave empty to use the bundled pool (~34 mixed structures)")
+        self.pool_edit.setMaximumHeight(80)
+        p1l.addWidget(self.pool_edit)
         # page 2: bundled demo (combo populated from DEMO_MANIFEST)
         p2 = QtWidgets.QWidget(); p2l = QtWidgets.QHBoxLayout(p2)
         self.demo_combo = QtWidgets.QComboBox()
@@ -101,6 +113,12 @@ class SetupTab(QtWidgets.QWidget):
         self.target_stack.addWidget(p1)
         self.target_stack.addWidget(p2)
         tgt_form.addRow(self.target_stack)
+        # Gap 3: Lock source checkbox — when checked, Randomize preserves the
+        # current target_mode + identifier and only randomizes hider composition.
+        self.lock_source_cb = QtWidgets.QCheckBox(
+            "Lock source (don't change target on Randomize)")
+        self.lock_source_cb.setChecked(DEFAULTS["lock_source"])
+        tgt_form.addRow(self.lock_source_cb)
         outer.addWidget(tgt)
 
         # --- Hiders group (SETUP-03/04/05) ---
@@ -163,6 +181,12 @@ class SetupTab(QtWidgets.QWidget):
         self.fetch_btn.clicked.connect(self._on_fetch)
         self.demo_combo.currentIndexChanged.connect(self._on_target_changed)
         self.lock_scene_cb.toggled.connect(self._on_lock_scene_toggled)
+        # Gap 2 UI: bound per-rep spinbox maxes so manual entry can't overflow
+        # the total hider_count. Fires on hider_spin change + each per-rep
+        # spinbox valueChanged.
+        self.hider_spin.valueChanged.connect(self._recompute_per_rep_maxes)
+        for rep, (cb, spin, label) in self.rep_rows.items():
+            spin.valueChanged.connect(self._recompute_per_rep_maxes)
         self.reset_btn.clicked.connect(lambda: self.apply_state(DEFAULTS))
         self.random_btn.clicked.connect(self._randomize)
         self.save_btn.clicked.connect(self._save_setup)
@@ -176,7 +200,9 @@ class SetupTab(QtWidgets.QWidget):
         """Recompute the hider-count cap from the current target object.
         If 'lock scene' is on and an object is selected, sync reps from it.
         Suppressed during apply_state (the _loading flag) so saved state is
-        applied verbatim without cascading recompute.
+        applied verbatim without cascading recompute. After the cap updates,
+        recompute the per-rep spinbox maxes so they follow the new cap
+        (Gap 2 UI).
         """
         if self._loading:
             return
@@ -192,6 +218,7 @@ class SetupTab(QtWidgets.QWidget):
             self.hider_spin.setValue(cap)
         if self.lock_scene_cb.isChecked():
             self._sync_reps_from_scene(obj)
+        self._recompute_per_rep_maxes()
 
     def _on_fetch(self):
         """Fetch the typed PDB code; show a QMessageBox on failure."""
@@ -248,19 +275,53 @@ class SetupTab(QtWidgets.QWidget):
             spin.setEnabled(checked)
             label.setText("" if checked else "random")
 
+    def _recompute_per_rep_maxes(self):
+        """Bound each per-rep spinbox to (hider_count - sum(other per_rep))
+        so manual entry can't overflow the total (Gap 2 UI fix). Suppressed
+        during apply_state (the _loading flag) so saved per_rep values are
+        applied verbatim before the bounds kick in.
+        """
+        if self._loading:
+            return
+        total = self.hider_spin.value()
+        current_sum = 0
+        for rep, (cb, spin, label) in self.rep_rows.items():
+            if cb.isChecked():
+                current_sum += spin.value()
+        for rep, (cb, spin, label) in self.rep_rows.items():
+            if cb.isChecked():
+                others = current_sum - spin.value()
+                spin.setMaximum(max(0, total - others))
+            else:
+                spin.setMaximum(max(0, total))
+
     def current_target_object(self):
         """Return the PyMOL object name the form currently points at, or
-        None if the target isn't a loaded object yet (fetch/demo modes are
-        not loaded until the user clicks Fetch / Start). Used by
-        _on_target_changed to recompute the hider-count cap.
+        None if the target isn't a loaded object yet. In 'loaded' mode,
+        returns the non-empty combo text WITHOUT re-querying the loaded
+        objects list — the try/except in _on_target_changed handles a bogus
+        name so the cap still recomputes on selection (Gap 1 fix:
+        previously a membership re-query against the loaded-objects list
+        returned None whenever the combo text didn't exactly match
+        cmd.get_names output, bailing _on_target_changed before the cap
+        could recompute).
         """
         mode = self.mode_combo.currentData()
         if mode == "loaded":
             name = self.obj_combo.currentText().strip()
-            if name and name in list_loaded_molecule_objects():
-                return name
-            return None
+            return name or None
         return None  # fetch/demo targets aren't loaded objects yet
+
+    def _pool_list(self):
+        """Return the PDB pool as a list from the pool_edit text area
+        (Gap 4 UI). Splits on whitespace/newlines, lowercases. Empty text
+        -> [] (signals randomize_state to use the bundled PDB_POOL default;
+        never produces an empty pdb_code box).
+        """
+        text = self.pool_edit.toPlainText().strip()
+        if not text:
+            return []
+        return [w.strip().lower() for w in text.split() if w.strip()]
 
     # ---- collect_state / apply_state (round-trip) ----
     def collect_state(self):
@@ -279,6 +340,8 @@ class SetupTab(QtWidgets.QWidget):
             "lock_scene": self.lock_scene_cb.isChecked(),
             "per_rep": per_rep,
             "difficulty_easy": self.diff_easy_cb.isChecked(),
+            "lock_source": self.lock_source_cb.isChecked(),   # Gap 3
+            "pdb_pool": self._pool_list(),                    # Gap 4
         }
 
     def apply_state(self, state):
@@ -327,13 +390,25 @@ class SetupTab(QtWidgets.QWidget):
                     spin.setEnabled(False)
                     label.setText("random")
             self.diff_easy_cb.setChecked(bool(state.get("difficulty_easy", True)))
+            # Gap 3: lock_source checkbox
+            self.lock_source_cb.setChecked(bool(state.get("lock_source", False)))
+            # Gap 4: pdb_pool text area (empty list/non-list -> empty text,
+            # which signals randomize_state to use the bundled PDB_POOL)
+            pool = state.get("pdb_pool", [])
+            if isinstance(pool, list) and pool:
+                self.pool_edit.setPlainText("\n".join(pool))
+            else:
+                self.pool_edit.setPlainText("")
         finally:
             self._loading = False
 
     # ---- Action buttons ----
     def _randomize(self):
-        """Randomize setup params via the pure randomize_state, then apply.
-        Uses the current target's atom count to cap the hider count.
+        """Randomize setup params via randomize_state. If 'Lock source' is
+        checked, preserve the current target and only randomize hider
+        composition (Gap 3). PDB pool comes from the pool_edit text area
+        (Gap 4); empty pool -> [] which signals randomize_state to use the
+        bundled PDB_POOL default (never produces an empty pdb_code box).
         """
         obj = self.current_target_object()
         atom_count = None
@@ -342,7 +417,14 @@ class SetupTab(QtWidgets.QWidget):
                 atom_count = cmd.count_atoms(obj)
             except Exception:
                 atom_count = None
-        result = randomize_state(seed=None, atom_count=atom_count)
+        lock_src = self.lock_source_cb.isChecked()
+        locked = self.collect_state() if lock_src else None
+        pool = self._pool_list()  # [] -> DEFAULTS pool in randomize_state
+        result = randomize_state(
+            seed=None, atom_count=atom_count,
+            lock_source=lock_src, locked_state=locked,
+            pdb_pool=pool,
+        )
         self.apply_state(result)
 
     def _save_setup(self):
