@@ -18,6 +18,7 @@ from pymol import cmd
 
 from .setup_state import (
     DEFAULTS, SETUP_FORMAT, GAME_REPS, DEMO_MANIFEST,
+    PDB_POOL, _validate_pdb_code,
     hider_count_cap, randomize_state, validate_state,
 )
 from .demos import (
@@ -92,15 +93,26 @@ class SetupTab(QtWidgets.QWidget):
         self.fetch_btn = QtWidgets.QPushButton("Fetch")
         fetch_row.addWidget(self.pdb_edit); fetch_row.addWidget(self.fetch_btn)
         p1l.addLayout(fetch_row)
-        # Gap 4: user-editable PDB-pool text area for Randomize fetch mode.
-        # Empty text -> [] (signals randomize_state to use the bundled
-        # PDB_POOL default; never produces an empty pdb_code box).
-        self.pool_edit = QtWidgets.QPlainTextEdit()
-        self.pool_edit.setPlaceholderText(
-            "PDB pool for Randomize (one code per line, max 100)\n"
-            "Leave empty to use the bundled pool (~34 mixed structures)")
-        self.pool_edit.setMaximumHeight(80)
-        p1l.addWidget(self.pool_edit)
+        # Issue 1 fix: QListWidget pool editor (replaces the old free-text editor).
+        # Empty list -> [] (signals randomize_state to use the bundled PDB_POOL
+        # default; never produces an empty pdb_code box). The label makes the
+        # "use bundled pool" affordance explicit.
+        pool_box = QtWidgets.QGroupBox("Pool of PDB IDs (Randomize picks fetch codes from here)")
+        pool_bl = QtWidgets.QVBoxLayout(pool_box)
+        self.pool_list = QtWidgets.QListWidget()
+        self.pool_list.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+        pool_bl.addWidget(self.pool_list)
+        # Button row: Add / Edit / Remove / Use bundled pool (no reorder — out of scope)
+        pool_btn_row = QtWidgets.QHBoxLayout()
+        self.pool_add_btn = QtWidgets.QPushButton("+ Add")
+        self.pool_edit_btn = QtWidgets.QPushButton("\u270e Edit")
+        self.pool_remove_btn = QtWidgets.QPushButton("\u2212 Remove")
+        self.pool_default_btn = QtWidgets.QPushButton("Use bundled pool")
+        for b in (self.pool_add_btn, self.pool_edit_btn,
+                  self.pool_remove_btn, self.pool_default_btn):
+            pool_btn_row.addWidget(b)
+        pool_bl.addLayout(pool_btn_row)
+        p1l.addWidget(pool_box)
         # page 2: bundled demo (combo populated from DEMO_MANIFEST)
         p2 = QtWidgets.QWidget(); p2l = QtWidgets.QHBoxLayout(p2)
         self.demo_combo = QtWidgets.QComboBox()
@@ -191,6 +203,11 @@ class SetupTab(QtWidgets.QWidget):
         self.random_btn.clicked.connect(self._randomize)
         self.save_btn.clicked.connect(self._save_setup)
         self.load_btn.clicked.connect(self._load_setup)
+        # Issue 1: pool editor button wiring
+        self.pool_add_btn.clicked.connect(self._add_pool_entry)
+        self.pool_edit_btn.clicked.connect(self._edit_pool_entry)
+        self.pool_remove_btn.clicked.connect(self._remove_pool_entry)
+        self.pool_default_btn.clicked.connect(self._use_bundled_pool)
 
     # ---- Slots ----
     def _on_mode_changed(self, idx):
@@ -312,16 +329,77 @@ class SetupTab(QtWidgets.QWidget):
             return name or None
         return None  # fetch/demo targets aren't loaded objects yet
 
+    def _add_pool_entry(self):
+        """Issue 1/2: prompt for a PDB ID, validate via _validate_pdb_code,
+        add to the list only if valid. Invalid -> QMessageBox.warning, no add."""
+        text, ok = QtWidgets.QInputDialog.getText(
+            self, "Add PDB ID", "Enter PDB ID (4 chars):")
+        if not ok:
+            return
+        code = _validate_pdb_code(text)
+        if code == "":
+            QtWidgets.QMessageBox.warning(
+                self, "Invalid PDB ID",
+                "Invalid PDB ID '{}'. PDB IDs are exactly 4 lowercase "
+                "alphanumeric characters (e.g. 1ubq).".format(text))
+            return
+        # avoid duplicates
+        existing = self._pool_list()
+        if code in existing:
+            QtWidgets.QMessageBox.information(
+                self, "Duplicate", "'{}' is already in the pool.".format(code))
+            return
+        self.pool_list.addItem(QtWidgets.QListWidgetItem(code))
+
+    def _edit_pool_entry(self):
+        """Issue 1: edit the selected entry in place. Validates the new value;
+        invalid -> QMessageBox.warning, no change."""
+        items = self.pool_list.selectedItems()
+        if not items:
+            return
+        item = items[0]  # edit the first selected
+        old = item.text()
+        text, ok = QtWidgets.QInputDialog.getText(
+            self, "Edit PDB ID", "Enter PDB ID (4 chars):",
+            text=old)
+        if not ok:
+            return
+        code = _validate_pdb_code(text)
+        if code == "":
+            QtWidgets.QMessageBox.warning(
+                self, "Invalid PDB ID",
+                "Invalid PDB ID '{}'. PDB IDs are exactly 4 lowercase "
+                "alphanumeric characters (e.g. 1ubq).".format(text))
+            return
+        # dupe check: allow if it's the same item being re-saved to the same code
+        existing = [self.pool_list.item(i).text()
+                    for i in range(self.pool_list.count())
+                    if self.pool_list.item(i) is not item]
+        if code in existing:
+            QtWidgets.QMessageBox.information(
+                self, "Duplicate", "'{}' is already in the pool.".format(code))
+            return
+        item.setText(code)
+
+    def _remove_pool_entry(self):
+        """Issue 1: remove selected row(s). List can become empty — that
+        signals 'use bundled pool' at randomize time (unchanged behavior)."""
+        for item in self.pool_list.selectedItems():
+            self.pool_list.takeItem(self.pool_list.row(item))
+
+    def _use_bundled_pool(self):
+        """Issue 1: one-click reset to the 33-entry bundled PDB_POOL."""
+        self.pool_list.clear()
+        for code in PDB_POOL:
+            self.pool_list.addItem(QtWidgets.QListWidgetItem(code))
+
     def _pool_list(self):
-        """Return the PDB pool as a list from the pool_edit text area
-        (Gap 4 UI). Splits on whitespace/newlines, lowercases. Empty text
-        -> [] (signals randomize_state to use the bundled PDB_POOL default;
-        never produces an empty pdb_code box).
+        """Return the PDB pool as a list from the QListWidget.
+
+        Empty list -> [] (signals randomize_state to use DEFAULTS pool).
         """
-        text = self.pool_edit.toPlainText().strip()
-        if not text:
-            return []
-        return [w.strip().lower() for w in text.split() if w.strip()]
+        return [self.pool_list.item(i).text()
+                for i in range(self.pool_list.count())]
 
     # ---- collect_state / apply_state (round-trip) ----
     def collect_state(self):
@@ -392,13 +470,15 @@ class SetupTab(QtWidgets.QWidget):
             self.diff_easy_cb.setChecked(bool(state.get("difficulty_easy", True)))
             # Gap 3: lock_source checkbox
             self.lock_source_cb.setChecked(bool(state.get("lock_source", False)))
-            # Gap 4: pdb_pool text area (empty list/non-list -> empty text,
-            # which signals randomize_state to use the bundled PDB_POOL)
+            # Issue 1: populate QListWidget (replaces the old free-text editor)
             pool = state.get("pdb_pool", [])
-            if isinstance(pool, list) and pool:
-                self.pool_edit.setPlainText("\n".join(pool))
-            else:
-                self.pool_edit.setPlainText("")
+            self.pool_list.clear()
+            if isinstance(pool, list):
+                for code in pool:
+                    validated = _validate_pdb_code(code)
+                    if validated:
+                        self.pool_list.addItem(QtWidgets.QListWidgetItem(validated))
+            # (empty list = use bundled pool at randomize time — unchanged behavior)
         finally:
             self._loading = False
 
