@@ -12,6 +12,7 @@ dialog stays modeless (QFileDialog/QMessageBox are modal children, which
 is fine — research section 9.3).
 """
 import json
+import random
 
 from pymol.Qt import QtCore, QtGui, QtWidgets
 from pymol import cmd
@@ -102,14 +103,19 @@ class SetupTab(QtWidgets.QWidget):
         self.pool_list = QtWidgets.QListWidget()
         self.pool_list.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         pool_bl.addWidget(self.pool_list)
-        # Button row: Add / Edit / Remove / Use bundled pool (no reorder — out of scope)
+        # Button row: Add / Edit / Remove / Use bundled pool / Choose random
+        # (no reorder — out of scope). 'Choose random' is visually associated
+        # with the pool (inside the pool QGroupBox) — it picks a random pool
+        # entry into the fetch field (plan 02-07), not a main Setup action.
         pool_btn_row = QtWidgets.QHBoxLayout()
         self.pool_add_btn = QtWidgets.QPushButton("+ Add")
         self.pool_edit_btn = QtWidgets.QPushButton("\u270e Edit")
         self.pool_remove_btn = QtWidgets.QPushButton("\u2212 Remove")
         self.pool_default_btn = QtWidgets.QPushButton("Use bundled pool")
+        self.pool_choose_btn = QtWidgets.QPushButton("Choose random")
         for b in (self.pool_add_btn, self.pool_edit_btn,
-                  self.pool_remove_btn, self.pool_default_btn):
+                  self.pool_remove_btn, self.pool_default_btn,
+                  self.pool_choose_btn):
             pool_btn_row.addWidget(b)
         pool_bl.addLayout(pool_btn_row)
         p1l.addWidget(pool_box)
@@ -208,6 +214,8 @@ class SetupTab(QtWidgets.QWidget):
         self.pool_edit_btn.clicked.connect(self._edit_pool_entry)
         self.pool_remove_btn.clicked.connect(self._remove_pool_entry)
         self.pool_default_btn.clicked.connect(self._use_bundled_pool)
+        # 02-07: Choose random — pick a random pool entry into the fetch field
+        self.pool_choose_btn.clicked.connect(self._choose_random_from_pool)
 
     # ---- Slots ----
     def _on_mode_changed(self, idx):
@@ -392,6 +400,25 @@ class SetupTab(QtWidgets.QWidget):
         self.pool_list.clear()
         for code in PDB_POOL:
             self.pool_list.addItem(QtWidgets.QListWidgetItem(code))
+
+    def _choose_random_from_pool(self):
+        """Pick a random entry from the pool and put it in the fetch field.
+
+        Switches source mode to 'fetch' so the field is visible. Does NOT
+        change any other setup field (focused, single-purpose action).
+        Uses the user's pool list if non-empty, else the bundled PDB_POOL.
+        """
+        pool = self._pool_list()
+        if not pool:
+            # empty list signals 'use bundled pool' — fall back to PDB_POOL
+            pool = list(PDB_POOL)
+        if not pool:
+            # defensive: both empty (shouldn't happen — PDB_POOL has 33 entries)
+            return
+        code = random.choice(pool)
+        # switch to fetch mode (0=loaded, 1=fetch, 2=demo) so the field is visible
+        self.mode_combo.setCurrentIndex(1)
+        self.pdb_edit.setText(code)
 
     def _pool_list(self):
         """Return the PDB pool as a list from the QListWidget.
