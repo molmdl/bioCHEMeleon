@@ -5,34 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-08-02)
 
 **Core value:** The player can load a molecule, generate blended "hider" atoms that match the local representation style, and reliably find them by clicking — with a working timer and win condition.
-**Current focus:** Phase 2 — Setup Tab Configuration & Bundled Demos (02-06 gap closure done; 02-04 smoke test re-run is the gate to Phase 2 completion)
+**Current focus:** Phase 2 — Setup Tab Configuration & Bundled Demos (02-07 gap closure done; 02-04 smoke test re-run is the gate to Phase 2 completion)
 
 ## Current Position
 
-Phase: 2 of 10 (in progress — 2 UX gaps closed by 02-06, smoke test re-run still pending)
-Plan: 02-06 done (gap closure); 02-04 smoke test re-run is the gate to Phase 2 completion
-Status: 02-06 gap closure complete (WSL tier); awaiting user re-run of 02-04 Windows PyMOL smoke test to confirm the QListWidget pool editor + tightened validator
-Last activity: 2026-08-04 — Completed 02-06-PLAN.md (2 pool-editor UX issues closed: QListWidget editor + exactly-4-char _validate_pdb_code)
+Phase: 2 of 10 (in progress — 02-07 "Choose random" button gap closure done; 02-04 smoke test re-run is the gate to Phase 2 completion)
+Plan: 02-07 done (gap closure — Choose random button); 02-04 smoke test re-run is the gate to Phase 2 completion
+Status: 02-07 gap closure complete (WSL tier); awaiting user re-run of 02-04 Windows PyMOL smoke test to confirm the Choose random button + the QListWidget pool editor + tightened validator
+Last activity: 2026-08-04 — Completed 02-07-PLAN.md (1 enhancement: Choose random button next to the pool buttons that picks a random pool entry into the fetch field)
 
-Progress: [█████████░] 90% (6 concrete plans done: 01-01, 02-01, 02-02, 02-03, 02-05, 02-06; 02-04 smoke test re-run is the gate to Phase 2 completion)
+Progress: [█████████░] 90% (7 concrete plans done: 01-01, 02-01, 02-02, 02-03, 02-05, 02-06, 02-07; 02-04 smoke test re-run is the gate to Phase 2 completion)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: ~13 min
-- Total execution time: ~1.2 hours
+- Total plans completed: 7
+- Average duration: ~12 min
+- Total execution time: ~1.3 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Plugin Bootstrap & Dialog Scaffold | 1 | ~35 min | ~35 min |
-| 2. Setup Tab Configuration & Bundled Demos | 5/5 + 02-06 gap closure | ~30 min | ~5 min |
+| 2. Setup Tab Configuration & Bundled Demos | 6/6 + 02-06 + 02-07 gap closures | ~31 min | ~4 min |
 
 **Recent Trend:**
-- Last 6 plans: 01-01 ~35min, 02-01 ~2min, 02-02 ~1min, 02-03 ~4min, 02-05 ~19min, 02-06 ~4min
-- Trend: 02-06 was fast (TDD RED→GREEN for 1 validator + 1 UI swap; 10 new tests); still WSL-only (no Windows PyMOL until 02-04 re-run)
+- Last 7 plans: 01-01 ~35min, 02-01 ~2min, 02-02 ~1min, 02-03 ~4min, 02-05 ~19min, 02-06 ~4min, 02-07 ~1min
+- Trend: 02-07 was the smallest plan yet (1 UI-only button + slot, no pure-layer change, no new test — WSL-only verified; runtime behavior deferred to 02-04 smoke test re-run)
 
 *Updated after each plan completion*
 
@@ -53,7 +53,11 @@ Progress: [█████████░] 90% (6 concrete plans done: 01-01, 02
 - **setup_state.py (169 -> 313 lines)**: PDB_POOL (33 verified RCSB entries — 6 bundled demos + 14 proteins + 3 DNA + 4 RNA + 6 hybrid; plan prose said "34" but the actual list + category breakdown both sum to 33, used verbatim), _validate_pdb_code/_validate_pdb_pool helpers, DEFAULTS extended to 11 keys (+ lock_source, pdb_pool), randomize_state(lock_source, locked_state, pdb_pool), validate_state per_rep-sum clamp + new-field validation. Module still pure (no pymol, no Qt). 02-06 TIGHTENED _validate_pdb_code to exactly 4-char (was 3-5); _validate_pdb_pool + PDB_POOL + DEFAULTS + randomize_state + validate_state UNCHANGED.
 - **tests/test_setup_state.py (244 -> 471 lines)**: 6 new test classes from 02-05 (TestPdbPool, TestDefaultsExtended, TestValidateStatePerRepSum, TestValidateStateNewFields, TestRandomizeLockSource, TestRandomizePdbPool) + TestDefaults.test_has_all_keys updated for 11-key schema. 02-06 added TestValidatePdbCode (10 tests) + updated test_pdb_pool_filters_invalid (input "12345" 5-char now rejected at _validate_pdb_code). 90 tests pass (48 pre-02-05 + 32 from 02-05 + 10 from 02-06).
 - **gui_setup.py (390 -> 472 -> 552 lines)**: full SetupTab. 02-05 added: current_target_object (Gap 1), _recompute_per_rep_maxes (Gap 2 UI), lock_source_cb (Gap 3), pool_edit QPlainTextEdit + _pool_list (Gap 4), _randomize passes lock_source/locked_state/pdb_pool. 02-06 REPLACED pool_edit QPlainTextEdit with pool_list QListWidget (ExtendedSelection) inside a QGroupBox "Pool of PDB IDs (Randomize picks fetch codes from here)" + 4 buttons (+ Add, ✎ Edit, − Remove, Use bundled pool) + 4 slot methods (_add_pool_entry/_edit_pool_entry/_remove_pool_entry/_use_bundled_pool); _pool_list reads QListWidget items; apply_state clears + repopulates QListWidget (validates each); _validate_pdb_code + PDB_POOL imported.
-- **All 4 smoke-test gaps closed at WSL tier (02-05) + 2 UX issues closed at WSL tier (02-06)**. Awaiting user re-run of 02-04 Windows PyMOL smoke test to confirm runtime behavior (QListWidget populate on first show, Add/Edit/Remove/Use-bundled-pool buttons, QMessageBox on invalid, cmd.count_atoms, QSpinBox.setMaximum are WSL-unverifiable).
+- **All 4 smoke-test gaps closed at WSL tier (02-05) + 2 UX issues closed at WSL tier (02-06) + 1 enhancement closed at WSL tier (02-07)**. Awaiting user re-run of 02-04 Windows PyMOL smoke test to confirm runtime behavior (QListWidget populate on first show, Add/Edit/Remove/Use-bundled-pool/Choose-random buttons, QMessageBox on invalid, cmd.count_atoms, QSpinBox.setMaximum are WSL-unverifiable).
+
+### Wave 4 outputs (02-07 gap closure — STILL AVAILABLE; UI-only enhancement)
+
+- **gui_setup.py (552 -> 581 lines)**: 02-07 added a "Choose random" button (`self.pool_choose_btn`, QPushButton) as the 5th button in the pool button row (inside the pool QGroupBox, visually associated with the pool — not with the main Reset/Randomize/Save/Load Setup actions). Wired `pool_choose_btn.clicked -> _choose_random_from_pool` slot. The slot picks `random.choice(self._pool_list() or list(PDB_POOL))`, switches `mode_combo` to index 1 (fetch) so the field is visible, sets `pdb_edit` to the chosen code; returns early if both lists empty (defensive — PDB_POOL has 33 entries so unreachable). Does NOT touch any other setup field (hider count, lock scene, per-rep, difficulty, lock source, demo, loaded object) — focused, single-purpose. `import random` added at module level (line 15, next to `import json`). PDB_POOL import (line 22, from 02-06) verified present, not re-added. NO pure-layer change; NO new test (UI-only behavior; pre-existing 90 tests pin the pure layer).
 
 ### Decisions
 
@@ -78,6 +82,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-06]: _validate_pdb_code tightened to EXACTLY 4-char lowercase alphanumeric (drops 3-5 tolerance) — PDB IDs are 4 chars by format; the 3-5 tolerance caused silent loss (5-char "12345" passed the code validator but was dropped by _validate_pdb_pool). _validate_pdb_pool's len==4 check kept for defense-in-depth (redundant but harmless). PDB_POOL (33 entries) UNCHANGED.
 - [02-06]: Pool editor is a QListWidget (ExtendedSelection) inside a QGroupBox "Pool of PDB IDs (Randomize picks fetch codes from here)" + 4 buttons (+ Add, ✎ Edit, − Remove, Use bundled pool) — list semantics match the affordance (the QPlainTextEdit read as "might be a dropdown" but was free-text). Add/Edit validate via _validate_pdb_code BEFORE entry + QMessageBox.warning on invalid — invalid IDs never enter the list (no silent loss on Save/Load round-trip). No reorder buttons (out of scope).
 - [02-06]: _randomize left UNCHANGED per the plan (it already calls self._pool_list() which now reads from the QListWidget — behavior identical). Its docstring still references "pool_edit text area" (stale, but plan-protected — "do NOT touch _randomize").
+- [02-07]: "Choose random" button placed INSIDE the pool QGroupBox's button row (5th button after + Add / ✎ Edit / − Remove / Use bundled pool), NOT with the main Setup actions — per the user's enhancement spec, the button is visually associated with the pool it picks from. Empty pool falls back to list(PDB_POOL) (mirrors the 02-05 randomize_state convention that empty pool = use bundled pool; never produces an empty pdb_code box). mode_combo.setCurrentIndex(1) triggers _on_mode_changed -> target_stack.setCurrentIndex(1) only; it does NOT trigger _on_target_changed (wired to obj_combo/demo_combo, not mode_combo) so the hider-count cap recompute is NOT triggered — focused, single-purpose. import random at module level (not local); PDB_POOL import (02-06, line 22) verified, not re-added. No new test (UI-only; runtime behavior deferred to 02-04 smoke test).
 
 ### Pending Todos
 
@@ -91,9 +96,10 @@ None yet.
 - [02-04]: The `rep <name>` selector and the hider-count cap are WSL-unverifiable (need Windows PyMOL); the 02-04 smoke test is the formal confirmation (research 12.1 mitigation: per-rep try/except degrades gracefully)
 - [02-05]: All 4 smoke-test gaps closed at WSL tier (pure tests + py_compile + grep gates); the cap recompute (Gap 1) and per-rep max bounding (Gap 2 UI) call cmd.count_atoms / QSpinBox.setMaximum at runtime — only the 02-04 smoke test re-run can confirm them. ROADMAP.md NOT updated (Phase 2 not complete until smoke test approved).
 - [02-06]: Both pool-editor UX issues closed at WSL tier (90 tests + py_compile + grep gates); the QListWidget populate-on-first-show, Add/Edit/Remove/Use-bundled-pool button behavior, and QMessageBox on invalid input are WSL-unverifiable (need a live PyMOL Qt session) — only the 02-04 smoke test re-run can confirm them. ROADMAP.md NOT updated (Phase 2 not complete until smoke test re-approved after this fix).
+- [02-07]: The "Choose random" button gap closure closed at WSL tier (90 tests + py_compile + grep gates + git diff stats confirming setup_state.py/tests/other modules/ROADMAP.md untouched); the button's live-Qt behavior (appears in the pool group; clicking it switches to fetch mode + populates the pdb_code field with a random pool entry; does not change any other field) is WSL-unverifiable — only the 02-04 smoke test re-run can confirm it. ROADMAP.md NOT updated (Phase 2 not complete until smoke test re-approved after this enhancement).
 
 ## Session Continuity
 
-Last session: 2026-08-04 (Plan 02-06 executed — 2 pool-editor UX issues closed: _validate_pdb_code tightened to exactly 4-char in setup_state.py; QPlainTextEdit pool editor replaced with QListWidget + Add/Edit/Remove/Use-bundled-pool buttons in gui_setup.py; 10 new TestValidatePdbCode tests, 90 total pass)
-Stopped at: Completed 02-06-PLAN.md. All 3 task commits done (test/feat/fix). Awaiting user re-run of 02-04 Windows PyMOL smoke test to confirm the QListWidget pool editor + tightened validator at runtime.
-Resume file: .planning/phases/02-setup-tab-configuration-bundled-demos/02-06-SUMMARY.md
+Last session: 2026-08-04 (Plan 02-07 executed — 1 enhancement: "Choose random" button added next to the pool buttons in gui_setup.py; picks random.choice(self._pool_list() or list(PDB_POOL)) into the fetch field, switches mode to fetch, does NOT touch any other field; import random at module level; UI-only, no pure-layer change, no new test, 90 tests pass)
+Stopped at: Completed 02-07-PLAN.md. 1 task commit done (feat). Awaiting user re-run of 02-04 Windows PyMOL smoke test to confirm the Choose random button + the QListWidget pool editor + tightened validator at runtime.
+Resume file: .planning/phases/02-setup-tab-configuration-bundled-demos/02-07-SUMMARY.md
