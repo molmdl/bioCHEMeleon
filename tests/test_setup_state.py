@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from biochemeleon.setup_state import (
     GAME_REPS, DEMO_MANIFEST, DEFAULTS, SETUP_FORMAT, PDB_POOL,
+    _validate_pdb_code,
     hider_count_cap, randomize_state, validate_state,
 )
 
@@ -321,6 +322,41 @@ class TestValidateStatePerRepSum(unittest.TestCase):
         self.assertEqual(validate_state({"hider_count": 5, "per_rep": {}})["per_rep"], {})
 
 
+class TestValidatePdbCode(unittest.TestCase):
+    """Test _validate_pdb_code enforces exactly 4-char lowercase alnum."""
+
+    def test_accepts_4char_alnum(self):
+        self.assertEqual(_validate_pdb_code("1ubq"), "1ubq")
+
+    def test_accepts_4char_all_letters(self):
+        # format-valid even if not a real PDB — we don't verify against RCSB
+        self.assertEqual(_validate_pdb_code("zzzz"), "zzzz")
+
+    def test_rejects_5char(self):
+        self.assertEqual(_validate_pdb_code("12345"), "")
+
+    def test_rejects_3char(self):
+        self.assertEqual(_validate_pdb_code("123"), "")
+
+    def test_rejects_2char(self):
+        self.assertEqual(_validate_pdb_code("12"), "")
+
+    def test_rejects_non_alnum(self):
+        self.assertEqual(_validate_pdb_code("ab!"), "")
+
+    def test_lowercases(self):
+        self.assertEqual(_validate_pdb_code("1UBQ"), "1ubq")
+
+    def test_strips_whitespace(self):
+        self.assertEqual(_validate_pdb_code(" 1ubq "), "1ubq")
+
+    def test_rejects_empty(self):
+        self.assertEqual(_validate_pdb_code(""), "")
+
+    def test_rejects_none(self):
+        self.assertEqual(_validate_pdb_code(None), "")
+
+
 class TestValidateStateNewFields(unittest.TestCase):
     """Test lock_source + pdb_pool validation in validate_state."""
 
@@ -334,8 +370,9 @@ class TestValidateStateNewFields(unittest.TestCase):
         self.assertEqual(validate_state({})["pdb_pool"], PDB_POOL)
 
     def test_pdb_pool_filters_invalid(self):
-        # lowercase, 4-char alnum, dedupe — 1UBQ lowercased to 1ubq dupes out
-        result = validate_state({"pdb_pool": ["1ubq", "INVALID", "12", "1UBQ", "1bna"]})
+        # 12345 (5-char) now rejected by _validate_pdb_code itself (Issue 2);
+        # INVALID (non-alnum), 12 (2-char) rejected; 1UBQ lowercased to 1ubq dupes out
+        result = validate_state({"pdb_pool": ["1ubq", "12345", "INVALID", "1UBQ", "1bna"]})
         self.assertEqual(result["pdb_pool"], ["1ubq", "1bna"])
 
     def test_pdb_pool_bounds_to_100(self):
