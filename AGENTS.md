@@ -2,6 +2,8 @@
 
 High-signal notes for OpenCode sessions. Read before touching code. See `spec.md` and `.planning/PROJECT.md` for full project context.
 
+> **Scope:** v1 (PyMOL 2.5.0 plugin). v2 (VMD tcl script) is deferred per `spec.md` — this file is v1-scoped; revisit it when v2 research begins. When the active milestone becomes v2, flag that AGENTS.md needs a VMD/tcl-specific rewrite.
+
 ## Environment — the WSL/Windows split (read first)
 
 This is the single most common way to break things.
