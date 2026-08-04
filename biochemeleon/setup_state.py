@@ -102,15 +102,21 @@ _VALID_MODES = {"loaded", "fetch", "demo"}
 # ---- PDB code/pool helpers (pure) ----
 
 def _validate_pdb_code(code):
-    """Lowercase, strip, keep only 3-5 char alphanumeric; else empty string.
+    """Validate a PDB ID: exactly 4 lowercase alphanumeric chars.
 
-    PDB IDs are 4 chars by convention, but the 3-5 range tolerates legacy
-    and extended IDs. The pool helper enforces 4-char to match PDB_POOL.
+    Returns the normalized code or '' if invalid. PDB IDs are 4 chars
+    (e.g. '1ubq'); we don't verify against RCSB — the UI's Add/Edit
+    dialogs call this and show a QMessageBox on '' (Issue 2 fix).
+
+    Previously accepted 3-5 chars for legacy/extended IDs, but that let
+    5-char entries like '12345' pass the code validator only to be
+    silently dropped by _validate_pdb_pool. Tightened to exactly 4 so
+    invalid IDs never enter the pool editor (no silent loss).
     """
     if not code:
         return ""
     c = str(code).strip().lower()
-    if 3 <= len(c) <= 5 and c.isalnum():
+    if len(c) == 4 and c.isalnum():
         return c
     return ""
 
