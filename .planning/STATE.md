@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-08-02)
 
 **Core value:** The player can load a molecule, generate blended "hider" atoms that match the local representation style, and reliably find them by clicking — with a working timer and win condition.
-**Current focus:** Phase 3 — Mutation Safety & Hider Registry Foundation (next)
+**Current focus:** Phase 3 — Mutation Safety & Hider Registry Foundation (in progress, Wave 1)
 
 ## Current Position
 
-Phase: 2 of 10 COMPLETE → ready for Phase 3
-Plan: 7 of 7 in Phase 2 (verified passed 4/4 must-haves + 11/11 requirements)
-Status: Phase 2 verified complete; ready to plan Phase 3
-Last activity: 2026-08-05 — Phase 2 verified (4/4 must-haves, 11/11 requirements satisfied; SETUP-01..06, DEMO-01, BTN-01..04 complete)
+Phase: 3 of 10 (Mutation Safety & Hider Registry Foundation)
+Plan: 03-02 complete (1 of 20 Phase 3 plans summarized; Wave 1 parallel — 03-01/03-03+ may be concurrent)
+Status: In progress
+Last activity: 2026-08-05 — Completed 03-02-PLAN.md (backup.py snapshot + discard)
 
-Progress: [██████░░░░] 20%
+Progress: [███░░░░░░░] 32%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
+- Total plans completed: 8
 - Average duration: ~12 min
-- Total execution time: ~1.3 hours
+- Total execution time: ~1.4 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [██████░░░░] 20%
 |-------|-------|-------|----------|
 | 1. Plugin Bootstrap & Dialog Scaffold | 1 | ~35 min | ~35 min |
 | 2. Setup Tab Configuration & Bundled Demos | 6/6 + 02-06 + 02-07 gap closures | ~31 min | ~4 min |
+| 3. Mutation Safety & Hider Registry Foundation | 1/20 (03-02) | ~1 min | ~1 min |
 
 **Recent Trend:**
-- Last 7 plans: 01-01 ~35min, 02-01 ~2min, 02-02 ~1min, 02-03 ~4min, 02-05 ~19min, 02-06 ~4min, 02-07 ~1min
-- Trend: 02-07 was the smallest plan yet (1 UI-only button + slot, no pure-layer change, no new test — WSL-only verified; runtime behavior deferred to 02-04 smoke test re-run)
+- Last 8 plans: 01-01 ~35min, 02-01 ~2min, 02-02 ~1min, 02-03 ~4min, 02-05 ~19min, 02-06 ~4min, 02-07 ~1min, 03-02 ~1min
+- Trend: 03-02 was a single-file cmd-coupled module (backup.py: BACKUP_PREFIX + snapshot + discard, 41 lines) — the snapshot/discard half of the PyMOL-has-no-undo backup lifecycle. 1 Rule-3 auto-fix (reworded docstring NOTE to avoid a literal `from pymol` false-positive grep match). All WSL gates green (py_compile + 90 tests + Pitfall-1/11 grep gates). Runtime deferred to Phase 3 smoke test.
 
 *Updated after each plan completion*
 
@@ -59,6 +60,10 @@ Progress: [██████░░░░] 20%
 
 - **gui_setup.py (552 -> 581 lines)**: 02-07 added a "Choose random" button (`self.pool_choose_btn`, QPushButton) as the 5th button in the pool button row (inside the pool QGroupBox, visually associated with the pool — not with the main Reset/Randomize/Save/Load Setup actions). Wired `pool_choose_btn.clicked -> _choose_random_from_pool` slot. The slot picks `random.choice(self._pool_list() or list(PDB_POOL))`, switches `mode_combo` to index 1 (fetch) so the field is visible, sets `pdb_edit` to the chosen code; returns early if both lists empty (defensive — PDB_POOL has 33 entries so unreachable). Does NOT touch any other setup field (hider count, lock scene, per-rep, difficulty, lock source, demo, loaded object) — focused, single-purpose. `import random` added at module level (line 15, next to `import json`). PDB_POOL import (line 22, from 02-06) verified present, not re-added. NO pure-layer change; NO new test (UI-only behavior; pre-existing 90 tests pin the pure layer).
 
+### Phase 3 Wave 1 outputs (03-02 — STILL AVAILABLE; cmd-coupled, standalone)
+
+- **backup.py (41 lines, NEW)**: cmd-coupled backup module (standalone — no import of setup_state/registry/mutation; mirrors demos.py's `from pymol import cmd` + section-comment style). `BACKUP_PREFIX = '_bchm_backup'` (underscore => private, hidden from `cmd.get_names('public_objects')` per RESEARCH Q6). `snapshot(target_obj)` = `cmd.delete(BACKUP_PREFIX)` (idempotent stale-backup discard) + `cmd.create(BACKUP_PREFIX, target_obj)` (fresh independent deep copy, creating.py:960) + return backup name. `discard(backup_name=BACKUP_PREFIX)` = `cmd.delete(backup_name)` (idempotent — safe on absent objects). `restore()` and `verify_intact()` deliberately NOT added (plans 03-05 + 03-08). 1 Rule-3 auto-fix: reworded the module docstring NOTE from `` `from pymol import cmd` will FAIL `` to "The pymol.cmd import will FAIL" to avoid a false-positive `from pymol` grep match (mirrors the AGENTS.md-documented "from PyQt5 import" docstring false positive). All WSL gates green (py_compile biochemeleon/*.py + 90 tests + Pitfall-1/11 grep gates zero matches). Runtime (cmd.delete/cmd.create deep-copy independence, idempotent delete, underscore-prefix privacy) deferred to the Phase 3 smoke test (plans 03-13/03-14, run via 03-15 checkpoint).
+
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecting current work:
@@ -83,6 +88,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [02-06]: Pool editor is a QListWidget (ExtendedSelection) inside a QGroupBox "Pool of PDB IDs (Randomize picks fetch codes from here)" + 4 buttons (+ Add, ✎ Edit, − Remove, Use bundled pool) — list semantics match the affordance (the QPlainTextEdit read as "might be a dropdown" but was free-text). Add/Edit validate via _validate_pdb_code BEFORE entry + QMessageBox.warning on invalid — invalid IDs never enter the list (no silent loss on Save/Load round-trip). No reorder buttons (out of scope).
 - [02-06]: _randomize left UNCHANGED per the plan (it already calls self._pool_list() which now reads from the QListWidget — behavior identical). Its docstring still references "pool_edit text area" (stale, but plan-protected — "do NOT touch _randomize").
 - [02-07]: "Choose random" button placed INSIDE the pool QGroupBox's button row (5th button after + Add / ✎ Edit / − Remove / Use bundled pool), NOT with the main Setup actions — per the user's enhancement spec, the button is visually associated with the pool it picks from. Empty pool falls back to list(PDB_POOL) (mirrors the 02-05 randomize_state convention that empty pool = use bundled pool; never produces an empty pdb_code box). mode_combo.setCurrentIndex(1) triggers _on_mode_changed -> target_stack.setCurrentIndex(1) only; it does NOT trigger _on_target_changed (wired to obj_combo/demo_combo, not mode_combo) so the hider-count cap recompute is NOT triggered — focused, single-purpose. import random at module level (not local); PDB_POOL import (02-06, line 22) verified, not re-added. No new test (UI-only; runtime behavior deferred to 02-04 smoke test).
+- [03-02]: backup.py snapshot = delete-then-create (`cmd.delete(BACKUP_PREFIX)` to discard any stale backup, then `cmd.create(BACKUP_PREFIX, target_obj)` for a fresh independent deep copy) — unambiguous; no merge-vs-replace question (RESEARCH Q2 flagged single-call `cmd.create(existing, other)` as UNVERIFIED C-side; the snapshot direction creates a fresh name so no merge question, but deleting stale first guarantees cleanliness even if a prior game crashed without discarding). `BACKUP_PREFIX='_bchm_backup'` underscore-prefixed so it's hidden from `public_objects`. `discard` is idempotent (`cmd.delete` safe on absent objects). `restore` (03-05) + `verify_intact` (03-08) deliberately deferred — snapshot+discard subset only per plan scope.
 
 ### Pending Todos
 
@@ -97,9 +103,10 @@ None yet.
 - [02-05]: All 4 smoke-test gaps closed at WSL tier (pure tests + py_compile + grep gates); the cap recompute (Gap 1) and per-rep max bounding (Gap 2 UI) call cmd.count_atoms / QSpinBox.setMaximum at runtime — only the 02-04 smoke test re-run can confirm them. ROADMAP.md NOT updated (Phase 2 not complete until smoke test approved).
 - [02-06]: Both pool-editor UX issues closed at WSL tier (90 tests + py_compile + grep gates); the QListWidget populate-on-first-show, Add/Edit/Remove/Use-bundled-pool button behavior, and QMessageBox on invalid input are WSL-unverifiable (need a live PyMOL Qt session) — only the 02-04 smoke test re-run can confirm them. ROADMAP.md NOT updated (Phase 2 not complete until smoke test re-approved after this fix).
 - [02-07]: The "Choose random" button gap closure closed at WSL tier (90 tests + py_compile + grep gates + git diff stats confirming setup_state.py/tests/other modules/ROADMAP.md untouched); the button's live-Qt behavior (appears in the pool group; clicking it switches to fetch mode + populates the pdb_code field with a random pool entry; does not change any other field) is WSL-unverifiable — only the 02-04 smoke test re-run can confirm it. ROADMAP.md NOT updated (Phase 2 not complete until smoke test re-approved after this enhancement).
+- [03-02]: backup.py is cmd-coupled — `cmd.delete`/`cmd.create` behavior (deep-copy independence, idempotent delete on absent objects, underscore-prefix privacy in `public_objects`) is WSL-unverifiable (no PyMOL in WSL; py_compile is syntax-only). Only the Phase 3 smoke test (plans 03-13/03-14, run via 03-15 Windows PyMOL checkpoint) can confirm runtime behavior. The RESEARCH Q2 MEDIUM flag (cmd.create merge-vs-replace) does NOT affect snapshot (fresh-name create) — it only affects the restore path (plan 03-05, which uses delete+create to sidestep it).
 
 ## Session Continuity
 
-Last session: 2026-08-04 (Plan 02-07 executed — 1 enhancement: "Choose random" button added next to the pool buttons in gui_setup.py; picks random.choice(self._pool_list() or list(PDB_POOL)) into the fetch field, switches mode to fetch, does NOT touch any other field; import random at module level; UI-only, no pure-layer change, no new test, 90 tests pass)
-Stopped at: Completed 02-07-PLAN.md. 1 task commit done (feat). Awaiting user re-run of 02-04 Windows PyMOL smoke test to confirm the Choose random button + the QListWidget pool editor + tightened validator at runtime.
-Resume file: .planning/phases/02-setup-tab-configuration-bundled-demos/02-07-SUMMARY.md
+Last session: 2026-08-05 (Plan 03-02 executed — created biochemeleon/backup.py: BACKUP_PREFIX + snapshot + discard, the snapshot/discard half of the PyMOL-has-no-undo backup lifecycle; cmd-coupled, 41 lines, standalone; 1 Rule-3 auto-fix reworded a docstring NOTE to avoid a `from pymol` false-positive grep match; all WSL gates green; runtime deferred to Phase 3 smoke test)
+Stopped at: Completed 03-02-PLAN.md. 1 task commit done (feat 07abca1). Phase 3 Wave 1 in progress (03-01/03-03+ may be concurrent — parallelization enabled).
+Resume file: .planning/phases/03-mutation-safety-hider-registry-foundation/03-02-SUMMARY.md

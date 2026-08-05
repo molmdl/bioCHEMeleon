@@ -71,7 +71,7 @@ Plans:
 
 Plans:
 - [ ] 03-01-PLAN.md — TDD registry.py core (HiderRecord + HiderRegistry register/get/all/remove)
-- [ ] 03-02-PLAN.md — backup.py snapshot + discard (BACKUP_PREFIX)
+- [x] 03-02-PLAN.md — backup.py snapshot + discard (BACKUP_PREFIX)
 - [ ] 03-03-PLAN.md — mutation.py insert_hider (pseudoatom + sentinel + identify→id)
 - [ ] 03-04-PLAN.md — TDD registry.py queries (by_rep, counts_by_rep, mark_found)
 - [ ] 03-05-PLAN.md — backup.py restore (delete+create, never single-call)
@@ -198,7 +198,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 |-------|----------------|--------|-----------|
 | 1. Plugin Bootstrap & Dialog Scaffold | 1/1 | ✓ Complete | 2026-08-03 |
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
-| 3. Mutation Safety & Hider Registry Foundation | 0/20 | Not started | - |
+| 3. Mutation Safety & Hider Registry Foundation | 1/20 | In progress | - |
 | 4. MVP Core Loop (Sphere) | 0/TBD | Not started | - |
 | 5. Line/Stick & Cartoon Generators | 0/TBD | Not started | - |
 | 6. Hint & Reveal | 0/TBD | Not started | - |
