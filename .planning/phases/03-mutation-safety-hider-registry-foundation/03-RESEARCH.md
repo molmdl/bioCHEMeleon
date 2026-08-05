@@ -2,7 +2,7 @@
 
 **Researched:** 2026-08-05
 **Domain:** PyMOL 2.5.0 open-source object mutation, snapshot/restore, atom-id tracking
-**Confidence:** HIGH (API signatures + semantics verified from bundled PyMOL 2.5.0 source at `/tmp/opencode/pymol-src/`; 4 narrow C-dispatched behaviors flagged UNVERIFIED with smoke-test resolutions)
+**Confidence:** HIGH (API signatures + semantics verified from bundled PyMOL 2.5.0 source at `./tmp/pymol-src/`; 4 narrow C-dispatched behaviors flagged UNVERIFIED with smoke-test resolutions)
 
 ## Summary
 
@@ -49,7 +49,7 @@ This phase adds NO new third-party dependencies. It uses only what `pymol-open-s
 
 ## API Verification
 
-All citations are `pymol-open-source` 2.5.0 source at `/tmp/opencode/pymol-src/modules/pymol/`. "UNVERIFIED" = dispatches to C (`_cmd.*`) and could not be confirmed from Python.
+All citations are `pymol-open-source` 2.5.0 source at `./tmp/pymol-src/modules/pymol/`. "UNVERIFIED" = dispatches to C (`_cmd.*`) and could not be confirmed from Python.
 
 ### Q1. `cmd.pseudoatom` — signature, return value, id-fetch (creating.py:1082-1134)
 
@@ -664,23 +664,23 @@ cmd.remove("1ubq and segi GAME")   # removes only hiders, leaves originals
 ## Sources
 
 ### Primary (HIGH confidence — bundled PyMOL 2.5.0 open-source source, read directly)
-- `/tmp/opencode/pymol-src/modules/pymol/creating.py:960-1036` — `cmd.create` signature, body, dispatch to `_cmd.create`
-- `/tmp/opencode/pymol-src/modules/pymol/creating.py:1082-1134` — `cmd.pseudoatom` full signature, defaults, body, `return r`
-- `/tmp/opencode/pymol-src/modules/pymol/creating.py:1136-1199` — `join_states` (create append-state idiom, line 1180)
-- `/tmp/opencode/pymol-src/modules/pymol/editing.py:47-62` — `_iterate_prepare_args` (space= semantics, callback form)
-- `/tmp/opencode/pymol-src/modules/pymol/editing.py:800-834` — `cmd.remove`
-- `/tmp/opencode/pymol-src/modules/pymol/editing.py:937-987` — `cmd.fuse` (modes 1/2/3, mode=3 combine-no-bond)
-- `/tmp/opencode/pymol-src/modules/pymol/editing.py:1424-1473` — `cmd.alter` (symbol table, sort warning, space=)
-- `/tmp/opencode/pymol-src/modules/pymol/editing.py:1490-1533` — `cmd.iterate` (callback form, space=)
-- `/tmp/opencode/pymol-src/modules/pymol/querying.py:1148-1192` — `cmd.get_names` (mode map; public_objects=4)
-- `/tmp/opencode/pymol-src/modules/pymol/querying.py:1235-1267` — `cmd.id_atom` (single-atom id)
-- `/tmp/opencode/pymol-src/modules/pymol/querying.py:1269-1300` — `cmd.identify` (mode 0 = id list, mode 1 = (obj,id))
-- `/tmp/opencode/pymol-src/modules/pymol/querying.py:1302-1330` — `cmd.index` (fragile-index warning, line 1315)
-- `/tmp/opencode/pymol-src/modules/pymol/querying.py:1412-1434` — `cmd.count_atoms`
-- `/tmp/opencode/pymol-src/modules/pymol/commanding.py:496-530` — `cmd.delete` (wildcards)
-- `/tmp/opencode/pymol-src/modules/pymol/editor.py:25-36` — `undocontext` NO-OP stub (confirms no undo)
-- `/tmp/opencode/pymol-src/modules/pymol/editor.py:156, 158, 354, 355` — canonical `space=` + multi-`;` alter + `create(union)` merge idioms
-- `/tmp/opencode/pymol-src/modules/pymol/selector.py:1-7` — `process` (tuple→backtick form)
+- `./tmp/pymol-src/modules/pymol/creating.py:960-1036` — `cmd.create` signature, body, dispatch to `_cmd.create`
+- `./tmp/pymol-src/modules/pymol/creating.py:1082-1134` — `cmd.pseudoatom` full signature, defaults, body, `return r`
+- `./tmp/pymol-src/modules/pymol/creating.py:1136-1199` — `join_states` (create append-state idiom, line 1180)
+- `./tmp/pymol-src/modules/pymol/editing.py:47-62` — `_iterate_prepare_args` (space= semantics, callback form)
+- `./tmp/pymol-src/modules/pymol/editing.py:800-834` — `cmd.remove`
+- `./tmp/pymol-src/modules/pymol/editing.py:937-987` — `cmd.fuse` (modes 1/2/3, mode=3 combine-no-bond)
+- `./tmp/pymol-src/modules/pymol/editing.py:1424-1473` — `cmd.alter` (symbol table, sort warning, space=)
+- `./tmp/pymol-src/modules/pymol/editing.py:1490-1533` — `cmd.iterate` (callback form, space=)
+- `./tmp/pymol-src/modules/pymol/querying.py:1148-1192` — `cmd.get_names` (mode map; public_objects=4)
+- `./tmp/pymol-src/modules/pymol/querying.py:1235-1267` — `cmd.id_atom` (single-atom id)
+- `./tmp/pymol-src/modules/pymol/querying.py:1269-1300` — `cmd.identify` (mode 0 = id list, mode 1 = (obj,id))
+- `./tmp/pymol-src/modules/pymol/querying.py:1302-1330` — `cmd.index` (fragile-index warning, line 1315)
+- `./tmp/pymol-src/modules/pymol/querying.py:1412-1434` — `cmd.count_atoms`
+- `./tmp/pymol-src/modules/pymol/commanding.py:496-530` — `cmd.delete` (wildcards)
+- `./tmp/pymol-src/modules/pymol/editor.py:25-36` — `undocontext` NO-OP stub (confirms no undo)
+- `./tmp/pymol-src/modules/pymol/editor.py:156, 158, 354, 355` — canonical `space=` + multi-`;` alter + `create(union)` merge idioms
+- `./tmp/pymol-src/modules/pymol/selector.py:1-7` — `process` (tuple→backtick form)
 
 ### Secondary (MEDIUM — established PyMOL behavior, C-side, flagged for smoke test)
 - underscore-prefix object privacy (public_objects filter) — C-side, smoke-tested
