@@ -12,13 +12,14 @@ Phase 3 scope (this module):
   - :class:`HiderRecord`: data container with validation + key + to_dict
   - :class:`HiderRegistry`: ``OrderedDict``-backed core CRUD
     (register/get/all/remove) + queries (by_rep/counts_by_rep) +
-    status update (mark_found)
+    status update (mark_found) + serialization (to_dict/from_dict)
 
 The cmd-coupled insertion/cleanup lives in ``mutation.py``; the
 orchestrator lives in ``game.py``. The registry stays pure by accepting
 an injected iterate function for sentinel reconstruction (dependency
-inversion - ``reconstruct_from_sentinels`` + ``to_dict`` / ``from_dict``
-are added in a later Phase 3 plan).
+inversion - ``reconstruct_from_sentinels`` is added in a later Phase 3
+plan; ``to_dict`` / ``from_dict`` are implemented here so Phase 8 just
+writes the dict to a ``.bcm`` JSON sidecar and reads it back).
 """
 
 from collections import OrderedDict
@@ -103,8 +104,9 @@ class HiderRegistry(object):
 
     Phase 3 methods: ``register`` / ``get`` / ``all`` / ``remove``
     (core CRUD) plus ``by_rep`` / ``counts_by_rep`` / ``mark_found``
-    (queries + status). A later plan adds
-    ``reconstruct_from_sentinels`` + ``to_dict`` / ``from_dict``.
+    (queries + status) plus ``to_dict`` / ``from_dict`` (serialization
+    for the Phase 8 ``.bcm`` sidecar). A later plan adds
+    ``reconstruct_from_sentinels`` (dependency-injected sentinel rebuild).
     """
 
     def __init__(self):
@@ -185,3 +187,37 @@ class HiderRegistry(object):
         """
         rec = self._records[(object, int(id))]
         rec.status = HIDER_STATUS_FOUND
+
+    # ---- serialization (Phase 8 .bcm sidecar shape) ----
+
+    def to_dict(self):
+        """Return the JSON-serializable registry shape for the ``.bcm`` sidecar.
+
+        Returns ``{'version': 1, 'hiders': [record.to_dict() for each
+        record in insertion order]}``. The shape is designed in Phase 3
+        and unit-tested for round-trip correctness so Phase 8 just writes
+        this dict to a JSON file and reads it back via
+        :meth:`from_dict` - no schema migration at Phase 8.
+        """
+        return {'version': 1,
+                'hiders': [r.to_dict() for r in self._records.values()]}
+
+    @classmethod
+    def from_dict(cls, d):
+        """Reconstruct a :class:`HiderRegistry` from a ``to_dict`` payload.
+
+        Tolerant: a missing ``'version'`` key is accepted (treated as
+        v1); a missing ``'status'`` on a hider defaults to
+        :data:`HIDER_STATUS_HIDDEN`; a missing ``'pos'`` stays ``None``.
+        ``pos`` is stored as-is (a list from JSON); list/tuple
+        normalization is a Phase 8 boundary concern.
+
+        Raises ``KeyError`` if a hider dict is missing ``'object'`` /
+        ``'id'`` / ``'rep'`` (required fields). ``id`` is coerced to
+        ``int`` via :meth:`register` (matches the rest of the registry).
+        """
+        reg = cls()
+        for h in d.get('hiders', []):
+            reg.register(h['object'], h['id'], h['rep'],
+                          h.get('status', HIDER_STATUS_HIDDEN), h.get('pos'))
+        return reg
