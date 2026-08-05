@@ -357,5 +357,95 @@ class TestHiderRegistryQueries(unittest.TestCase):
             self.reg.mark_found('1ubq', 999)
 
 
+class TestHiderRegistrySerialize(unittest.TestCase):
+    """Test HiderRegistry to_dict / from_dict round-trip (Phase 8 .bcm shape).
+
+    The serialization shape is designed NOW (Phase 3) and unit-tested for
+    round-trip correctness, so Phase 8 just writes ``registry.to_dict()``
+    to a ``.bcm`` JSON sidecar and reads it back via
+    ``HiderRegistry.from_dict()``. Designing the shape now avoids a
+    Phase 8 schema migration.
+
+    Shape: ``{'version': 1, 'hiders': [record.to_dict() for each record
+    in insertion order]}``.
+
+    Round-trip is value-preserving for id / object / rep / status (the
+    four fields the click handler + Game tab rely on). ``pos`` round-trip
+    is not asserted here: ``from_dict`` stores ``pos`` as-is (a list from
+    JSON) while ``HiderRecord`` accepts either a list or tuple; the
+    list/tuple normalization is a Phase 8 boundary concern (RESEARCH
+    serialization shape note, lines 240-241).
+    """
+
+    def test_to_dict_empty(self):
+        """Fresh registry: to_dict() == {'version': 1, 'hiders': []}."""
+        reg = HiderRegistry()
+        self.assertEqual(reg.to_dict(), {'version': 1, 'hiders': []})
+
+    def test_to_dict_three_hiders(self):
+        """3 hiders (mixed reps, one with pos): version=1, 3 hider dicts.
+
+        Each hider dict has keys id/object/rep/status; the one with pos
+        has 'pos' key as a list.
+        """
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')
+        reg.register('1ubq', 2, 'sticks')
+        reg.register('1ubq', 3, 'spheres', pos=[1.0, 2.0, 3.0])
+        d = reg.to_dict()
+        self.assertEqual(d['version'], 1)
+        self.assertEqual(len(d['hiders']), 3)
+        for h in d['hiders']:
+            self.assertIn('id', h)
+            self.assertIn('object', h)
+            self.assertIn('rep', h)
+            self.assertIn('status', h)
+        # Exactly one hider has 'pos', and it's a list
+        with_pos = [h for h in d['hiders'] if 'pos' in h]
+        self.assertEqual(len(with_pos), 1)
+        self.assertEqual(with_pos[0]['pos'], [1.0, 2.0, 3.0])
+        self.assertIsInstance(with_pos[0]['pos'], list)
+
+    def test_from_dict_round_trip(self):
+        """register 3, to_dict -> d, from_dict(d) -> reg2; id/object/rep/status match."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')
+        reg.register('1ubq', 2, 'sticks')
+        reg.register('2qbz', 1, 'cartoon', pos=(4.0, 5.0, 6.0))
+        d = reg.to_dict()
+        reg2 = HiderRegistry.from_dict(d)
+        orig = reg.all()
+        new = reg2.all()
+        self.assertEqual(len(new), len(orig))
+        for a, b in zip(orig, new):
+            self.assertEqual(b.id, a.id)
+            self.assertEqual(b.object, a.object)
+            self.assertEqual(b.rep, a.rep)
+            self.assertEqual(b.status, a.status)
+
+    def test_from_dict_missing_status_defaults_hidden(self):
+        """from_dict with missing 'status' in a hider defaults to 'hidden'."""
+        d = {'hiders': [{'id': 1, 'object': 'o', 'rep': 'spheres'}]}
+        reg = HiderRegistry.from_dict(d)
+        rec = reg.get('o', 1)
+        self.assertIsNotNone(rec)
+        self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+
+    def test_from_dict_missing_version(self):
+        """from_dict with missing 'version' key still works (treats as v1).
+
+        No KeyError on a dict that omits 'version' entirely.
+        """
+        d = {'hiders': []}
+        reg = HiderRegistry.from_dict(d)
+        self.assertEqual(reg.all(), [])
+
+    def test_from_dict_empty_hiders(self):
+        """from_dict with 'hiders': [] -> empty registry."""
+        d = {'version': 1, 'hiders': []}
+        reg = HiderRegistry.from_dict(d)
+        self.assertEqual(reg.all(), [])
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
