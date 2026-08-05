@@ -4,7 +4,10 @@ the new atom's stable id (fetched via the identify call, never the pseudoatom
 return value). fetch_all_hider_ids reads back every sentinel atom's
 ``(object, id)`` tuple via the iterate primitive with an explicit dict
 (hygienic -- no global namespace pollution), for registry reconstruction
-and the smoke-test id-stability spike.
+and the smoke-test id-stability spike. cleanup_hiders removes all sentinel
+atoms FROM an object by sentinel (happy-path cleanup -- the remove primitive
+deletes atoms FROM the object, not the object itself) and returns the count
+removed (idempotent; gates the remove call on a non-zero sentinel count).
 
 This module is the cmd-coupled mutation primitive for Phase 3. It lives in
 the cmd layer (imports the pymol cmd module) alongside demos.py and
@@ -110,3 +113,36 @@ def fetch_all_hider_ids(object):
     cmd.iterate(f"{object} and segi GAME and b -999", "stored.append((model, id))",
                 space={'stored': out})  # editing.py:1490; explicit dict avoids global namespace pollution (RESEARCH sec Q3); id = stable integral id, NOT index (RESEARCH sec Q4)
     return out  # list of (object_name, id)
+
+
+# ---- Hider cleanup (sentinel-based, happy path) ----
+
+def cleanup_hiders(object):
+    """Remove all hider sentinel atoms FROM *object* and return the count
+    removed. Happy-path cleanup: the remove primitive deletes atoms FROM
+    the object (NOT the object itself, unlike the delete primitive which
+    removes the whole object) -- the original structure stays and only
+    hiders are removed, so the object matches its pre-game state (criterion
+    4). This is the happy-path counterpart to ``backup.restore`` (the
+    failure path).
+
+    Cleanup is by sentinel ONLY -- the selector is the sentinel
+    (``segi='GAME'`` + ``b=-999``), never resi/chain/per-object index
+    (unstable across deletions; AGENTS.md sentinel-only rule), which makes
+    cleanup robust against registry loss on a ``.pse`` reload (RESEARCH
+    sec Q4). The count-atoms primitive (querying.py:1412) gates the remove
+    call: if the sentinel count is zero, the remove is skipped (idempotent
+    -- no error on an empty selection). The returned count lets the caller
+    (game.py cleanup) assert it matches the registry length.
+
+    Args:
+        object (str): the PyMOL object to remove hider sentinels from.
+
+    Returns:
+        int: the number of hider sentinel atoms removed (0 if none were
+            present -- idempotent).
+    """
+    before = cmd.count_atoms(f"{object} and segi GAME")  # querying.py:1412; gate to skip remove on empty selection
+    if before:
+        cmd.remove(f"{object} and segi GAME")  # editing.py:800; remove atoms FROM object (NOT delete the object)
+    return before
