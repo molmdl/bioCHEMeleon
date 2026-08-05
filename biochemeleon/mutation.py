@@ -1,0 +1,74 @@
+"""Hider insertion + sentinel + cleanup -- cmd-coupled. insert_hider inserts
+a pseudoatom INTO an existing object, tags the GAME sentinel, and returns
+the new atom's stable id (fetched via cmd.identify, never the pseudoatom
+return value).
+
+This module is the cmd-coupled mutation primitive for Phase 3. It lives in
+the cmd layer (imports `from pymol import cmd`) alongside demos.py and
+backup.py, and is NOT WSL-runnable at runtime -- only syntax-checked
+(``python3.6 -m py_compile``) and runtime-verified by the Phase 3 Windows
+PyMOL smoke test. The pure data model (HiderRegistry) lives in registry.py.
+
+Source: .planning/phases/03-mutation-safety-hider-registry-foundation/
+        03-RESEARCH.md, sections Q1 (pseudoatom return value), Q3 (alter
+        sentinel + space= idiom), Q4 (id vs index).
+"""
+from pymol import cmd
+
+
+# ---- Hider insertion (HIDER-01 + HIDER-02) ----
+
+def insert_hider(object, pos, rep, handle, segi='GAME', b=-999.0):
+    """Insert one hider pseudoatom INTO object. Returns the new atom's id
+    (fetched via identify). The pseudoatom return value is an unverified C
+    status code (RESEARCH sec Q1) -- NEVER rely on it.
+
+    HIDER-01: the pseudoatom is inserted INTO *object* (via
+    ``cmd.pseudoatom(object=existing, ...)``), NOT as a separate object
+    (``cmd.load`` / ``cmd.create('hiders', ...)`` would let the player
+    toggle one object to win). ``cmd.get_names('public_objects')`` is
+    therefore unchanged by this call.
+
+    HIDER-02: the sentinel ``segi='GAME'`` + ``b=-999`` is set via
+    ``cmd.alter`` with a single semicolon-joined expression (the canonical
+    editor.py:354 idiom). Cleanup and session reload identify hiders by
+    this sentinel ONLY -- never by resi/chain/per-object index (unstable
+    across deletions).
+
+    The atom's stable ``id`` is fetched via ``cmd.identify(..., mode=0)``
+    (querying.py:1269; mode=0 returns the integral id list, NOT the
+    fragile index). ``cmd.sort`` is called after the alter as a defensive
+    habit (editing.py:1457 warns to sort after altering segi/chain; sort
+    reassigns index but preserves id -- safe for the id-keyed registry).
+
+    ``rep`` is accepted as a parameter (the registry needs it for
+    per-rep counts) but insert_hider itself does NOT use rep for placement
+    logic -- placement is Phase 4/5 generator work. Phase 3's insert_hider
+    places at the caller-supplied *pos*; this proves the insertion
+    mechanism, not the generator.
+
+    Args:
+        object (str): existing PyMOL object to insert INTO.
+        pos (sequence of 3 floats): insertion coordinates.
+        rep (str): one of GAME_REPS (validated by the registry, not here).
+        handle (str): throwaway atom *name* used to re-select the new
+            atom for the alter + identify calls (e.g. 'H001').
+        segi (str): sentinel segment id (default 'GAME').
+        b (float): sentinel b-factor (default -999.0).
+
+    Returns:
+        int: the new atom's stable id.
+
+    Raises:
+        AssertionError: if identify does not return exactly one id (the
+            pseudoatom insert or alter did not produce a unique atom).
+    """
+    cmd.pseudoatom(object=object, pos=list(pos), name=handle,  # creating.py:1082
+                   segi=segi, b=b, hetatm=1, elem='PS',
+                   resn='HIDER', chain='H', resi='9001')
+    cmd.alter(f"{object} and name {handle}", "segi='GAME'; b=-999.0",
+              space={})  # editing.py:1424; editor.py:354 multi-`;` idiom; space={} avoids global namespace pollution (RESEARCH sec Q3)
+    cmd.sort(object)  # defensive -- editing.py:1457 alter warning: sort after altering segi/chain
+    ids = cmd.identify(f"{object} and name {handle} and segi GAME", mode=0)  # querying.py:1269; mode=0 returns id list, NOT index
+    assert len(ids) == 1, "expected 1 new hider id, got %r" % (ids,)
+    return ids[0]
