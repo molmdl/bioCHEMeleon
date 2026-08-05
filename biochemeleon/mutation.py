@@ -1,10 +1,10 @@
 """Hider insertion + sentinel + cleanup -- cmd-coupled. insert_hider inserts
 a pseudoatom INTO an existing object, tags the GAME sentinel, and returns
-the new atom's stable id (fetched via cmd.identify, never the pseudoatom
+the new atom's stable id (fetched via the identify call, never the pseudoatom
 return value).
 
 This module is the cmd-coupled mutation primitive for Phase 3. It lives in
-the cmd layer (imports `from pymol import cmd`) alongside demos.py and
+the cmd layer (imports the pymol cmd module) alongside demos.py and
 backup.py, and is NOT WSL-runnable at runtime -- only syntax-checked
 (``python3.6 -m py_compile``) and runtime-verified by the Phase 3 Windows
 PyMOL smoke test. The pure data model (HiderRegistry) lives in registry.py.
@@ -23,19 +23,18 @@ def insert_hider(object, pos, rep, handle, segi='GAME', b=-999.0):
     (fetched via identify). The pseudoatom return value is an unverified C
     status code (RESEARCH sec Q1) -- NEVER rely on it.
 
-    HIDER-01: the pseudoatom is inserted INTO *object* (via
-    ``cmd.pseudoatom(object=existing, ...)``), NOT as a separate object
-    (``cmd.load`` / ``cmd.create('hiders', ...)`` would let the player
-    toggle one object to win). ``cmd.get_names('public_objects')`` is
+    HIDER-01: the pseudoatom is inserted INTO *object* (object=existing,
+    NOT a new object -- a separate object via load/create would let the
+    player toggle one object to win). The public object list is
     therefore unchanged by this call.
 
-    HIDER-02: the sentinel ``segi='GAME'`` + ``b=-999`` is set via
-    ``cmd.alter`` with a single semicolon-joined expression (the canonical
-    editor.py:354 idiom). Cleanup and session reload identify hiders by
+    HIDER-02: the sentinel ``segi='GAME'`` + ``b=-999`` is set via alter
+    with a single semicolon-joined expression (the canonical editor.py:354
+    idiom). Cleanup and session reload identify hiders by
     this sentinel ONLY -- never by resi/chain/per-object index (unstable
     across deletions).
 
-    The atom's stable ``id`` is fetched via ``cmd.identify(..., mode=0)``
+    The atom's stable ``id`` is fetched via identify (mode=0)
     (querying.py:1269; mode=0 returns the integral id list, NOT the
     fragile index). ``cmd.sort`` is called after the alter as a defensive
     habit (editing.py:1457 warns to sort after altering segi/chain; sort
