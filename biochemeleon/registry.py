@@ -8,16 +8,17 @@ add/remove; ``index`` is not). The registry lives in the PURE layer
 ``pymol.Qt`` import) so it is WSL-unit-testable, mirroring
 ``setup_state.py``'s convention.
 
-Phase 3 scope (this module): the core CRUD subset -
+Phase 3 scope (this module):
   - :class:`HiderRecord`: data container with validation + key + to_dict
-  - :class:`HiderRegistry`: ``OrderedDict``-backed register/get/all/remove
+  - :class:`HiderRegistry`: ``OrderedDict``-backed core CRUD
+    (register/get/all/remove) + queries (by_rep/counts_by_rep) +
+    status update (mark_found)
 
-Later Phase 3 plans extend this with ``by_rep`` / ``counts_by_rep`` /
-``mark_found`` (03-02), ``reconstruct_from_sentinels`` + ``to_dict`` /
-``from_dict`` (03-03). The cmd-coupled insertion/cleanup lives in
-``mutation.py``; the orchestrator lives in ``game.py``. The registry
-stays pure by accepting an injected iterate function for sentinel
-reconstruction (dependency inversion - implemented in 03-03).
+The cmd-coupled insertion/cleanup lives in ``mutation.py``; the
+orchestrator lives in ``game.py``. The registry stays pure by accepting
+an injected iterate function for sentinel reconstruction (dependency
+inversion - ``reconstruct_from_sentinels`` + ``to_dict`` / ``from_dict``
+are added in a later Phase 3 plan).
 """
 
 from collections import OrderedDict
@@ -100,10 +101,10 @@ class HiderRegistry(object):
     matches the order hiders are inserted into the target object, which
     the click handler (Phase 4) relies on for stable iteration.
 
-    Phase 3 core subset: ``register`` / ``get`` / ``all`` / ``remove``.
-    Later plans add ``by_rep`` / ``counts_by_rep`` / ``mark_found``
-    (03-02), ``reconstruct_from_sentinels`` + ``to_dict`` / ``from_dict``
-    (03-03).
+    Phase 3 methods: ``register`` / ``get`` / ``all`` / ``remove``
+    (core CRUD) plus ``by_rep`` / ``counts_by_rep`` / ``mark_found``
+    (queries + status). A later plan adds
+    ``reconstruct_from_sentinels`` + ``to_dict`` / ``from_dict``.
     """
 
     def __init__(self):
@@ -146,3 +147,41 @@ class HiderRegistry(object):
         time, never raises). ``id`` is coerced to ``int``.
         """
         return self._records.pop((object, int(id)), None) is not None
+
+    # ---- queries + status ----
+
+    def by_rep(self, rep):
+        """Return all records matching ``rep`` in insertion order.
+
+        Pure filter over the stored records; returns a fresh list. Reps
+        with no hiders return ``[]`` (not ``None``) so callers can
+        iterate without a None-check. Used by the Phase 4 Game tab to
+        show remaining hiders per representation.
+        """
+        return [r for r in self._records.values() if r.rep == rep]
+
+    def counts_by_rep(self):
+        """Return ``{rep: count}`` for EVERY rep in :data:`GAME_REPS`.
+
+        Zero-fills reps with no hiders so the Game tab can render
+        ``"cartoon: 0"`` even when no cartoon hiders exist (criterion 3:
+        per-rep counts). The returned dict's key order matches
+        :data:`GAME_REPS`; counts reflect insertion-order records.
+        """
+        out = {rep: 0 for rep in GAME_REPS}
+        for r in self._records.values():
+            out[r.rep] = out.get(r.rep, 0) + 1
+        return out
+
+    def mark_found(self, object, id):
+        """Set the record at ``(object, id)`` status to ``'found'``.
+
+        Raises ``KeyError`` if ``(object, id)`` is not registered - this
+        is the desired behavior for the Phase 4 click handler: clicking
+        an atom that isn't a registered hider is a caller bug, and a
+        clean ``KeyError`` surfaces it immediately rather than silently
+        no-op-ing. ``id`` is coerced to ``int`` (matches register/get/
+        remove).
+        """
+        rec = self._records[(object, int(id))]
+        rec.status = HIDER_STATUS_FOUND
