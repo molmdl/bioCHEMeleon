@@ -284,5 +284,78 @@ class TestHiderRegistryCore(unittest.TestCase):
         self.assertIsNone(r2.get('1ubq', 1))
 
 
+class TestHiderRegistryQueries(unittest.TestCase):
+    """Test HiderRegistry by_rep / counts_by_rep / mark_found queries.
+
+    These are the per-rep counting + status-update methods needed for
+    success criterion 3 (per-rep counts) and Phase 4's click-to-find
+    handler (mark_found). Pure functions over the registry's in-memory
+    records.
+    """
+
+    def setUp(self):
+        """Build a registry with 3 hiders across 2 reps.
+
+        Fixture: ('1ubq', 1, 'spheres'), ('1ubq', 2, 'sticks'),
+                 ('1ubq', 3, 'spheres')
+        Keep direct references for insertion-order + status assertions.
+        """
+        self.reg = HiderRegistry()
+        self.r1 = self.reg.register('1ubq', 1, 'spheres')
+        self.r2 = self.reg.register('1ubq', 2, 'sticks')
+        self.r3 = self.reg.register('1ubq', 3, 'spheres')
+
+    # ---- by_rep ----
+
+    def test_by_rep_returns_matching(self):
+        """by_rep('spheres') returns [r1, r3] in insertion order."""
+        out = self.reg.by_rep('spheres')
+        self.assertEqual(out, [self.r1, self.r3])
+
+    def test_by_rep_empty_returns_empty_list(self):
+        """by_rep for a rep with no hiders returns [] (not None)."""
+        out = self.reg.by_rep('cartoon')
+        self.assertEqual(out, [])
+        self.assertIsNotNone(out)
+
+    # ---- counts_by_rep ----
+
+    def test_counts_by_rep_all_reps_present(self):
+        """counts_by_rep() returns ALL 5 GAME_REPS keys, zero-filled."""
+        counts = self.reg.counts_by_rep()
+        # Every GAME_REP is a key (zero-filled for reps with no hiders)
+        self.assertEqual(set(counts.keys()), set(GAME_REPS))
+        # Specific values for the setUp fixture
+        self.assertEqual(counts, {'lines': 0, 'sticks': 1, 'spheres': 2,
+                                  'cartoon': 0, 'ribbon': 0})
+
+    def test_counts_by_rep_empty_registry(self):
+        """counts_by_rep() on a fresh registry zero-fills all 5 reps."""
+        reg = HiderRegistry()
+        counts = reg.counts_by_rep()
+        self.assertEqual(set(counts.keys()), set(GAME_REPS))
+        for rep in GAME_REPS:
+            with self.subTest(rep=rep):
+                self.assertEqual(counts[rep], 0)
+
+    # ---- mark_found ----
+
+    def test_mark_found_sets_status(self):
+        """mark_found('1ubq', 2) sets r2.status to 'found'."""
+        self.reg.mark_found('1ubq', 2)
+        self.assertEqual(self.r2.status, HIDER_STATUS_FOUND)
+
+    def test_mark_found_only_affects_target(self):
+        """mark_found('1ubq', 2) leaves r1 (and r3) as 'hidden'."""
+        self.reg.mark_found('1ubq', 2)
+        self.assertEqual(self.r1.status, HIDER_STATUS_HIDDEN)
+        self.assertEqual(self.r3.status, HIDER_STATUS_HIDDEN)
+
+    def test_mark_found_not_registered_raises(self):
+        """mark_found on an unregistered (object, id) raises KeyError."""
+        with self.assertRaises(KeyError):
+            self.reg.mark_found('1ubq', 999)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
