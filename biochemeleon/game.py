@@ -39,3 +39,31 @@ class GameController:
         self.registry = registry.HiderRegistry().reconstruct_from_sentinels(
             lambda: mutation.fetch_all_hider_ids(self.target_obj))
         return self.registry
+
+    def cleanup(self):
+        """Happy-path cleanup: remove all hiders by sentinel, verify structure intact, discard backup.
+        Returns True if the structure matches the pre-game backup exactly (criterion 4 happy path),
+        False if the verify_intact check fails (caller should call abort_on_error).
+        Idempotent: safe to call when not started (returns True, no-op)."""
+        if not self._started:
+            return True
+        removed = mutation.cleanup_hiders(self.target_obj)
+        intact = backup.verify_intact(self.target_obj, self._backup_name)
+        backup.discard(self._backup_name)
+        self._backup_name = None
+        self._started = False
+        self.registry = registry.HiderRegistry()  # reset
+        return intact
+
+    def abort_on_error(self):
+        """Failure-path restore: restore from backup (delete+create), then discard.
+        Returns True on success, False on failure (restore failed — target may be in bad state).
+        Use when cleanup() returned False OR an unexpected error occurred mid-game."""
+        if not self._started:
+            return True
+        ok = backup.restore(self.target_obj, self._backup_name)
+        backup.discard(self._backup_name)
+        self._backup_name = None
+        self._started = False
+        self.registry = registry.HiderRegistry()  # reset
+        return ok
