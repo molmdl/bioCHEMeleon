@@ -110,7 +110,7 @@ def fetch_all_hider_ids(object):
         atom found in *object* (empty list if none).
     """
     out = []
-    cmd.iterate(f"{object} and segi GAME and b -999", "stored.append((model, ID))",
+    cmd.iterate(f"{object} and segi GAME and b < 0", "stored.append((model, ID))",
                 space={'stored': out})  # editing.py:1490; explicit dict avoids global namespace pollution (RESEARCH sec Q3); id = stable integral id, NOT index (RESEARCH sec Q4)
     return out  # list of (object_name, id)
 
