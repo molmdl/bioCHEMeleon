@@ -52,9 +52,15 @@ setup_state.py  (PURE: stdlib only — no pymol, no Qt; unit-testable in WSL)
 demos.py        (cmd bridge: imports FROM setup_state; uses pymol.cmd)
       ↑
 gui_setup.py    (Qt + cmd: imports FROM setup_state AND demos)
+
+Phase 3 stack (mutation-safety; game.py is the composition root):
+  registry.py  (PURE: stdlib + GAME_REPS from setup_state; unit-testable in WSL)
+  backup.py    (cmd: snapshot/restore/discard/verify_intact — standalone)
+  mutation.py  (cmd: insert_hider/fetch_all_hider_ids/cleanup_hiders — standalone)
+  game.py      (cmd orchestrator: GameController imports backup+mutation+registry)
 ```
 
-Never reverse. `setup_state.py` must have NO `from pymol import cmd` and NO `from pymol.Qt import`. `GAME_REPS` and `DEMO_MANIFEST` live in `setup_state.py` (the pure layer) so pure functions can reference them without importing the cmd-coupled module.
+Never reverse. `setup_state.py` must have NO `from pymol import cmd` and NO `from pymol.Qt import`. `registry.py` (Phase 3) is ALSO pure (stdlib + `GAME_REPS` from setup_state; no `from pymol`) — unit-testable in WSL. `backup.py`/`mutation.py` are standalone cmd bridges (no cross-module imports); `game.py` is the composition root that wires all three. `GAME_REPS` and `DEMO_MANIFEST` live in `setup_state.py` (the pure layer) so pure functions can reference them without importing the cmd-coupled module.
 
 Plugin entry point and dialog live in `biochemeleon/__init__.py`:
 - Entry point is `__init_plugin__(app=None)` (NOT legacy `__init__(self)`); `addmenuitemqt` is imported locally inside it.
@@ -76,6 +82,23 @@ Plugin entry point and dialog live in `biochemeleon/__init__.py`:
 - No `cmd.get_representations()` in PyMOL 2.5.0; detect active reps with `cmd.count_atoms("{obj} and rep {rep}") > 0`.
 - `cmd.fetch` must use `async_=0` for synchronous load.
 - WSL→Windows path guard: `demos.to_windows_path()` converts `/mnt/c/...` → `C:\...` only for WSL mount paths (returns other paths unchanged). Windows PyMOL cannot resolve WSL paths.
+
+### Phase 3 mutation-safety rules
+
+- **Restore = `cmd.delete(target)` + `cmd.create(target, backup)` two-step** — NEVER single-call `cmd.create(existing, backup)` (merge-vs-replace UNVERIFIED C-dispatched; RESEARCH §Q2). Smoke test confirmed single-call create IS REPLACE (`n_after==n_before`), but delete+create stays for an unambiguous failure-path.
+- **Hider id via `cmd.identify("obj and name <handle> and segi GAME", mode=0)`** after insert — NEVER rely on `cmd.pseudoatom()`'s return value (smoke test: returns `None`/`NoneType`; RESEARCH §Q1).
+- **`cmd.iterate` exposes the atom id as UPPERCASE `ID`**, not lowercase `id` (the Python builtin → `NameError` or wrong value; symbol table editing.py:1444-1449). Smoke test caught a lowercase-`id` transcription bug.
+- **Registry keys on atom `id`** (stable across add/delete; smoke test: id stable across `.pse` reload, `pse_sent==[saved_id]`) — NEVER on `index` (fragile, shifts on insert/remove; RESEARCH §Q4, querying.py:1315).
+- **`reconstruct_from_sentinels` uses dependency injection** — the iterate fn is passed as a parameter so `registry.py` stays pure (no `from pymol import cmd`); `game.py` injects `lambda: mutation.fetch_all_hider_ids(obj)`.
+- **rep is NOT recoverable from sentinels after `.pse` reload** — the sentinel carries only `segi='GAME'` + `b=-999`; `reconstruct_from_sentinels` sets `rep=None`. Phase 8 `.bcm` sidecar reconciles `rep` (RESEARCH Open Risk 6; smoke test confirmed `rep=None` post-reload).
+- **`backup.snapshot` MUST precede any `mutation.insert_hider`** — there is NO undo (undocontext is a no-op stub; editor.py:25-36); the backup is the only recovery mechanism.
+- **Do NOT re-call `verify_intact` on a backup AFTER `cleanup()`/`abort_on_error()` discarded it** — both already run `verify_intact`/`restore` + `discard` internally; re-calling raises `CmdException` on the deleted object. Assert the orchestrator's RETURN value, not a re-derivation.
+- **`cmd.iterate`/`cmd.alter` with `space={'stored': ...}`** — NEVER `space=None` (pollutes global `pymol.__dict__`; RESEARCH §Q3, editing.py:59-60).
+- **`cmd.iterate` does NOT expose `x`/`y`/`z` coords** (state-dependent; need `cmd.iterate_state`). `verify_intact` uses `(resn, resi, name, chain, segi)` — count + identity multiset suffices because `cmd.create` copies coords bit-for-bit (RESEARCH §Q6).
+- **B-factor sentinel SELECTOR is `b < 0`, NEVER `b -999`** — PyMOL has no exact-match b-factor selector; `b -999` is malformed ("Selector-Error: Malformed selection") and silently matches nothing. The sentinel VALUE stays `-999` (set in `insert_hider`/cleanup docstrings); only the SELECTOR uses the comparison `b < 0` (matches `-999.0`).
+- **`cleanup_hiders` uses `segi GAME` ALONE** (sentinel-only; hiders are the only atoms with `segi=GAME`). `b < 0` is for `fetch_all_hider_ids`/read paths; cleanup by `segi GAME` ONLY. NEVER by `resi`/`chain`/per-object `index` (unstable across deletions).
+- **`cmd.sort(obj)` after `cmd.alter` of `segi`/`chain`** — defensive (editing.py:1457: stale canonical order confounds later `create`/`byres`). `sort` reassigns `index` but preserves `id` — safe for the id-keyed registry.
+- **Architecture: `registry.py` (pure) ← `backup.py`/`mutation.py` (cmd) ← `game.py` (orchestrator)** — strict dependency direction. `registry.py` has NO `from pymol import`. `game.py` wires all three.
 
 ## Code & UI standards (spec.md constraints)
 
