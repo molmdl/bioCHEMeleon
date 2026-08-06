@@ -128,7 +128,7 @@ The hider registry stores `(resi, chain)` or `(object, atom_index)` at generatio
 - `cmd.iterate(obj + " and id N", ...)` returns a different atom after a removal.
 - Two atoms answer to the same `(resi, chain)`.
 
-**Phase to address:** **generator** (registry design) + **game loop** (found-marking strategy) + **save-load** (sentinel-based reconstruction).
+**Phase to address:** **generator** (registry design) + **game loop** (found-marking strategy) + **save-load** (sentinel-based reconstruction). *(Runtime-verified 2026-08-06 via the Phase 3 headless smoke test — atom `id` stable across insert and `.pse` round-trip; see "Phase 3 — Resolved Research Flags" below.)*
 
 ---
 
@@ -215,7 +215,7 @@ Even this only round-trips serializable state (numbers, strings, lists, dicts). 
 - Loading a `.pse` raises `TypeError: cannot pickle 'QTimer'` (or similar) in the console.
 - Hiders reappear but their "found" recolor is lost (because recolor was a runtime state not persisted).
 
-**Phase to address:** **save-load** (the entire phase is essentially this).
+**Phase to address:** **save-load** (the entire phase is essentially this). *(Runtime-verified 2026-08-06 via the Phase 3 headless smoke test — `segi='GAME'` sentinel survives `.pse` reload, `id` stable, `b=-999.0` preserved, `reconstruct_from_sentinels` rebuilds with `rep=None`; see "Phase 3 — Resolved Research Flags" below.)*
 
 ---
 
@@ -417,6 +417,46 @@ PyMOL **Open Source has no undo/redo**. The `undocontext` is a no-op stub. (The 
 | 11. WSL/Windows paths | **setup** + **demos** | Bundled PDB loads via `setenv.bat` with no path error. |
 | 12. Large-molecule perf | **generator** + **demos** | 3GP6 with membrane: Generate < 30 s; click latency < 200 ms. |
 | 13. Demo licensing/attribution | **demos** | `DATA_SOURCES.md` lists every PDB ID + DOI + MemProtMD/SASBDB entry + license. |
+
+---
+
+## Phase 3 — Resolved Research Flags (runtime-verified 2026-08-06)
+
+The Phase 3 smoke test (`smoke/phase3_smoke.py`, plan 03-15) ran headlessly via Windows PyMOL (`cmd.exe /c C:\\src\\run-conda-pymol.bat -cq` from the staged WSL→Windows path) and reached **24/24 ALL PASSED, exit 0**. It resolved the UNVERIFIED/MEDIUM flags from `03-RESEARCH.md` with runtime-confirmed values. **Future research must NOT re-investigate these** — the values below are confirmed at the PyMOL 2.5.0 runtime tier.
+
+Source: `.planning/phases/03-mutation-safety-hider-registry-foundation/03-15-SUMMARY.md`.
+
+### Q1 — `cmd.pseudoatom` return value: RESOLVED (informational)
+
+- **Finding:** `cmd.pseudoatom(...)` returns `None` (type `NoneType`). It does NOT return the new atom's id, a status code, or an object reference.
+- **Conclusion:** Code NEVER relies on the return value. `biochemeleon/mutation.py::insert_hider` fetches the stable id via `cmd.identify(f"{object} and name {handle} and segi GAME", mode=0)` + `assert len(ids) == 1` + `return ids[0]` (mode=0 returns the id list, NOT the fragile index — see Pitfall 4). The Q1 finding is informational only.
+- **Status:** RESOLVED (informational). Confirms RESEARCH §Q1.
+
+### Q2 — `cmd.create` merge-vs-replace (single-call `create(existing, src)`): RESOLVED (REPLACE)
+
+- **Finding:** A single-call `cmd.create(existing_obj, src_obj)` IS a **REPLACE**, not an append/merge — `n_after == n_before` (the existing object's atom count is unchanged; the source atoms replace the existing object's contents rather than adding to them). No doubling.
+- **Conclusion:** `backup.restore` uses the explicit two-step `cmd.delete(target)` + `cmd.create(target, backup)` (delete removes the mutated object entirely; create makes a fresh atom-for-atom copy from the backup) — unambiguous and correct regardless of the single-call behavior. The smoke test confirmed the restore brings the target back atom-for-atom (criterion 4 failure path: `abort_on_error()` returns True, count back to orig). The single-call REPLACE finding documents the behavior but does not change the implementation.
+- **Status:** RESOLVED. RESEARCH §Q2 MEDIUM flag cleared. `backup.py` (03-05/03-12) delete+create is canonical.
+
+### Q2b — `cmd.create` id-preservation across copy: RESOLVED
+
+- **Finding:** `cmd.create` copies preserve atom `id`s (the restored target's id-set matches the backup's). The happy-path cleanup (`mutation.cleanup_hiders` by sentinel) preserves all original ids; the abort/restore path rebuilds from a backup whose ids match the pre-game ids.
+- **Conclusion:** Affects only the abort/restore path, and the registry is rebuilt fresh on the next `start()` anyway (per the 03-11 contract: `start()` builds a fresh `HiderRegistry`). Happy path (cleanup via `cmd.remove` by sentinel) preserves ids. The registry does NOT depend on ids surviving `create` — it rebuilds from sentinels via `reconstruct_from_sentinels` after `.pse` reload.
+- **Status:** RESOLVED.
+
+### PSE — `.pse` round-trip id/sentinel stability: RESOLVED (sentinel-survives is load-bearing; id-stable)
+
+- **Finding:** The `segi='GAME'` sentinel SURVIVES `.pse` save/load (after `cmd.save` + `cmd.delete` + `cmd.load`, `len(pse_sent) == 1` — the sentinel atom is found; `segi=GAME` survives). The atom `id` is STABLE across the round-trip (`pse_sent == [saved_id]` — Pitfall 4 holds at the runtime tier). `b=-999.0` is preserved exactly. `reconstruct_from_sentinels` rebuilds a 1-record registry with `rep=None` (the sentinel carries no rep — RESEARCH Open Risk 6 confirmed; Phase 8 `.bcm` sidecar reconciles `rep`).
+- **Conclusion:** Sentinel-survival is LOAD-BEARING (the whole reconstruct-after-reload mechanism depends on it — confirmed). Id-stability is informational (even if ids shifted, `reconstruct_from_sentinels` keys the registry by the post-reload ids it reads via `fetch_all_hider_ids`, so a shift would just produce a different-but-correct key). The `.bcm` sidecar (Phase 8) recovers `rep`, which the sentinel cannot carry.
+- **Status:** RESOLVED. Pitfall 4 (id stable across add/remove) and Pitfall 7 (.pse round-trip) both confirmed at the runtime tier.
+
+### New runtime pitfalls discovered during the Phase 3 smoke (all RESOLVED in code)
+
+These were NOT in the original research — discovered when the headless smoke crashed at each; each auto-fixed (Rule 1 bug / Rule 3 blocker) and committed. Recorded here so future phases don't re-trip them.
+
+- **`cmd.iterate` exposes atom `id` as uppercase `ID`, NOT lowercase `id`** (the Python builtin). All iterate expressions must use `ID` (uppercase) — the `03-RESEARCH.md` symbol table was authoritative; lowercase `id` is a transcription error that errors or appends the wrong value. Fixed in `mutation.py` + `smoke/phase3_smoke.py` (commit `e38cff7`). **Rule:** PyMOL iterate symbols are case-sensitive and UPPERCASE (`ID`, `MODEL`, `RESN`, `RESI`, `NAME`, `CHAIN`, `SEGI`, `B`, etc.).
+- **`cmd.iterate` does NOT expose `x`/`y`/`z` coordinates** (they are state-dependent; `cmd.iterate_state` is needed for coords). For structure-identity checks, `count` + `(resn, resi, name, chain, segi)` multiset suffices because `cmd.create` copies coords bit-for-bit (RESEARCH §Q6 fallback). `backup.verify_intact` identity tuple is `(resn, resi, name, chain, segi)` WITHOUT coords (commit `5ed6a13`).
+- **PyMOL b-factor selectors are COMPARISONS, never exact matches.** `b -999` is INVALID syntax ("Selector-Error: Malformed selection") and SILENTLY matches nothing (no exception — returns `[]`, a dangerous failure mode because the count looks plausible). `b < 0` is valid comparison syntax and matches `-999.0`. The sentinel VALUE stays `-999` (set in `insert_hider` + cleanup docstrings); only the SELECTOR uses `b < 0`. Fixed in `mutation.py:113` `fetch_all_hider_ids` (commit `6a15a29` — the load-bearing fix that unblocked the 2 PSE-reconstruct checks). **Rule:** b-factor sentinels are matched by comparison (`b < 0`, `b > N`), never exact (`b -999`).
 
 ---
 
