@@ -12,14 +12,17 @@ Phase 3 scope (this module):
   - :class:`HiderRecord`: data container with validation + key + to_dict
   - :class:`HiderRegistry`: ``OrderedDict``-backed core CRUD
     (register/get/all/remove) + queries (by_rep/counts_by_rep) +
-    status update (mark_found) + serialization (to_dict/from_dict)
+    status update (mark_found) + serialization (to_dict/from_dict) +
+    sentinel reconstruction (reconstruct_from_sentinels, dependency
+    injection - rep=None tolerance for post-``.pse``-reload rebuild)
 
 The cmd-coupled insertion/cleanup lives in ``mutation.py``; the
 orchestrator lives in ``game.py``. The registry stays pure by accepting
 an injected iterate function for sentinel reconstruction (dependency
-inversion - ``reconstruct_from_sentinels`` is added in a later Phase 3
-plan; ``to_dict`` / ``from_dict`` are implemented here so Phase 8 just
-writes the dict to a ``.bcm`` JSON sidecar and reads it back).
+inversion - ``reconstruct_from_sentinels`` takes the iterate callable
+as a parameter, so ``game.py`` injects ``lambda: mutation.fetch_all_hider_ids(obj)``
+and this module never imports ``pymol``; ``to_dict`` / ``from_dict`` let
+Phase 8 just write the dict to a ``.bcm`` JSON sidecar and read it back).
 """
 
 from collections import OrderedDict
@@ -47,8 +50,14 @@ class HiderRecord(object):
         object (str): the PyMOL object name the hider was inserted INTO.
             Atom ids are per-object; ``(object, id)`` is the future-safe
             primary key (multi-target safety).
-        rep (str): one of :data:`biochemeleon.setup_state.GAME_REPS`.
-            Required for per-rep counts (criterion 3).
+        rep (str or None): one of :data:`biochemeleon.setup_state.GAME_REPS`,
+            or ``None``. A valid rep is required for per-rep counts
+            (criterion 3) on the normal insert path (``register()`` always
+            passes a valid rep). ``rep=None`` is allowed ONLY for the
+            post-``.pse``-reload reconstruction path
+            (:meth:`HiderRegistry.reconstruct_from_sentinels`): the
+            sentinel carries no rep, so the rebuilt record stores ``None``
+            pending Phase 8 ``.bcm`` sidecar reconciliation.
         status (str): ``'hidden'`` (default) or ``'found'``. The field
             exists now (cheap); ``found`` is set in Phase 4/6.
         pos: optional ``(x, y, z)`` tuple for hint/reveal (Phase 6).
@@ -61,8 +70,10 @@ class HiderRecord(object):
     __slots__ = ('id', 'object', 'rep', 'status', 'pos')
 
     def __init__(self, id, object, rep, status=HIDER_STATUS_HIDDEN, pos=None):
-        if rep not in GAME_REPS:
-            raise ValueError("rep must be one of %r" % (GAME_REPS,))
+        # rep=None is allowed (post-reload reconstruction; the sentinel
+        # carries no rep). Normal register() always passes a valid rep.
+        if rep is not None and rep not in GAME_REPS:
+            raise ValueError("rep must be one of %r (or None)" % (GAME_REPS,))
         self.id = int(id)
         self.object = object
         self.rep = rep
@@ -105,8 +116,10 @@ class HiderRegistry(object):
     Phase 3 methods: ``register`` / ``get`` / ``all`` / ``remove``
     (core CRUD) plus ``by_rep`` / ``counts_by_rep`` / ``mark_found``
     (queries + status) plus ``to_dict`` / ``from_dict`` (serialization
-    for the Phase 8 ``.bcm`` sidecar). A later plan adds
-    ``reconstruct_from_sentinels`` (dependency-injected sentinel rebuild).
+    for the Phase 8 ``.bcm`` sidecar) plus ``reconstruct_from_sentinels``
+    (dependency-injected sentinel rebuild after ``.pse`` reload;
+    ``rep=None`` tolerance - the sentinel carries no rep). registry.py
+    is functionally complete for Phase 3 (10 methods).
     """
 
     def __init__(self):
@@ -169,9 +182,18 @@ class HiderRegistry(object):
         ``"cartoon: 0"`` even when no cartoon hiders exist (criterion 3:
         per-rep counts). The returned dict's key order matches
         :data:`GAME_REPS`; counts reflect insertion-order records.
+
+        Records with ``rep=None`` (from
+        :meth:`reconstruct_from_sentinels`) are SKIPPED: the returned
+        dict has only :data:`GAME_REPS` keys, never a ``None`` key. This
+        is a documented limitation - Phase 8's ``.bcm`` sidecar reconciles
+        ``rep`` for reloaded games, after which ``counts_by_rep``
+        reflects the rebuilt records normally.
         """
         out = {rep: 0 for rep in GAME_REPS}
         for r in self._records.values():
+            if r.rep is None:
+                continue
             out[r.rep] = out.get(r.rep, 0) + 1
         return out
 
@@ -221,3 +243,30 @@ class HiderRegistry(object):
             reg.register(h['object'], h['id'], h['rep'],
                           h.get('status', HIDER_STATUS_HIDDEN), h.get('pos'))
         return reg
+
+    # ---- sentinel reconstruction (dependency injection) ----
+
+    def reconstruct_from_sentinels(self, iterate_hider_keys):
+        """Rebuild the registry from sentinel atoms after a ``.pse`` reload.
+
+        ``iterate_hider_keys`` is a callable returning an iterable of
+        ``(object, id)`` tuples for ``segi='GAME'`` + ``b=-999`` atoms
+        (the sentinel). It is INJECTED by ``game.py`` (typically
+        ``lambda: mutation.fetch_all_hider_ids(obj)``) so this module
+        stays pure - no ``from pymol import cmd`` (dependency inversion).
+
+        The sentinel carries no ``rep`` (RESEARCH Open Risk 6), so the
+        rebuilt records store ``rep=None`` pending Phase 8 ``.bcm``
+        sidecar reconciliation. ``rep=None`` is tolerated here (and ONLY
+        here - normal :meth:`register` always passes a valid rep).
+
+        Clears existing records first (overwrite, NOT append), then
+        registers each sentinel as a fresh :class:`HiderRecord` with
+        ``status=HIDER_STATUS_HIDDEN`` (a reloaded game treats all
+        sentinel survivors as unfound). Returns ``self`` (fluent).
+        """
+        self._records.clear()
+        for (obj, aid) in iterate_hider_keys():
+            self._records[(obj, int(aid))] = HiderRecord(aid, obj, rep=None,
+                                                         status=HIDER_STATUS_HIDDEN)
+        return self
