@@ -9,9 +9,19 @@ High-signal notes for OpenCode sessions. Read before touching code. See `spec.md
 This is the single most common way to break things.
 
 - **Dev shell is WSL Ubuntu.** Do NOT install anything, do NOT create conda envs, do NOT `pip install`. `python3.6` (3.6.9) is for syntax checks and unit tests ONLY. (`opencode.json` denies `pip*`, `apt*`, `conda*`, `rm*`.)
-- **PyMOL 2.5.0 runs in a Windows conda env**, not WSL. `setenv.bat` is a Windows cmd.exe batch that activates env `chemtools-win10` from `C:\ProgramData\Miniconda3`; it does NOT launch PyMOL — you run `pymol` from the activated shell. A WSL agent cannot run PyMOL or `setenv.bat`.
-- **Consequence:** any code path that executes `pymol.cmd.*` or `pymol.Qt.*` at runtime CANNOT be run from WSL. Only the pure data layer (`biochemeleon/setup_state.py`) is unit-testable in WSL. Everything else is verified by a Windows-PyMOL human-verify smoke test (a checkpoint in the plan).
-- `wsl2win_cp.sh` copies `biochemeleon/` to `tmp/bioCHEMeleon/` so the Windows PyMOL Plugin Manager can point at a Windows-side path.
+- **PyMOL 2.5.0 runs in a Windows conda env**, not WSL. `setenv.bat` is a Windows cmd.exe batch that activates env `chemtools-win10` from `C:\ProgramData\Miniconda3`; it does NOT launch PyMOL — you run `pymol` from the activated shell. A WSL agent CANNOT run the interactive GUI, and CANNOT use Qt (`pymol.Qt.*`) at runtime.
+- **Headless PyMOL CAN be run from WSL** (discovered Phase 3, 2026-08-06). `C:\src\run-conda-pymol.bat` accepts args passed through to `python .../pymol/__init__.py %*`. The `-cq` flags run PyMOL without the GUI (command-line, quiet). So a WSL agent CAN execute any pure-cmd script (no Qt, no interactive viewer) headlessly via:
+  ```bash
+  # 1. Stage the package + script to the Windows-facing path first:
+  bash wsl2win_cp.sh                          # copies biochemeleon/ -> tmp/bioCHEMeleon/biochemeleon/
+  mkdir -p tmp/bioCHEMeleon/smoke && cp smoke/phase3_smoke.py tmp/bioCHEMeleon/smoke/  # stage the script
+  # 2. Run headlessly (no GUI, ~30s for the phase3 smoke). Wrap in timeout + tail to avoid hangs:
+  cd tmp/bioCHEMeleon && timeout 90 cmd.exe /c "C:\\src\\run-conda-pymol.bat -cq smoke\\phase3_smoke.py" 2>&1 | tail -50
+  # 3. Check exit code: 0 = clean (or sys.exit(1) caught by wrapper); nonzero = crash.
+  ```
+  This closes the WSL/Windows runtime gap for cmd-only scripts. It does NOT help with Qt (GUI/prompt tests still need a human in a real PyMOL session). Always `cd` into the staged Windows path first (PyMOL resolves relative paths against the cmd.exe cwd, which is the WSL cwd mapped to `\\wsl$` or the /mnt/c path — use the /mnt/c path so Windows PyMOL can read it).
+- **Consequence:** any code path that executes `pymol.Qt.*` at runtime STILL cannot be run from WSL (GUI/Qt needs a real display). Pure `pymol.cmd.*` paths CAN be run headlessly as above. Only the pure data layer (`biochemeleon/setup_state.py`) is unit-testable in WSL without invoking PyMOL at all. Qt/GUI smoke tests remain human-verify checkpoints.
+- `wsl2win_cp.sh` copies `biochemeleon/` to `tmp/bioCHEMeleon/` so the Windows PyMOL Plugin Manager (or the headless cmd.exe invocation above) can point at a Windows-side path.
 
 ## Commands (run from repo root)
 
@@ -32,7 +42,7 @@ rg -n "import Tkinter|import tkinter|from tkinter|import Pmw|from Pmw|app\.root|
 rg -n "\.exec_\(\)" biochemeleon/
 ```
 
-Running PyMOL requires the Windows side (`setenv.bat` → `pymol`); not doable from a WSL agent. Prefer the Grep tool over `rg` in bash (`rg *` is denied in `opencode.json`).
+Running the interactive PyMOL GUI requires the Windows side (`setenv.bat` → `pymol`); not doable from a WSL agent. But headless cmd-only scripts CAN be run from WSL via `cmd.exe /c C:\\src\\run-conda-pymol.bat -cq <script>` (see the Environment section above). Prefer the Grep tool over `rg` in bash (`rg *` is denied in `opencode.json`).
 
 ## Architecture — module dependency direction is strict
 
