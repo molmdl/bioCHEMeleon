@@ -54,7 +54,6 @@ intact = gc.cleanup()
 check("C4: cleanup returned True (intact)", intact is True)
 check("C4: count back to orig", cmd.count_atoms(obj) == orig_count)
 check("C4: id-set matches orig (Q4 spike)", set(cmd.identify(obj, mode=0)) == orig_ids)
-check("C4: verify_intact", backup.verify_intact(obj, bname) or True)  # backup already discarded by cleanup; this is informational
 check("backup discarded by cleanup", bname not in cmd.get_names("objects"))
 
 # --- failure path: restore from backup (criterion 4 alternate) ---
