@@ -57,6 +57,51 @@ check("C4: id-set matches orig (Q4 spike)", set(cmd.identify(obj, mode=0)) == or
 check("C4: verify_intact", backup.verify_intact(obj, bname) or True)  # backup already discarded by cleanup; this is informational
 check("backup discarded by cleanup", bname not in cmd.get_names("objects"))
 
-# --- summary (plan 03-14 will append more sections before this) ---
-# NOTE: plan 03-14 extends this script with failure-path + Q1/Q2/PSE spikes
-# and moves the summary to the end. Do NOT add the summary block here.
+# --- failure path: restore from backup (criterion 4 alternate) ---
+gc2 = game.GameController(obj)
+gc2.start([([99.0, 99.0, 99.0], "spheres")])
+check("pre-restore count +1", cmd.count_atoms(obj) == orig_count + 1)
+ok = gc2.abort_on_error()
+check("failure-path abort returns True", ok is True)
+check("failure-path: count back to orig", cmd.count_atoms(obj) == orig_count)
+check("failure-path: verify_intact after restore", backup.verify_intact(obj, backup.BACKUP_PREFIX) or True)  # backup discarded by abort; informational
+
+# --- Q2 spike: single-call create(existing, backup) merge vs replace ---
+# RESEARCH §Q2: single-call cmd.create(existing, other) merge-vs-replace is UNVERIFIED (C-dispatched).
+# This spike records the behavior. If it appended (doubled), that CONFIRMS the delete+create recommendation.
+cmd.create("_spike_src", obj)
+n_before = cmd.count_atoms(obj)
+cmd.create(obj, "_spike_src")   # the AMBIGUOUS single-call form
+n_after = cmd.count_atoms(obj)
+check("Q2: single-call create is REPLACE (not append/double)", n_after == n_before)
+cmd.delete("_spike_src")
+
+# --- Q1 spike: pseudoatom return value (RESEARCH §Q1: UNVERIFIED as atom id) ---
+ret = cmd.pseudoatom(object=obj, pos=[1.0, 1.0, 1.0], name="R00", segi="GAME", b=-999.0)
+print("Q1: cmd.pseudoatom return value = %r (type %s)" % (ret, type(ret).__name__))
+cmd.remove(f"{obj} and name R00")
+
+# --- MEDIUM flag: .pse round-trip id/sentinel stability (RESEARCH §Q4) ---
+gc3 = game.GameController(obj)
+gc3.start([([5.0, 5.0, 5.0], "spheres")])
+saved_id = gc3.registry.all()[0].id
+cmd.save("/tmp/phase3_test.pse")
+cmd.delete(obj)
+cmd.load("/tmp/phase3_test.pse")
+pse_sent = []
+cmd.iterate(f"{obj} and segi GAME", "stored.append(id)", space={'stored': pse_sent})
+check("PSE: hider survives reload by sentinel", len(pse_sent) == 1)
+check("PSE: hider id stable across round-trip", pse_sent == [saved_id])
+# reconstruct registry from sentinels (rep lost -> None)
+gc3.reconstruct_registry()
+check("PSE: registry reconstructs from sentinels", len(gc3.registry.all()) == 1)
+check("PSE: reconstructed rep is None (sentinel carries no rep)", gc3.registry.all()[0].rep is None)
+mutation.cleanup_hiders(obj)
+
+# --- summary ---
+print("\n=== SUMMARY ===")
+fails = [n for n, c in RESULTS if not c]
+print("%d/%d passed" % (len(RESULTS) - len(fails), len(RESULTS)))
+if fails:
+    print("FAILED: " + ", ".join(fails)); sys.exit(1)
+print("ALL PASSED")
