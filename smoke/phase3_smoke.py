@@ -63,7 +63,6 @@ check("pre-restore count +1", cmd.count_atoms(obj) == orig_count + 1)
 ok = gc2.abort_on_error()
 check("failure-path abort returns True", ok is True)
 check("failure-path: count back to orig", cmd.count_atoms(obj) == orig_count)
-check("failure-path: verify_intact after restore", backup.verify_intact(obj, backup.BACKUP_PREFIX) or True)  # backup discarded by abort; informational
 
 # --- Q2 spike: single-call create(existing, backup) merge vs replace ---
 # RESEARCH §Q2: single-call cmd.create(existing, other) merge-vs-replace is UNVERIFIED (C-dispatched).
