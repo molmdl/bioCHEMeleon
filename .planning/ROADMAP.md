@@ -83,7 +83,7 @@ Plans:
 - [x] 03-11-PLAN.md — game.py GameController __init__ + start() (snapshot + insert loop + register)
 - [x] 03-12-PLAN.md — game.py GameController cleanup() + abort_on_error()
 - [x] 03-13-PLAN.md — smoke/phase3_smoke.py setup + criteria 1-4 happy path
-- [ ] 03-14-PLAN.md — smoke/phase3_smoke.py failure path + Q1/Q2/PSE spikes + summary
+- [x] 03-14-PLAN.md — smoke/phase3_smoke.py failure path + Q1/Q2/PSE spikes + summary
 - [ ] 03-15-PLAN.md — checkpoint:human-verify (run smoke in Windows PyMOL + triage)
 - [ ] 03-16-PLAN.md — AGENTS.md Phase 3 domain rules + grep gates
 - [ ] 03-17-PLAN.md — STATE.md (Phase 3 complete) + PITFALLS.md (resolve MEDIUM flags)
