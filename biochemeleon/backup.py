@@ -68,15 +68,18 @@ def restore(target_obj, backup_name=BACKUP_PREFIX):
 
 def verify_intact(target_obj, backup_name=BACKUP_PREFIX):
     """Return True iff target's structure matches backup: atom count + atomic tuple multiset.
-    Tuple = (resn, resi, name, chain, segi, x, y, z). Coords are exact for a create-copy."""
+    Tuple = (resn, resi, name, chain, segi). Coords omitted — the iterate primitive
+    does not expose x/y/z (state-dependent; need iterate_state); count + identity is
+    sufficient for create copies (coords are bit-for-bit per RESEARCH section Q6, so
+    identity + count proves structure for cleanup/restore paths)."""
     target_n = cmd.count_atoms(target_obj)           # querying.py:1412 — cheap count gate
     backup_n = cmd.count_atoms(backup_name)          # mismatch => structure changed (gross)
     if target_n != backup_n:
         return False
     target_tuples = []
-    cmd.iterate(target_obj, "stored.append((resn, resi, name, chain, segi, x, y, z))",
+    cmd.iterate(target_obj, "stored.append((resn, resi, name, chain, segi))",
                 space={'stored': target_tuples})     # editing.py:1490
     backup_tuples = []
-    cmd.iterate(backup_name, "stored.append((resn, resi, name, chain, segi, x, y, z))",
+    cmd.iterate(backup_name, "stored.append((resn, resi, name, chain, segi))",
                 space={'stored': backup_tuples})     # editing.py:1490
     return sorted(target_tuples) == sorted(backup_tuples)
