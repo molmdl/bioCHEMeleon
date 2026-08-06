@@ -82,7 +82,7 @@ Plans:
 - [x] 03-10-PLAN.md — TDD registry.py reconstruct_from_sentinels (DI) + edge cases
 - [x] 03-11-PLAN.md — game.py GameController __init__ + start() (snapshot + insert loop + register)
 - [x] 03-12-PLAN.md — game.py GameController cleanup() + abort_on_error()
-- [ ] 03-13-PLAN.md — smoke/phase3_smoke.py setup + criteria 1-4 happy path
+- [x] 03-13-PLAN.md — smoke/phase3_smoke.py setup + criteria 1-4 happy path
 - [ ] 03-14-PLAN.md — smoke/phase3_smoke.py failure path + Q1/Q2/PSE spikes + summary
 - [ ] 03-15-PLAN.md — checkpoint:human-verify (run smoke in Windows PyMOL + triage)
 - [ ] 03-16-PLAN.md — AGENTS.md Phase 3 domain rules + grep gates
@@ -198,7 +198,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 |-------|----------------|--------|-----------|
 | 1. Plugin Bootstrap & Dialog Scaffold | 1/1 | ✓ Complete | 2026-08-03 |
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
-| 3. Mutation Safety & Hider Registry Foundation | 12/20 | In progress | - |
+| 3. Mutation Safety & Hider Registry Foundation | 13/20 | In progress | - |
 | 4. MVP Core Loop (Sphere) | 0/TBD | Not started | - |
 | 5. Line/Stick & Cartoon Generators | 0/TBD | Not started | - |
 | 6. Hint & Reveal | 0/TBD | Not started | - |
