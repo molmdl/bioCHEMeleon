@@ -253,7 +253,7 @@ class HiderRegistry(object):
         ``(object, id)`` tuples for ``segi='GAME'`` + ``b=-999`` atoms
         (the sentinel). It is INJECTED by ``game.py`` (typically
         ``lambda: mutation.fetch_all_hider_ids(obj)``) so this module
-        stays pure - no ``from pymol import cmd`` (dependency inversion).
+        stays pure - NO ``pymol`` import (dependency inversion).
 
         The sentinel carries no ``rep`` (RESEARCH Open Risk 6), so the
         rebuilt records store ``rep=None`` pending Phase 8 ``.bcm``
