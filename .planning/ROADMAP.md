@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Plugin Bootstrap & Dialog Scaffold** - Install + menu item + empty tabbed dialog
 - [x] **Phase 2: Setup Tab Configuration & Bundled Demos** - Full Setup form + config buttons + bundled demo PDBs
-- [ ] **Phase 3: Mutation Safety & Hider Registry Foundation** - De-risk object mutation + registry (highest-risk area)
+- [x] **Phase 3: Mutation Safety & Hider Registry Foundation** - De-risk object mutation + registry (highest-risk area)
 - [ ] **Phase 4: MVP Core Loop (Sphere)** - THE core value: load → generate spheres → click-to-find → win
 - [ ] **Phase 5: Line/Stick & Cartoon Generators** - The harder blend-in generators (cartoon = L-complexity swing)
 - [ ] **Phase 6: Hint & Reveal** - Get-help / give-up mechanics with usage tracking
@@ -89,7 +89,7 @@ Plans:
 - [x] 03-17-PLAN.md — STATE.md (Phase 3 complete) + PITFALLS.md (resolve MEDIUM flags)
 - [x] 03-18-PLAN.md — final 12-gate regression suite (full-package WSL check)
 - [x] 03-19-PLAN.md — 03-VERIFICATION.md (criterion-by-criterion evidence + spike findings)
-- [ ] 03-20-PLAN.md — 03-SUMMARY.md (phase handoff to Phase 4)
+- [x] 03-20-PLAN.md — 03-SUMMARY.md (phase handoff to Phase 4)
 
 ### Phase 4: MVP Core Loop (Sphere)
 **Goal**: The player can play a complete hide-and-seek round with sphere hiders — the PROJECT.md core value. If nothing else works, this loop works.
@@ -198,7 +198,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 |-------|----------------|--------|-----------|
 | 1. Plugin Bootstrap & Dialog Scaffold | 1/1 | ✓ Complete | 2026-08-03 |
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
-| 3. Mutation Safety & Hider Registry Foundation | 19/20 | In progress | - |
+| 3. Mutation Safety & Hider Registry Foundation | 20/20 | ✓ Complete | 2026-08-06 |
 | 4. MVP Core Loop (Sphere) | 0/TBD | Not started | - |
 | 5. Line/Stick & Cartoon Generators | 0/TBD | Not started | - |
 | 6. Hint & Reveal | 0/TBD | Not started | - |
