@@ -83,9 +83,9 @@ cmd.remove(f"{obj} and name R00")
 gc3 = game.GameController(obj)
 gc3.start([([5.0, 5.0, 5.0], "spheres")])
 saved_id = gc3.registry.all()[0].id
-cmd.save("/tmp/phase3_test.pse")
+cmd.save("phase3_test.pse")
 cmd.delete(obj)
-cmd.load("/tmp/phase3_test.pse")
+cmd.load("phase3_test.pse")
 pse_sent = []
 cmd.iterate(f"{obj} and segi GAME", "stored.append(ID)", space={'stored': pse_sent})
 check("PSE: hider survives reload by sentinel", len(pse_sent) == 1)
