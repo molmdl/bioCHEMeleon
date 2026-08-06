@@ -447,5 +447,133 @@ class TestHiderRegistrySerialize(unittest.TestCase):
         self.assertEqual(reg.all(), [])
 
 
+class TestHiderRegistryReconstruct(unittest.TestCase):
+    """Test HiderRegistry.reconstruct_from_sentinels(iterate_hider_keys).
+
+    The post-``.pse``-reload registry rebuild via dependency injection:
+    after a session reload the in-memory registry is lost but the sentinel
+    atoms (``segi='GAME'`` + ``b=-999``) survive. ``reconstruct_from_sentinels``
+    rebuilds the registry from the sentinel atoms' ``(object, id)`` tuples.
+    The iterate function is INJECTED as a parameter (dependency inversion)
+    so ``registry.py`` stays pure - no ``from pymol import cmd``.
+
+    After reconstruction, ``rep`` is unknown (the sentinel carries no rep -
+    RESEARCH Open Risk 6) and is set to ``None``; the registry must tolerate
+    ``rep=None`` ONLY in the reconstruction path (normal ``register()``
+    validates against :data:`GAME_REPS`). Phase 8's ``.bcm`` sidecar recovers
+    ``rep`` later.
+    """
+
+    def test_reconstruct_from_fake_iterate(self):
+        """Fake fn [('1ubq',1),('1ubq',2)] -> 2 records, rep=None, status='hidden'."""
+        reg = HiderRegistry()
+        fake_keys = lambda: [('1ubq', 1), ('1ubq', 2)]
+        reg.reconstruct_from_sentinels(fake_keys)
+        all_recs = reg.all()
+        self.assertEqual(len(all_recs), 2)
+        # Each record: rep is None, status is 'hidden'
+        for rec in all_recs:
+            self.assertIsNone(rec.rep)
+            self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        # Keys are ('1ubq', 1) and ('1ubq', 2)
+        self.assertIsNotNone(reg.get('1ubq', 1))
+        self.assertIsNotNone(reg.get('1ubq', 2))
+        self.assertEqual(reg.get('1ubq', 1).id, 1)
+        self.assertEqual(reg.get('1ubq', 2).id, 2)
+
+    def test_reconstruct_clears_existing(self):
+        """Reconstruct clears existing records (overwrite, NOT append).
+
+        Register 3 hiders first, then reconstruct with a fake fn returning
+        [('1ubq', 99)]; after, len(all()) == 1 (cleared + rebuilt, not 4).
+        """
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')
+        reg.register('1ubq', 2, 'sticks')
+        reg.register('2qbz', 1, 'cartoon')
+        self.assertEqual(len(reg.all()), 3)
+        fake_keys = lambda: [('1ubq', 99)]
+        reg.reconstruct_from_sentinels(fake_keys)
+        self.assertEqual(len(reg.all()), 1)
+        # The one record is ('1ubq', 99), rep=None
+        rec = reg.get('1ubq', 99)
+        self.assertIsNotNone(rec)
+        self.assertIsNone(rec.rep)
+        # The old records are gone
+        self.assertIsNone(reg.get('1ubq', 1))
+        self.assertIsNone(reg.get('1ubq', 2))
+        self.assertIsNone(reg.get('2qbz', 1))
+
+    def test_reconstruct_empty_iterate(self):
+        """Reconstruct with an empty iterate fn -> empty registry."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')
+        reg.reconstruct_from_sentinels(lambda: [])
+        self.assertEqual(reg.all(), [])
+
+    def test_reconstruct_returns_self(self):
+        """reconstruct_from_sentinels returns the registry instance (fluent)."""
+        reg = HiderRegistry()
+        result = reg.reconstruct_from_sentinels(lambda: [])
+        self.assertIs(result, reg)
+
+    def test_reconstruct_rep_none_bypasses_validation(self):
+        """Reconstruct with rep=None does NOT raise (sentinel carries no rep).
+
+        Normal register() validates rep in GAME_REPS and raises ValueError
+        for invalid reps. But reconstruct_from_sentinels sets rep=None
+        (the sentinel carries no rep post-.pse-reload); this must NOT raise.
+        """
+        reg = HiderRegistry()
+        fake_keys = lambda: [('1ubq', 1), ('1ubq', 2), ('2qbz', 7)]
+        # Should not raise
+        reg.reconstruct_from_sentinels(fake_keys)
+        self.assertEqual(len(reg.all()), 3)
+
+
+class TestHiderRegistryEdgeCases(unittest.TestCase):
+    """Reconfirm + new edge cases for HiderRegistry.
+
+    - Bad rep (ValueError) - reconfirm from 03-01
+    - Duplicate id (KeyError) - reconfirm from 03-01
+    - rep=None reconstruction: counts_by_rep() returns only GAME_REPS keys
+      (rep=None records are invisible - documented limitation Phase 8
+      sidecar reconciles)
+    """
+
+    def test_register_bad_rep_raises(self):
+        """register('o', 1, 'surface') raises ValueError (reconfirm 03-01)."""
+        reg = HiderRegistry()
+        with self.assertRaises(ValueError):
+            reg.register('o', 1, 'surface')
+
+    def test_register_dup_id_raises(self):
+        """register('o', 1, 'spheres') then register('o', 1, 'sticks') raises KeyError (reconfirm)."""
+        reg = HiderRegistry()
+        reg.register('o', 1, 'spheres')
+        with self.assertRaises(KeyError):
+            reg.register('o', 1, 'sticks')
+
+    def test_reconstruct_rep_none_then_counts_by_rep(self):
+        """After reconstruct with rep=None records, counts_by_rep() returns
+        only GAME_REPS keys (rep=None records are invisible - documented
+        limitation Phase 8 sidecar reconciles).
+
+        Without the rep=None guard in counts_by_rep, the 03-04 implementation
+        would add a None key when records have rep=None, failing this test.
+        """
+        reg = HiderRegistry()
+        fake_keys = lambda: [('1ubq', 1), ('1ubq', 2), ('2qbz', 7)]
+        reg.reconstruct_from_sentinels(fake_keys)
+        counts = reg.counts_by_rep()
+        # Only GAME_REPS keys, never a None key
+        self.assertEqual(set(counts.keys()), set(GAME_REPS))
+        self.assertNotIn(None, counts)
+        # All counts are zero (rep=None records are invisible)
+        for rep in GAME_REPS:
+            with self.subTest(rep=rep):
+                self.assertEqual(counts[rep], 0)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
