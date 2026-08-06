@@ -85,10 +85,10 @@ Plans:
 - [x] 03-13-PLAN.md — smoke/phase3_smoke.py setup + criteria 1-4 happy path
 - [x] 03-14-PLAN.md — smoke/phase3_smoke.py failure path + Q1/Q2/PSE spikes + summary
 - [x] 03-15-PLAN.md — checkpoint:human-verify (run smoke in Windows PyMOL + triage) — CLOSED via headless PyMOL (run-conda-pymol.bat -cq from WSL, 24/24 ALL PASSED)
-- [ ] 03-16-PLAN.md — AGENTS.md Phase 3 domain rules + grep gates
-- [ ] 03-17-PLAN.md — STATE.md (Phase 3 complete) + PITFALLS.md (resolve MEDIUM flags)
-- [ ] 03-18-PLAN.md — final 12-gate regression suite (full-package WSL check)
-- [ ] 03-19-PLAN.md — 03-VERIFICATION.md (criterion-by-criterion evidence + spike findings)
+- [x] 03-16-PLAN.md — AGENTS.md Phase 3 domain rules + grep gates
+- [x] 03-17-PLAN.md — STATE.md (Phase 3 complete) + PITFALLS.md (resolve MEDIUM flags)
+- [x] 03-18-PLAN.md — final 12-gate regression suite (full-package WSL check)
+- [x] 03-19-PLAN.md — 03-VERIFICATION.md (criterion-by-criterion evidence + spike findings)
 - [ ] 03-20-PLAN.md — 03-SUMMARY.md (phase handoff to Phase 4)
 
 ### Phase 4: MVP Core Loop (Sphere)
@@ -198,7 +198,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 |-------|----------------|--------|-----------|
 | 1. Plugin Bootstrap & Dialog Scaffold | 1/1 | ✓ Complete | 2026-08-03 |
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
-| 3. Mutation Safety & Hider Registry Foundation | 15/20 | In progress | - |
+| 3. Mutation Safety & Hider Registry Foundation | 19/20 | In progress | - |
 | 4. MVP Core Loop (Sphere) | 0/TBD | Not started | - |
 | 5. Line/Stick & Cartoon Generators | 0/TBD | Not started | - |
 | 6. Hint & Reveal | 0/TBD | Not started | - |
