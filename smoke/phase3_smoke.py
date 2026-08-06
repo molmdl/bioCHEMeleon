@@ -35,7 +35,7 @@ check("C1: count += 3", cmd.count_atoms(obj) == orig_count + 3)
 
 # --- criterion 2: sentinel on all hiders ---
 sent = []
-cmd.iterate(f"{obj} and segi GAME", "stored.append((id, segi, b))", space={'stored': sent})
+cmd.iterate(f"{obj} and segi GAME", "stored.append((ID, segi, b))", space={'stored': sent})
 check("C2: 3 sentinel atoms", len(sent) == 3)
 check("C2: all segi=GAME and b=-999", all(s == 'GAME' and abs(b - (-999.0)) < 1e-6 for _, s, b in sent))
 
@@ -89,7 +89,7 @@ cmd.save("/tmp/phase3_test.pse")
 cmd.delete(obj)
 cmd.load("/tmp/phase3_test.pse")
 pse_sent = []
-cmd.iterate(f"{obj} and segi GAME", "stored.append(id)", space={'stored': pse_sent})
+cmd.iterate(f"{obj} and segi GAME", "stored.append(ID)", space={'stored': pse_sent})
 check("PSE: hider survives reload by sentinel", len(pse_sent) == 1)
 check("PSE: hider id stable across round-trip", pse_sent == [saved_id])
 # reconstruct registry from sentinels (rep lost -> None)
