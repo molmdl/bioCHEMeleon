@@ -90,10 +90,17 @@ pse_sent = []
 cmd.iterate(f"{obj} and segi GAME", "stored.append(ID)", space={'stored': pse_sent})
 check("PSE: hider survives reload by sentinel", len(pse_sent) == 1)
 check("PSE: hider id stable across round-trip", pse_sent == [saved_id])
+# diagnostic: triage reconstruct -- record sentinel b after reload + fetch_all_hider_ids result
+bchk = []
+cmd.iterate(f"{obj} and segi GAME", "stored.append(b)", space={'stored': bchk})
+print("PSE-DIAG: sentinel b after reload = %r" % (bchk,))
+fchk = mutation.fetch_all_hider_ids(obj)
+print("PSE-DIAG: fetch_all_hider_ids(%r) = %r" % (obj, fchk))
 # reconstruct registry from sentinels (rep lost -> None)
 gc3.reconstruct_registry()
-check("PSE: registry reconstructs from sentinels", len(gc3.registry.all()) == 1)
-check("PSE: reconstructed rep is None (sentinel carries no rep)", gc3.registry.all()[0].rep is None)
+recs = gc3.registry.all()
+check("PSE: registry reconstructs from sentinels", len(recs) == 1)
+check("PSE: reconstructed rep is None (sentinel carries no rep)", bool(recs) and recs[0].rep is None)
 mutation.cleanup_hiders(obj)
 
 # --- summary ---
