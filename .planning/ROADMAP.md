@@ -100,10 +100,15 @@ Plans:
   2. Clicking a hider atom in the viewer marks it "found" (recolors or hides it); clicking a non-hider does nothing harmful
   3. The Game tab shows a rolling info log, a timer counting up from start, and the remaining-hiders count (total)
   4. When all hiders are found, the timer stops and a winning message shows the time taken
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] 04-01: TBD during planning
+- [ ] 04-01-PLAN.md — TDD pure sphere generator (generators.py + tests/test_generators.py)
+- [ ] 04-02-PLAN.md — Populate PickWizard in wizard.py (click-to-find handler)
+- [ ] 04-03-PLAN.md — TDD GameController.on_pick/win/set_callbacks/_remaining (game.py)
+- [ ] 04-04-PLAN.md — Populate GameTab UI (log/timer/remaining/countdown/begin_play/on_win)
+- [ ] 04-05-PLAN.md — Wire Start button → _on_start (BTN-07 core loop fan-in)
+- [ ] 04-06-PLAN.md — Headless smoke + human-verify checkpoint (4 success criteria)
 
 ### Phase 5: Line/Stick & Cartoon Generators
 **Goal**: Hiders can blend into line/stick and cartoon/ribbon representations, not just spheres. Cartoon/ribbon is the "L"-complexity swing feature (novel C-alpha geometry) and the phase most likely to need deeper research.
@@ -199,7 +204,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 1. Plugin Bootstrap & Dialog Scaffold | 1/1 | ✓ Complete | 2026-08-03 |
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
 | 3. Mutation Safety & Hider Registry Foundation | 20/20 | ✓ Complete | 2026-08-06 |
-| 4. MVP Core Loop (Sphere) | 0/TBD | Not started | - |
+| 4. MVP Core Loop (Sphere) | 0/6 | Not started | - |
 | 5. Line/Stick & Cartoon Generators | 0/TBD | Not started | - |
 | 6. Hint & Reveal | 0/TBD | Not started | - |
 | 7. Found-Hider Management, Restart & Cleanup | 0/TBD | Not started | - |
