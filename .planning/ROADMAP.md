@@ -104,7 +104,7 @@ Plans:
 
 Plans:
 - [ ] 04-01-PLAN.md — TDD pure sphere generator (generators.py + tests/test_generators.py)
-- [ ] 04-02-PLAN.md — Populate PickWizard in wizard.py (click-to-find handler)
+- [x] 04-02-PLAN.md — Populate PickWizard in wizard.py (click-to-find handler)
 - [x] 04-03-PLAN.md — TDD GameController.on_pick/win/set_callbacks/_remaining (game.py)
 - [ ] 04-04-PLAN.md — Populate GameTab UI (log/timer/remaining/countdown/begin_play/on_win)
 - [ ] 04-05-PLAN.md — Wire Start button → _on_start (BTN-07 core loop fan-in)
