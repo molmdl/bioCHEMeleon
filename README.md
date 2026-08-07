@@ -1,3 +1,5 @@
+> UNDER DEVELOPMENT
+
 # bioCHEMeleon
 
 A "hide-and-seek" game played on molecular structures inside PyMOL. Foreign atoms are inserted directly into a molecule's own object — styled to blend with the local representation (line/stick, cartoon/ribbon, spheres) — and the player must hunt them down by clicking atoms in the OpenGL viewer. Because hiders live in the same object as the real structure, the player can't trivially isolate them by toggling object visibility; they must visually spot the impostors.
