@@ -5,7 +5,7 @@ Layout (research section 5.1):
   +-- QGroupBox "Target"          (SETUP-02: 3-mode selector + QStackedWidget)
   +-- QGroupBox "Hiders"          (SETUP-03/04/05: count + lock-scene + per-rep rows)
   +-- QGroupBox "Difficulty"      (SETUP-06: easy/hard toggle)
-  +-- QGroupBox "Setup actions"   (BTN-01..04: Reset/Randomize/Save/Load)
+  +-- QGroupBox "Setup actions"   (BTN-01..04 + BTN-07: Reset/Randomize/Save/Load/Start)
 
 All Qt imports come from `pymol.Qt` (NEVER raw PyQt5); the main plugin
 dialog stays modeless (QFileDialog/QMessageBox are modal children, which
@@ -181,14 +181,17 @@ class SetupTab(QtWidgets.QWidget):
         dform.addRow(self.diff_easy_cb)
         outer.addWidget(diff)
 
-        # --- Buttons group (BTN-01..04) ---
+        # --- Buttons group (BTN-01..04 + BTN-07 Start) ---
         btns = QtWidgets.QGroupBox("Setup actions")
         brow = QtWidgets.QHBoxLayout(btns)
         self.reset_btn = QtWidgets.QPushButton("Reset")
         self.random_btn = QtWidgets.QPushButton("Randomize")
         self.save_btn = QtWidgets.QPushButton("Save Setup…")
         self.load_btn = QtWidgets.QPushButton("Load Setup…")
-        for b in (self.reset_btn, self.random_btn, self.save_btn, self.load_btn):
+        self.start_btn = QtWidgets.QPushButton("Start")
+        self.start_btn.setStyleSheet("font-weight: bold;")  # primary action
+        for b in (self.reset_btn, self.random_btn, self.save_btn,
+                  self.load_btn, self.start_btn):
             brow.addWidget(b)
         outer.addWidget(btns)
 
