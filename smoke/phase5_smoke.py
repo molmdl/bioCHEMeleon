@@ -199,6 +199,55 @@ check("cleanup: returned True", intact is True)
 check("cleanup: count back to orig", cmd.count_atoms(obj) == orig_count)
 check("cleanup: no GAME atoms remain", cmd.count_atoms("%s and segi GAME" % obj) == 0)
 
+# --- 5b. GUI-PATH ALIGNMENT: CA-selection survives free_nterminal_valence ---
+# The 05-05 human-verify found insert_line_stick_hider raised IndexError in
+# the GUI (_on_start captured ALL atom ids, some removed by free_nterminal_valence
+# before insertion). The 05-07 fix: _on_start uses 'name CA' (aligned with this
+# smoke). This section verifies CA neighbor_ids survive free_nterminal_valence.
+# 1. Re-fetch 1ubq (clean state after section 5 cleanup)
+cmd.delete(obj)
+cmd.fetch("1ubq", async_=0)
+orig_count_5b = cmd.count_atoms(obj)
+# 2. Capture neighbor_ids the SAME way _on_start does (post-05-07 fix: name CA)
+nbr_ids_5b = []
+cmd.iterate("%s and not segi GAME and name CA" % obj,
+            "stored.append(ID)", space={'stored': nbr_ids_5b})
+check("gui-align: CA neighbor_ids captured (non-empty)", len(nbr_ids_5b) > 0)
+# 3. Find the N-terminus for free_nterminal_valence (mirrors _on_start cartoon path)
+cas_5b = []
+cmd.iterate("%s and polymer and name CA" % obj,
+            "stored.append((chain, resv, ID))", space={'stored': cas_5b})
+cas_by_5b = {}
+for ch5b, ri5b, cid5b in cas_5b:
+    cas_by_5b.setdefault(ch5b, []).append((ri5b, cid5b))
+chain5b = max(cas_by_5b, key=lambda c: len(cas_by_5b[c]))
+term_resi5b = min(r[0] for r in cas_by_5b[chain5b])
+# 4. Call free_nterminal_valence (removes H + cap atoms — mirrors _on_start)
+mutation.free_nterminal_valence(obj, chain5b, term_resi5b)
+# 5. Verify ALL captured CA neighbor_ids still exist (survive removal)
+surviving = 0
+for nid in nbr_ids_5b:
+    still_exists = []
+    cmd.iterate_state(1, "%s and id %d" % (obj, nid),
+                      "stored.append(1)", space={'stored': still_exists})
+    if still_exists:
+        surviving += 1
+check("gui-align: ALL CA neighbor_ids survive free_nterminal_valence",
+      surviving == len(nbr_ids_5b))
+print("diag: surviving=%d/%d (free_nterminal_valence removed H+cap, CA intact)" %
+      (surviving, len(nbr_ids_5b)))
+# 6. Verify insert_line_stick_hider works with a surviving CA neighbor_id
+offset_5b = [0.3, 0.3, 0.3]
+stick_id_5b = mutation.insert_line_stick_hider(obj, offset=offset_5b,
+                                                neighbor_id=nbr_ids_5b[0],
+                                                handle="S5b", rep="sticks")
+check("gui-align: insert_line_stick_hider succeeds with CA neighbor (no IndexError)",
+      isinstance(stick_id_5b, int))
+# 7. Cleanup
+mutation.cleanup_hiders(obj)
+check("gui-align: cleanup restores count after CA-path insert",
+      cmd.count_atoms(obj) == orig_count_5b)
+
 # --- 6. (optional spike) iterate_state exposes elem/color? (Open Risk 6 LOW) ---
 # insert_line_stick_hider reads (x,y,z,elem,color) via ONE iterate_state call.
 # If elem/color come back None at runtime, the inserter would need to split into
