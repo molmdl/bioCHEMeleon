@@ -1,13 +1,20 @@
-"""Sphere-hider generator - pure geometry (stdlib random only, WSL-testable).
+"""Pure hider generators - geometry + selection (stdlib random only, WSL-testable).
 
-NO ``pymol`` import, NO ``pymol.Qt`` import. The cmd-coupled caller
-(``__init__.py``) fetches the bounding box via ``cmd.get_extent`` and
-feeds it here; the returned positions become ``(pos, 'spheres')`` specs
-for ``GameController.start``.
+NO ``pymol`` import, NO ``pymol.Qt`` import, NO ``numpy``. The
+cmd-coupled caller (``__init__.py``) feeds data (bounding box,
+neighbor pool, C-alpha list) IN and gets pure geometry/selection
+decisions OUT; the cmd-coupled insertion (``cmd.pseudoatom``,
+``cmd.bond``, ``cmd.attach_amino_acid``) lives in ``mutation.py``
+(plan 05-02).
 
 This module mirrors the purity convention of ``registry.py`` and
 ``setup_state.py`` (AGENTS.md: pure layer <- cmd-coupled layer; never
 reversed) so it is WSL-unit-testable.
+
+Functions:
+  - generate_sphere_positions(extent, n, seed)  -- Phase 4 (bounding-box RNG)
+  - generate_line_stick_offsets(n, seed)        -- Phase 5 (small [-1,1] offsets)
+  - pick_terminal_residues(cas_by_chain, max_chains)  -- Phase 5 (C-term pick)
 """
 
 import random
@@ -31,3 +38,60 @@ def generate_sphere_positions(extent, n, seed=None):
             rng.uniform(zmin, zmax),
         ])
     return positions
+
+
+def generate_line_stick_offsets(n, seed=None):
+    """Generate ``n`` small ``[dx, dy, dz]`` offset vectors for line/stick hiders.
+
+    Each component is drawn uniform-random in ``[-1.0, 1.0]`` Angstrom so
+    the hider sits near a real neighbor (short bond, blends with real
+    bonds - 05-RESEARCH.md Sec2 Q3: "0.5-1.0 A so the bond is visible but
+    short"). The caller adds the offset to a neighbor's coords (read via
+    ``cmd.iterate_state``) and bonds the hider to that neighbor.
+
+    Args:
+        n: number of offset vectors.
+        seed: int for deterministic output (tests). ``None`` = entropy.
+
+    Returns:
+        list of ``[dx, dy, dz]`` lists (empty when ``n <= 0``).
+    """
+    rng = random.Random(seed)
+    return [[rng.uniform(-1.0, 1.0) for _ in range(3)] for _ in range(n)]
+
+
+def pick_terminal_residues(cas_by_chain, max_chains=None):
+    """Pick terminal residues for cartoon hiders (extend-at-terminal, MVP).
+
+    ``cas_by_chain`` is ``{chain: [(resi, ca_id), ...]}`` from the
+    caller's ``cmd.iterate`` over polymer C-alpha atoms
+    (05-RESEARCH.md Sec3 Q8 Step 1). Returns a list of
+    ``(chain, terminal_resi, is_c_terminus)`` tuples, one per chain,
+    longest chain first (most C-alpha entries), each at the C-terminus
+    (max resi, ``is_c_terminus=True``). Capped at ``max_chains`` if not
+    ``None``. Returns ``[]`` for an empty dict.
+
+    MVP caps cartoon hiders at one per chain (attaching many to one
+    terminus chains them - 05-RESEARCH.md Sec7 Open Risk 5). N-terminus
+    is a future option; MVP uses C-terminus only.
+
+    Args:
+        cas_by_chain: ``{chain: [(resi, ca_id), ...]}``.
+        max_chains: int or ``None``; if set, return at most this many
+            chains (longest first).
+
+    Returns:
+        list of ``(chain, terminal_resi, is_c_terminus)`` tuples
+        (``is_c_terminus`` is always ``True`` in the MVP).
+    """
+    if not cas_by_chain:
+        return []
+    chains = sorted(cas_by_chain.keys(),
+                    key=lambda c: len(cas_by_chain[c]), reverse=True)
+    if max_chains is not None:
+        chains = chains[:max_chains]
+    out = []
+    for ch in chains:
+        resis = [r[0] for r in cas_by_chain[ch]]
+        out.append((ch, max(resis), True))  # C-terminus (max resi)
+    return out
