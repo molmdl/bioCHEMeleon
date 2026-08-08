@@ -246,37 +246,64 @@ def insert_line_stick_hider(object, offset, neighbor_id, handle,
 def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
                          handle, aa='gly', ss=4, hydro=1,
                          segi='GAME', b=-999.0):
-    """Attach a residue at a terminus (cartoon/ribbon hider) and return
-    the new residue's C-alpha stable id.
+    """Attach TWO residues at a terminus (cartoon/ribbon hider) and return
+    the clickable residue's C-alpha stable id.
 
     Cartoon and ribbon are POLYMER-TRACE representations -- a lone
-    pseudoatom is invisible (Pitfall 8; research sec Q5). This function
-    attaches a real glycine residue at a chain terminus via the
-    residue-attach primitive (which fuses real backbone geometry via
-    mode-2 fuse internally -- research sec Q6), applies the GAME
-    sentinel + neighbor blend, shows the cartoon rep on the new residue
-    only, and returns the new C-alpha's stable id (the cartoon-
-    representative atom the player clicks).
+    pseudoatom is invisible (Pitfall 8; research sec Q5). PyMOL's cartoon
+    renderer draws a tube/arrow segment BETWEEN consecutive C-alpha atoms,
+    so a SINGLE isolated residue at a polymer terminus produces NO visible
+    geometry (verified headless 05-05: ss S/L/H all render identical to a
+    blank control -- the tube has no "next" C-alpha to draw toward).
 
-    **Visibility fallback (05-05 human-verify):** PyMOL's cartoon renderer
-    does NOT produce visible geometry for a single isolated residue at a
-    polymer terminus -- the cartoon tube/arrow is drawn BETWEEN consecutive
-    C-alpha atoms, so a one-residue extension has no segment to draw
-    (verified headless: ss S/L/H all render identically to a blank control).
-    To make the hider VISIBLE (the player must find it by eye, not just by
-    ``select segi GAME``), the C-alpha is ALSO shown as a sphere. The
-    sphere blends (it carries the neighbor's color via the alter above) but
-    its shape is visible against the cartoon. The cartoon show is kept
-    (harmless -- it renders if the residue ever connects to 2+ residues).
-    The player clicks the C-alpha (now rendered as a sphere); clickability
-    is preserved (the CA id is what's registered + returned).
+    **2-residue approach (05-05 fix, replacing the sphere fallback):** This
+    function attaches TWO glycine residues at the terminus. The cartoon tube
+    then renders BETWEEN the two new C-alphas (and between the first new
+    C-alpha and the original terminal C-alpha), producing a short tube/loop
+    extension that BLENDs with the existing cartoon (same color + ss copied
+    from the neighbor) -- NOT a glaring sphere. The first new residue
+    (closest to the original chain) is the CLICKABLE hider (its C-alpha id
+    is registered + returned); the second new residue (the new terminus) is
+    "support geometry" that gives the cartoon a segment to draw -- it is
+    NOT a separate hider.
 
-    Coloring (research sec Q15 option c): the GAME sentinel
-    (``segi='GAME'`` + ``b=-999``) is KEPT UNCHANGED so Phase 3 cleanup
-    + read path need zero migration. The neighbor C-alpha's color and
-    secondary structure are copied onto the new residue via a single
-    alter call so the cartoon tube segment blends (research sec Q16:
-    cartoon color follows the C-alpha by default).
+    **Clean sentinel design (so the registry has ONE entry per cartoon
+    hider, even after a ``.pse`` reload):** ``segi='GAME'`` is set on ALL
+    atoms of BOTH residues (cleanup_hiders removes all of them via
+    ``segi GAME``), but ``b=-999`` (the fetch sentinel) is set on the
+    CLICKABLE C-alpha ONLY. ``fetch_all_hider_ids`` selects
+    ``segi GAME and b < 0`` (AGENTS.md), so it returns exactly ONE atom per
+    cartoon hider (the clickable CA) -- not the whole residue -- and
+    ``reconstruct_from_sentinels`` creates ONE registry entry per cartoon
+    hider. All other GAME atoms carry ``b=0`` (not a fetch sentinel) but
+    are still removed on cleanup (``segi GAME``). This is more consistent
+    than the old 1-residue design, which set ``b=-999`` on the whole residue
+    (so fetch returned ~7 atoms -> ~7 registry entries on reload).
+
+    **id-diff selection (NOT resi):** the second N-terminal residue gets
+    ``resi = terminus_resi - 2``, which is often NEGATIVE (e.g. -1 for 1ubq).
+    The PyMOL ``resi`` SELECTOR parses a leading hyphen as a RANGE
+    operator (``resi -1`` matches residues 0..1, not residue -1; verified
+    headless 05-05), so newly-attached residues are NEVER selected by
+    ``resi`` here. Instead, the atom-id set is diffed before/after each
+    ``attach_amino_acid`` call (ids are STABLE across add/remove/sort --
+    AGENTS.md Pitfall 4), and the new atoms are selected by ``id a+b+c``.
+    This is robust for any resi (negative, zero, or positive).
+
+    **2nd-attach valence:** after the first attach, the new residue's
+    terminal atom (N for N-term, C for C-term) carries hydrogens (hydro=1)
+    that saturate its valence, so the second attach would fail. Before the
+    second attach, the first new residue's terminal valence is freed: N-term
+    removes H atoms bonded to the new N (mirrors ``free_nterminal_valence``
+    step 3 but for the newly-attached residue); C-term removes the OXT
+    terminal oxygen on the new C. The removed H/OXT atoms are part of the
+    GAME residue (removed on cleanup), so verify_intact still passes.
+
+    Coloring (research sec Q15 option c): the neighbor C-alpha's color and
+    secondary structure are copied onto BOTH new residues via alter so the
+    cartoon tube segment blends (research sec Q16: cartoon color follows
+    the C-alpha by default). No sphere fallback -- the tube itself is the
+    visible, blending hider.
 
     The residue-attach primitive lives in the ``pymol.editor`` module
     (``editor.attach_amino_acid``) and is NOT exposed as
@@ -288,29 +315,36 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
     It is called with a NAMED selection (NOT ``pk1`` -- research Open Risk 2:
     the general path accepts any sele; the Phase 5 smoke confirms).
     ``ss=4`` (flat/loop) gives the least conspicuous extension (no helix
-    ribbon or sheet arrow). ``hydro=0`` suppresses hydrogens. ``aa='gly'``
-    (glycine -- smallest side chain; research sec Q6).
+    ribbon or sheet arrow). ``aa='gly'`` (glycine -- smallest side chain;
+    research sec Q6).
 
-    MVP uses the N-terminus (``is_c_terminus=False`` ->
-    ``new_resi = terminus_resi - 1``, attach at ``name N``); the C-terminus
-    path (``is_c_terminus=True``) is supported but NOT exercised by the
-    generators because the C-terminus carbonyl C carries an OXT (terminal
-    oxygen) in most structures (e.g. 1ubq), which saturates the C valence
-    and makes the residue-attach primitive fail with "no target attachment
-    vector found" (ObjectMolecule.cpp:3357). The N-terminus N has a free
-    valence and extends cleanly with NO atom removal, so the happy-path
-    sentinel cleanup restores the structure exactly (verified in the
-    Phase 5 headless smoke).
+    MVP uses the N-terminus (``is_c_terminus=False`` -> attach at ``name N``,
+    first new resi = ``terminus_resi - 1``, second = ``terminus_resi - 2``);
+    the C-terminus path (``is_c_terminus=True``) is supported but NOT
+    exercised by the generators because the C-terminus carbonyl C carries an
+    OXT (terminal oxygen) in most structures (e.g. 1ubq), which saturates
+    the C valence and makes the FIRST residue-attach fail with "no target
+    attachment vector found" (ObjectMolecule.cpp:3357). The N-terminus N has
+    a free valence (after ``free_nterminal_valence``) and extends cleanly,
+    so the happy-path sentinel cleanup (``segi GAME``) restores the
+    structure exactly and ``verify_intact`` passes (verified Phase 5 smoke).
+
+    **Known MVP limitation:** only the clickable C-alpha is registered, so
+    clicking any OTHER atom of either GAME residue (the support residue's
+    atoms, or the clickable residue's N/C/O/H) registers as a "Miss!" in
+    ``on_pick``. The player is guided to click the cartoon tube; the
+    representative atom is the clickable residue's C-alpha. A future phase
+    could register all GAME atoms of the hider or resolve by residue.
 
     Args:
         object (str): existing PyMOL object to attach INTO.
         chain (str): chain identifier of the terminal residue.
         terminus_resi (int): residue number of the terminal residue.
-        is_c_terminus (bool): True for C-terminus extension (forward,
-            new_resi = terminus_resi + 1); False for N-terminus
-            (backward, new_resi = terminus_resi - 1).
-        handle (str): throwaway atom *name* (unused here but kept for
-            signature symmetry with insert_hider).
+        is_c_terminus (bool): True for C-terminus extension (forward); False
+            for N-terminus (backward, the MVP path).
+        handle (str): throwaway atom *name* (unused here -- new atoms are
+            selected by id-diff, not name -- but kept for signature symmetry
+            with insert_hider).
         aa (str): amino acid fragment name (default 'gly').
         ss (int): secondary structure for dihedrals (default 4 = flat).
         hydro (int): hydrogen handling (default 1 = keep hydrogens).
@@ -322,13 +356,17 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
             existing H and only adds/fixes H on the new residue (which
             gets segi=GAME and is removed on cleanup).
         segi (str): sentinel segment id (default 'GAME').
-        b (float): sentinel b-factor (default -999.0).
+        b (float): sentinel b-factor set on the clickable C-alpha only
+            (default -999.0). Other GAME atoms get b=0.
 
     Returns:
-        int: the new residue's C-alpha stable id.
+        int: the clickable residue's C-alpha stable id (the first new
+        residue's CA -- closest to the original chain; this is the atom the
+        player clicks and the registry registers).
 
     Raises:
-        AssertionError: if identify does not return exactly one C-alpha.
+        AssertionError: if the id-diff does not yield exactly one clickable
+        C-alpha (the attach or alter did not produce the expected atoms).
     """
     residue_sele = "%s and chain %s and resi %d" % (object, chain, terminus_resi)
     # 1. Read neighbor (terminal residue) C-alpha props for blending
@@ -339,44 +377,81 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
                 space={'stored': nbr})  # editing.py:1490; hygienic space= dict (RESEARCH sec Q3)
     n_chain, n_ss, n_color = nbr[0]
     # 2. Build the attach selection (single N or C atom -- editor.py:125)
-    attach_sele = "%s and name %s" % (residue_sele,
-                                     "C" if is_c_terminus else "N")
-    # 3. Attach the residue (fuses real backbone geometry; mode=2 internally).
-    #    attach_amino_acid lives in the pymol.editor module (editor.py:85) and is
-    #    NOT exposed as cmd.attach_amino_acid in PyMOL 2.5.0 open-source (cmd.py
-    #    imports editor lazily inside a function, so cmd.editor is not a stable
-    #    attribute). Imported lazily here so the module-level import stays
-    #    minimal and WSL unit tests (which stub pymol as MagicMock) never trigger
-    #    this path.
+    term_atom_name = "C" if is_c_terminus else "N"
+    attach_sele = "%s and name %s" % (residue_sele, term_atom_name)
+    # 3. attach_amino_acid lives in the pymol.editor module (editor.py:85) and
+    #    is NOT exposed as cmd.attach_amino_acid in PyMOL 2.5.0 open-source
+    #    (cmd.py imports editor lazily inside a function, so cmd.editor is not
+    #    a stable attribute). Imported lazily here so the module-level import
+    #    stays minimal and WSL unit tests (which stub pymol as MagicMock) never
+    #    trigger this path.
     from pymol import editor  # editor.py:85; not exposed as cmd.attach_amino_acid
+
+    def _id_sele(ids):
+        # Build a PyMOL `id a+b+c` selection from an iterable of stable atom
+        # ids (AGENTS.md Pitfall 4: id is stable across add/remove/sort).
+        return "id " + "+".join(str(i) for i in ids)
+
+    # 4. Attach FIRST glycine (CLICKABLE -- bonds to the original terminus).
+    #    id-diff (NOT resi) finds the new atoms: the 2nd N-term residue gets
+    #    a NEGATIVE resi (terminus_resi-2), and `resi -N` parses as a RANGE
+    #    in the PyMOL selector (verified 05-05), so resi is NEVER used to
+    #    select newly-attached residues here.
+    ids_before_1 = set(cmd.identify(object, mode=0))  # querying.py:1269
     editor.attach_amino_acid(attach_sele, aa, ss=ss, hydro=hydro)
-    # 4. Compute new residue number (C-term: +1 forward; N-term: -1 backward)
-    new_resi = terminus_resi + 1 if is_c_terminus else terminus_resi - 1
-    new_sele = "%s and chain %s and resi %d" % (object, n_chain, new_resi)
-    # 5. Sentinel + blend alter (single hygienic call -- research sec Q14):
-    #    KEEP segi='GAME' + b=-999 sentinel (option c), ADD color + ss for blend
-    cmd.alter(new_sele,
-              "segi='GAME'; b=-999.0; color=stored_c; ss=stored_ss",
+    first_new_ids = set(cmd.identify(object, mode=0)) - ids_before_1
+    assert first_new_ids, "1st attach produced no new atoms"
+    # 5. Find the first new residue's terminal atom (N or C) by id -- the
+    #    second attach bonds to it.
+    first_term_ids = []
+    cmd.iterate(_id_sele(first_new_ids) + " and name %s" % term_atom_name,
+                "stored.append(ID)", space={'stored': first_term_ids})
+    assert len(first_term_ids) == 1, \
+        "expected 1 terminal %s in 1st residue, got %r" % (term_atom_name,
+                                                           first_term_ids)
+    first_term_sele = "%s and id %d" % (object, first_term_ids[0])
+    # 6. Free the first new residue's terminal valence so the 2nd attach can
+    #    bond to it (N-term: remove H bonded to N -- mirrors
+    #    free_nterminal_valence step 3 for the new terminus; C-term: remove
+    #    OXT on C). The removed atoms are part of the GAME residue (removed
+    #    on cleanup), so verify_intact still passes.
+    if is_c_terminus:
+        cmd.remove("%s and name OXT" % first_term_sele)  # C-term OXT
+    else:
+        cmd.remove("(neighbor (%s)) and (elem H)" % first_term_sele)  # N-term H
+    # 7. Recompute first_new_ids (the H/OXT removal may have dropped atoms)
+    #    and attach the SECOND glycine (SUPPORT -- the new terminus). The
+    #    cartoon tube renders BETWEEN the two new C-alphas.
+    ids_before_2 = set(cmd.identify(object, mode=0))
+    first_new_ids = ids_before_2 - ids_before_1  # 1st residue (post-removal)
+    editor.attach_amino_acid(first_term_sele, aa, ss=ss, hydro=hydro)
+    second_new_ids = set(cmd.identify(object, mode=0)) - ids_before_2
+    assert second_new_ids, "2nd attach produced no new atoms"
+    all_game_ids = first_new_ids | second_new_ids
+    # 8. Sentinel + blend on ALL game atoms: segi='GAME' (cleanup tag),
+    #    color + ss (blend), b=0.0 (default; NOT a fetch sentinel). Single
+    #    hygienic alter (research sec Q14).
+    cmd.alter(_id_sele(all_game_ids),
+              "segi='GAME'; b=0.0; color=stored_c; ss=stored_ss",
               space={'stored_c': n_color, 'stored_ss': n_ss})  # editing.py:1424
+    # 9. Set the b=-999 fetch sentinel on the CLICKABLE C-alpha ONLY (the
+    #    first new residue's CA -- closest to the original chain; the atom
+    #    the player clicks). fetch_all_hider_ids (segi GAME and b < 0) then
+    #    returns exactly ONE atom per cartoon hider -> ONE registry entry.
+    ca_ids = []
+    cmd.iterate(_id_sele(first_new_ids) + " and name CA",
+                "stored.append(ID)", space={'stored': ca_ids})
+    assert len(ca_ids) == 1, "expected 1 clickable C-alpha, got %r" % (ca_ids,)
+    clickable_id = ca_ids[0]
+    cmd.alter("%s and id %d" % (object, clickable_id), "b=-999.0", space={})
     cmd.sort(object)  # defensive -- editing.py:1457; research sec Q23
-    # 6. Show cartoon on ONLY the new residue (NOT all GAME; Q11: fused atoms
-    #    start with no reps; same atoms render in ribbon too -- Q10).
-    #    BUT PyMOL cartoon CANNOT render a visible segment for a single
-    #    isolated terminal residue (tube/arrow drawn BETWEEN consecutive
-    #    C-alphas; 1 residue = no segment -- verified headless 05-05: ss
-    #    S/L/H all render identical to blank). As a VISIBLE fallback that
-    #    preserves clickability (player clicks the C-alpha) AND blends
-    #    (sphere carries the neighbor color set in step 5), ALSO show the
-    #    C-alpha as a sphere. The cartoon show is kept (harmless -- renders
-    #    if the residue ever connects to 2+ residues).
-    new_resi_sele = "%s and resi %d and segi GAME" % (object, new_resi)
-    cmd.show('cartoon', new_resi_sele)  # viewing.py:491
-    cmd.show('spheres', "%s and name CA" % new_resi_sele)  # visible fallback (05-05)
-    # 7. Fetch the new C-alpha stable id (the cartoon-representative atom)
-    ids = cmd.identify("%s and name CA and segi GAME and resi %d" % (object, new_resi),
-                       mode=0)  # querying.py:1269; mode=0 returns id list, NOT index
-    assert len(ids) == 1, "expected 1 new cartoon C-alpha, got %r" % (ids,)
-    return ids[0]
+    # 10. Show cartoon on BOTH residues (the tube renders BETWEEN consecutive
+    #     C-alphas; the 2nd residue provides the "next" C-alpha so the
+    #     segment is visible). NO sphere fallback -- the tube itself blends
+    #     (neighbor color + ss copied in step 8). Same atoms render in ribbon
+    #     too (research sec Q10).
+    cmd.show('cartoon', _id_sele(all_game_ids))  # viewing.py:491
+    return clickable_id
 
 
 def insert_hider_for_rep(object, rep, payload, handle):

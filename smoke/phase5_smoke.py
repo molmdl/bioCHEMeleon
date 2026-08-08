@@ -87,6 +87,10 @@ for ch, ri, cid in cas_list:
     cas_by_chain.setdefault(ch, []).append((ri, cid))
 chain = max(cas_by_chain, key=lambda c: len(cas_by_chain[c]))
 term_resi = min(r[0] for r in cas_by_chain[chain])  # N-terminus (min resi)
+# Record sentinel-atom count BEFORE the cartoon insert (the stick hider from
+# section 2 is still present -> 1 b<0 atom). The cartoon hider should add
+# EXACTLY 1 more (the clickable CA only -- clean sentinel design).
+fetch_before_cartoon = len(mutation.fetch_all_hider_ids(obj))
 ca_id = mutation.insert_cartoon_hider(obj, chain=chain, terminus_resi=term_resi,
                                        is_c_terminus=False, handle="C001")
 check("cartoon: returns C-alpha int id", isinstance(ca_id, int))
@@ -98,16 +102,31 @@ check("cartoon: GAME atoms in polymer (Open Risk 1)",
       cmd.count_atoms("%s and segi GAME and polymer" % obj) > 0)
 # corrected count_atoms check (NOT the roadmap's wrong cmd.count('cartoon',...);
 # mutagenesis.py:570 pattern: count_atoms("... and name CA and rep cartoon"))
+# 05-05 2-residue fix: a SINGLE residue renders no cartoon (tube drawn BETWEEN
+# consecutive C-alphas; 1 residue = no segment). The fix attaches TWO glycine
+# residues at the terminus so the tube renders BETWEEN the two new C-alphas
+# (and between the first new CA and the original terminal CA). Verify BOTH
+# new C-alphas carry the cartoon rep (2 C-alphas => a real tube segment).
 check("cartoon: GAME C-alpha in rep cartoon",
       cmd.count_atoms("%s and segi GAME and name CA and rep cartoon" % obj) > 0)
-# 05-05 visibility fix: PyMOL cartoon cannot render a single isolated terminal
-# residue (tube drawn BETWEEN C-alphas; 1 residue = no segment, verified
-# headless). The C-alpha is ALSO shown as a sphere so the hider is visible to
-# the eye. Verify the sphere fallback is present (regression guard).
-check("cartoon: GAME C-alpha in rep spheres (visible fallback, 05-05)",
-      cmd.count_atoms("%s and segi GAME and name CA and rep spheres" % obj) > 0)
-check("cartoon: residue has N-C-C-alpha backbone",
-      cmd.count_atoms("%s and segi GAME and (name N or name CA or name C)" % obj) >= 3)
+check("cartoon: 2 GAME C-alphas in rep cartoon (2-residue tube, 05-05)",
+      cmd.count_atoms("%s and segi GAME and name CA and rep cartoon" % obj) >= 2)
+# Regression guard: the sphere fallback was REMOVED (it was a glaring sphere
+# that defeated the hide-and-seek purpose). NO GAME atom should carry the
+# spheres rep -- the hider is now a blended cartoon TUBE, not a sphere.
+check("cartoon: NO GAME atoms in rep spheres (sphere fallback removed, 05-05)",
+      cmd.count_atoms("%s and segi GAME and rep spheres" % obj) == 0)
+# Clean sentinel design: b=-999 on the CLICKABLE C-alpha ONLY (so
+# fetch_all_hider_ids returns 1 atom PER cartoon hider -> 1 registry entry);
+# segi=GAME on ALL atoms of BOTH residues (cleanup removes all via segi GAME).
+# Verify the cartoon hider added EXACTLY 1 sentinel atom (the clickable CA) --
+# not the whole residue. The stick hider from section 2 is also present, so
+# compare against fetch_before_cartoon (delta must be 1, not the absolute count).
+check("cartoon: fetch_all_hider_ids += 1 (clean sentinel, 05-05)",
+      len(mutation.fetch_all_hider_ids(obj)) - fetch_before_cartoon == 1)
+# 2 residues => 2x(N,CA,C) = 6 backbone atoms (was >= 3 for 1 residue).
+check("cartoon: 2 residues have N-C-CA backbone (>=6 atoms)",
+      cmd.count_atoms("%s and segi GAME and (name N or name CA or name C)" % obj) >= 6)
 # sentinel on the new residue's C-alpha
 csent = []
 cmd.iterate("%s and id %d" % (obj, ca_id), "stored.append((segi, b))",
