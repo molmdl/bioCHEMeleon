@@ -118,6 +118,37 @@ This repo uses the OpenCode "get-shit-done" workflow. `.planning/` is the source
 - `phases/<NN-name>/` — `NN-MM-PLAN.md`, `NN-MM-SUMMARY.md`, optional `RESEARCH.md` / `VERIFICATION.md` / `UAT.md`.
 - Commit style: Conventional Commits with phase-plan scope, e.g. `feat(02-03):`, `docs(02-03):`, `test(02-01):`, `fix(02):`. Planning docs are committed (`commit_docs: true`).
 
+## Parallel subagent execution (worktree/branch protocol)
+
+When `/gsd-execute-phase` runs **≥2 plans in parallel** (one wave with
+multiple autonomous plans), each `gsd-executor` subagent commits on a
+**shared git index** — concurrent `git add`/`git commit` calls race and
+sweep in each other's staged files (happened in Phase 4 Wave 1: 3 agents,
+~3 Rule-3 collision fixes). To eliminate this collision class:
+
+- **One worktree per parallel plan.** Before spawning a wave, the
+  orchestrator creates a git worktree (or branch) per parallel plan:
+  `git worktree add tmp/exec-04-01 -b exec/04-01` (etc.). Each agent is
+  spawned with `workdir=tmp/exec-04-01` so it commits on an isolated
+  index — zero shared-index races.
+- **Merge back in dependency order.** After all agents in the wave return,
+  the orchestrator merges/fast-forwards each branch into the base in
+  dependency order (`git merge exec/04-01`, then `exec/04-02`, ...). Real
+  conflicts (same file touched by two plans — should be rare given
+  disjoint `files_modified` frontmatter) are resolved explicitly here.
+- **Single-plan waves skip this.** Waves with one plan (no parallelism)
+  need no worktree — commit directly on the base branch. The protocol
+  only applies when ≥2 plans run concurrently.
+- **TDD multi-commit safety.** Each agent can still do atomic
+  RED/GREEN/REFACTOR commits freely on its own branch — the per-task
+  commit granularity is preserved (unlike an orchestrator-owned commit
+  gate, which would collapse TDD's commit boundaries).
+
+Orchestrators: if `parallelization: true` in `.planning/config.json` and a
+wave has >1 plan, use this protocol. See `.planning/quick/001-*` for the
+rationale + rejected alternatives (message-board lock, orchestrator commit
+gate).
+
 ## Git-ignored (don't rely on / don't commit)
 
 `Pymol-script-repo/` (reference plugins for learning how to write PyMOL plugins), `3rd_party_lib/` (vendored libs), `tmp/`, `biochemeleon.zip` (staged fallback install artifact), `*.pyc`.
