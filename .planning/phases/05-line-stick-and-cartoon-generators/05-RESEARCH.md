@@ -821,3 +821,127 @@ assert cmd.count_atoms("%s and segi GAME and polymer" % obj) > 0
 
 **Research date:** 2026-08-08
 **Valid until:** 2026-09-07 (30 days — stable PyMOL 2.5.0 API; the runtime-verify items in §7 Open Risks should be resolved by the Phase 5 smoke test before they expire)
+
+---
+
+## 12. Alt-Conf Segment Replication — Spike Findings (Gap Closure 05-06)
+
+**Spike date:** 2026-08-09
+**Spike artifact:** `smoke/altconf_spike.py` (314 lines, pure `pymol.cmd.*`, NO Qt)
+**Spike commit:** `a6fd26a`
+**Run:** 10/10 ALL PASSED headlessly via `cmd.exe /c C:\src\run-conda-pymol.bat -cq smoke\altconf_spike.py`
+**Purpose:** The 05-05 human-verify found the cartoon terminal-extension approach renders as DISCONNECTED on 1ubq (the sheet arrow SHAPE on a beta-strand N-terminus; verified headless 05-05: the cartoon trace IS continuous — no literal gap — but the ARROW looks disconnected). This spike tests whether the roadmap's alternative — "replicating a segment (loop) as an alternate position using C-alpha geometry" — is viable for cartoon/ribbon hiders before committing implementation effort in plan 05-08.
+
+### 12.1 Spike Results Summary
+
+| # | Check | Result | Diag Value |
+|---|-------|--------|------------|
+| 2 | `cmd.create` same-object duplication (PRIMARY `cmd.create(obj,seg,1,1)`) | **NO-OP (0 new ids)** | `new_ids = 0` — merge by identity, NOT append — **plan hypothesis DISPROVED** |
+| 2 | `cmd.fuse(tmp,obj,mode=3)` fallback (plan 12.2) | **RENAMES atoms (no CA)** | `new_ids=25, new_CAs=0` — CA→C02, N→N01, etc. — **plan 12.2 fallback DISPROVED** |
+| 2 | WORKING: `create+alter+create` (`create(tmp,seg)` + `alter(tmp,"alt='B';segi='GAME'")` + `create(obj,tmp)`) | **PASS** | `new_ids=25, count_after=685` |
+| 3 | Duplicates are TRUE alt-conf pairs (same chain/resv/name=CA, alt='B') | **PASS** | `orig_props=[('A',30,'CA',''),('A',31,'CA',''),('A',32,'CA','')]` `new_props=[('A',30,'CA','B'),('A',31,'CA','B'),('A',32,'CA','B')]` |
+| 4 | b=-999 on ONE clickable CA (clean sentinel) | **PASS** | `clickable_id=227, clickable_resv=30, segi GAME b<0 count=1` |
+| 5 | Cartoon renders alt-conf GAME CAs (default settings) | **PASS** | `game_cartoon_ca = 3` |
+| 6 | all_states required for cartoon? | **NO** | `game_cartoon_ca_all = 3 (default=3); all_states_needed=False` — all_states NOT needed |
+| 7 | Alt-conf GAME atoms in polymer | **PASS** | `game_polymer = 25` (all 25 alt-conf atoms are polymer — cartoon trace includes them) |
+| 8 | Ribbon renders alt-conf GAME CAs | **PASS** | `game_ribbon_ca = 3` |
+| 9 | alter_state displacement (x=x+2.0) | **PASS** | `orig_coords[0]=(36.731, 30.570, 12.645)` `new_coords[0]=(38.731, 30.570, 12.645)` — dx=2.0000 |
+| 10 | Cleanup by segi GAME restores count | **PASS** | `after_count=660, orig_count=660` |
+| 11 | Sentinel: fetch_all_hider_ids returns 1 atom | **PASS** | `fetch_ids = [('1ubq', 227)]` — clean sentinel works UNCHANGED |
+| 11 | Sentinel: cleanup_hiders restores count | **PASS** | count back to 660 |
+
+**Three approaches tested (only the third works):**
+
+1. **PRIMARY (plan's hypothesis):** `cmd.create(obj, seg, 1, 1)` — same-name create. **DISPROVED**: this is a NO-OP. `cmd.create` MERGES by identity (segi, chain, resi, name) when the target name equals the source object. A subset selection overwrites itself, producing 0 new ids. The plan's claim that "name == source object => appends duplicated atoms to the existing object" (creating.py:960) is INCORRECT for same-object subsets — the merge-by-identity logic deduplicates the atoms back to themselves.
+
+2. **FALLBACK (plan 12.2):** `cmd.create(tmp, seg)` + `cmd.fuse(tmp, obj, mode=3)` + `cmd.delete(tmp)`. **DISPROVED**: `cmd.fuse mode=3` (combine only, no bond) RENAMES atoms to avoid collisions — CA→C02/C03, N→N01, O→O04, etc. The 25 fused atoms have NO `name CA`, so the cartoon trace (which goes through C-alpha atoms) cannot render them. They are NOT alt-conf pairs (different names from the originals). The plan's fallback was intended for "cmd.create cannot duplicate within the same object" — it does duplicate (25 new ids), but the renaming makes the duplicates useless for cartoon.
+
+3. **WORKING (this spike's discovery):** `cmd.create(tmp, seg, 1, 1)` + `cmd.alter(tmp, "alt='B'; segi='GAME'", space={})` + `cmd.create(obj, tmp)` + `cmd.delete(tmp)`. The `alt='B'` tag makes the temp atoms' identity DIFFER from the `alt=''` originals (alt is part of the identity key), so `cmd.create` APPENDS them as TRUE alt-conf pairs — same chain/resv/name=CA, but alt='B'. 25 atoms appended, 3 CAs, all alt-conf pairs of the originals. The cartoon trace renders them, they're polymer, alter_state displaces them, and cleanup by segi GAME removes them.
+
+### 12.2 Implementation Recommendation
+
+**The alt-conf approach IS VIABLE.** Plan 05-08 should implement `insert_cartoon_hider` (alt-conf variant) using the WORKING approach:
+
+1. `cmd.create(tmp, segment_sele, 1, 1)` — copy the mid-chain segment (3 residues) to a temp object (creating.py:960)
+2. `cmd.alter(tmp, "alt='B'; segi='GAME'", space={})` — set alt-conf tag + GAME sentinel on ALL temp atoms (editing.py:1424; hygienic space={})
+3. `cmd.create(obj, tmp)` — append the alt-conf atoms to the target object (they get new ids; creating.py:960)
+4. `cmd.delete(tmp)` — clean up the temp object
+5. `cmd.sort(obj)` — defensive (editing.py:1457)
+6. Set `b=-999` on ONE clickable CA via `cmd.alter("obj and segi GAME and name CA and resi <resv>", "b=-999.0", space={})` — clean sentinel design (fetch_all_hider_ids returns 1)
+7. `cmd.alter_state(1, "obj and segi GAME", "x=x+dx; y=y+dy; z=z+dz", space={})` — displace the copies by 1-2 Å for visibility (editing.py:1535)
+8. `cmd.show('cartoon', "obj and segi GAME")` — show the cartoon rep on the alt-conf atoms (viewing.py:491; newly-created atoms do NOT inherit shown reps)
+
+**all_states is NOT required.** The spike confirmed cartoon renders alt-conf CAs with default settings (`game_cartoon_ca = 3` with `all_states=off`). Plan 05-08 does NOT need to call `cmd.set('all_states', 'on')`.
+
+**Three critical caveats for 05-08 (discovered during spike development):**
+
+1. **`cmd.identify(obj, mode=0)` does NOT return alt-conf atoms.** The id-diff approach (used by `insert_cartoon_hider` in Phase 5 for terminal-extension) CANNOT find alt-conf duplicates. The 05-08 implementation MUST use `segi GAME` selectors to find the new atoms: `cmd.iterate("obj and segi GAME", ...)` and `cmd.identify("obj and segi GAME", mode=0)` both see alt-conf atoms.
+
+2. **The `id <id>` selector matches BOTH alt='' and alt='B' versions of the same atom** (they share id space in PyMOL's alt-conf implementation). `cmd.alter("obj and id 227", "b=-999.0")` would set b=-999 on the ORIGINAL atom too (which has segi='A', so it doesn't affect fetch_all_hider_ids, but it's semantically wrong). To set b=-999 on ONE alt-conf CA unambiguously, use `segi GAME and name CA and resi <resv>` — the original has segi='A' so it's excluded.
+
+3. **Residual alt-conf state after `cmd.remove("segi GAME")` interferes with re-insertion.** After a create+alter+create flow, if the alt-conf atoms are removed by `cmd.remove("segi GAME")` and then a SECOND create+alter+create is attempted on the same object, the `segi GAME` iterate finds 0 CAs (even though `count_atoms` shows 25 new atoms). The alt-conf "slots" or records left behind by the first round confuse the second round's `cmd.create(obj, tmp)`. **Plan 05-08 MUST ensure `GameController.cleanup` does a `backup.restore` (delete+create two-step, NOT just sentinel remove) for alt-conf hiders, OR reload the object between rounds.** The Phase 3 `cleanup_hiders` (sentinel `cmd.remove("segi GAME")` alone) is INSUFFICIENT for alt-conf hiders — it restores the count but leaves the object in a state where subsequent alt-conf insertions fail. This is the most significant finding for 05-08: the cleanup path needs a `backup.restore` for the alt-conf approach, not just a sentinel remove.
+
+### 12.3 Key API Calls for 05-08
+
+The exact PyMOL API calls plan 05-08 should use (all verified at runtime by this spike):
+
+```python
+# 1. Copy segment to temp (creating.py:960)
+cmd.create(tmp, segment_sele, 1, 1)
+
+# 2. Set alt-conf + sentinel on temp (editing.py:1424; hygienic space={})
+cmd.alter(tmp, "alt='B'; segi='GAME'", space={})
+
+# 3. Append alt-conf atoms to target (creating.py:960 -- different identity = append)
+cmd.create(obj, tmp)
+
+# 4. Clean up temp
+cmd.delete(tmp)
+
+# 5. Defensive sort (editing.py:1457)
+cmd.sort(obj)
+
+# 6. Set b=-999 on ONE clickable CA (unambiguous: segi GAME + resi, NOT id)
+#    Read (ID, resv) first via iterate (editing.py:1490; ID uppercase;
+#    resv is int, NOT int(resi) -- hygienic space= has no builtins)
+new_cas = []
+cmd.iterate("%s and segi GAME and name CA" % obj, "stored.append((ID, resv))",
+            space={'stored': new_cas})
+first_resv = new_cas[0][1]
+cmd.alter("%s and segi GAME and name CA and resi %d" % (obj, first_resv),
+          "b=-999.0", space={})
+
+# 7. Displace for visibility (editing.py:1535; alter_state modifies x/y/z)
+cmd.alter_state(1, "%s and segi GAME" % obj, "x=x+1.5; y=y+0.0; z=z+0.0",
+                space={})
+
+# 8. Show cartoon (viewing.py:491; new atoms do NOT inherit shown reps)
+cmd.show('cartoon', "%s and segi GAME" % obj)
+
+# 9. Cleanup: MUST use backup.restore (delete+create two-step), NOT just
+#    cmd.remove("segi GAME") -- residual alt-conf state breaks re-insertion
+cmd.delete(obj)
+cmd.create(obj, backup_name)  # restore from pre-game snapshot
+```
+
+### 12.4 Displacement Strategy
+
+The spike confirmed `cmd.alter_state` works for displacing alt-conf atoms (dx=2.0 Å verified). The recommended displacement for 05-08:
+
+- **1.0-2.0 Å** is sufficient to make the alt-conf CA a separate clickable atom while keeping it close enough to blend as a "conformational variant" of the original segment.
+- The displacement should be applied to ALL GAME atoms (not just the clickable CA) so the entire 3-residue segment moves as a unit — otherwise the cartoon trace would connect the original alt='' atoms to the displaced alt='B' atoms in a tangled way.
+- **Direction:** a small offset in one axis (e.g., `x=x+1.5`) is simplest. A random direction (normalized vector × 1.5 Å) would be more natural but requires a generator function. The human-verify in 05-08 will fine-tune the displacement magnitude — if the cartoon trace renders both the original and the displaced copy as a visible "fork," the displacement may need to be smaller (0.5 Å) for better blending.
+- **CAVEAT:** the displacement changes the ATOM coordinates but NOT the bond connectivity. The alt-conf atoms inherit the bond graph from the original segment (they're copies), so the cartoon trace should render the displaced segment as a parallel trace. This needs visual verification in 05-08.
+
+### 12.5 Sentinel Compatibility
+
+**The existing sentinel design (segi='GAME' + b=-999 on ONE clickable CA, read by `segi GAME and b < 0`, cleanup by `segi GAME`) works UNCHANGED for the READ and FETCH paths.** The spike's section 11 confirmed: `fetch_all_hider_ids` returns exactly `[(obj, 227)]` — one atom per alt-conf hider — and `cleanup_hiders` (by `segi GAME`) restores the count.
+
+**HOWEVER, the cleanup path has a CRITICAL LIMITATION for repeated game rounds** (caveat 3 in §12.2): `cmd.remove("segi GAME")` alone restores the count but leaves residual alt-conf state that breaks subsequent alt-conf insertions on the same object. For a single game round (insert → play → cleanup → done), the sentinel cleanup works fine. But for "New Game" (cleanup → insert again), the object must be restored from backup (delete+create two-step), not just sentinel-removed.
+
+**No sentinel migration needed.** The `segi='GAME'` tag, `b=-999` fetch sentinel, `fetch_all_hider_ids` read path, and `cleanup_hiders` remove path all work as-is for alt-conf hiders. The only change for 05-08 is:
+1. Use `segi GAME` selectors (NOT id-diff) to find new alt-conf atoms after `cmd.create`.
+2. Use `segi GAME and resi <resv>` (NOT `id <id>`) to set b=-999 on the clickable CA.
+3. Use `backup.restore` (delete+create) instead of `cmd.remove("segi GAME")` for cleanup when alt-conf hiders are present (to clear residual alt-conf state for the next round).
+
+**Registry compatibility:** `fetch_all_hider_ids` returns `[(obj, id)]` — the same tuple shape as Phase 3. The registry keys on `(object, id)` and works unchanged. The `id` returned (227 in the spike) is the alt-conf CA's id — stable across the game round (verified: cleanup removes it, and a fresh insert gets a new id). The `.pse` reload path (`reconstruct_from_sentinels`) also works unchanged — `segi='GAME'` survives reload, `b=-999` survives reload, `fetch_all_hider_ids` reads them back. Phase 8 `.bcm` sidecar reconciles `rep` as before.
