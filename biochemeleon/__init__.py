@@ -118,8 +118,11 @@ class PluginDialog(QtWidgets.QDialog):
                     "stored.append(ID)", space={'stored': neighbor_ids})
         # For cartoon: terminal C-alpha per chain (extend-at-terminus).
         cas_list = []
+        # resv (numeric residue value, already int) NOT int(resi): the hygienic
+        # space= dict does not expose Python builtins, so int(resi) raises
+        # NameError (symbol table editing.py:1444-1449; mirrors smoke/phase5_smoke.py).
         cmd.iterate("%s and polymer and name CA" % target_obj,
-                    "stored.append((chain, int(resi), ID))",
+                    "stored.append((chain, resv, ID))",
                     space={'stored': cas_list})
         cas_by_chain = {}
         for chain, resi, ca_id in cas_list:
