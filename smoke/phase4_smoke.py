@@ -116,6 +116,29 @@ except Exception as exc:
     print("spike: do_pick-simulation not supported headlessly: %r" % (exc,))
     check("spike: do_pick simulation skipped (deferral to human-verify)", True)
 
+# --- 11b. (optional spike) SELECT-path pick chain -- MEDIUM confidence ---
+# Option 2 fix (04-02): in SELECTION button modes (the DEFAULT in 3-Button
+# Viewing) the C layer (SceneMouse.cpp:337-356) creates "sele" + WizardDoSelect,
+# NOT "pk1" + WizardDoPick. do_select maps sele -> pk1 -> do_pick. Simulate by
+# creating "sele" on a hider atom, calling do_select("sele"), and asserting the
+# hider is marked found. This is the path real GUI clicks take.
+try:
+    gc3 = game.GameController(obj)
+    gc3.start([([6.0, 6.0, 6.0], "spheres")])
+    gc3._start_time = 1234.0
+    w3 = wizard.PickWizard(gc3, obj)
+    w3.activate()
+    hid3 = gc3.registry.all()[0].id
+    cmd.select("sele", "%s and id %d" % (obj, hid3))  # simulate C-layer "sele"
+    w3.do_select("sele")
+    check("spike: do_select via simulated sele marks found",
+          gc3.registry.get(obj, hid3).status == registry.HIDER_STATUS_FOUND)
+    w3.deactivate()
+    gc3.cleanup()
+except Exception as exc:
+    print("spike: do_select-simulation not supported headlessly: %r" % (exc,))
+    check("spike: do_select simulation skipped (deferral to human-verify)", True)
+
 # --- summary ---
 print("\n=== SUMMARY ===")
 fails = [n for n, c in RESULTS if not c]
