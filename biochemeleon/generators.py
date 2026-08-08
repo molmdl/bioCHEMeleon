@@ -67,13 +67,22 @@ def pick_terminal_residues(cas_by_chain, max_chains=None):
     caller's ``cmd.iterate`` over polymer C-alpha atoms
     (05-RESEARCH.md Sec3 Q8 Step 1). Returns a list of
     ``(chain, terminal_resi, is_c_terminus)`` tuples, one per chain,
-    longest chain first (most C-alpha entries), each at the C-terminus
-    (max resi, ``is_c_terminus=True``). Capped at ``max_chains`` if not
+    longest chain first (most C-alpha entries), each at the N-terminus
+    (min resi, ``is_c_terminus=False``). Capped at ``max_chains`` if not
     ``None``. Returns ``[]`` for an empty dict.
 
     MVP caps cartoon hiders at one per chain (attaching many to one
-    terminus chains them - 05-RESEARCH.md Sec7 Open Risk 5). N-terminus
-    is a future option; MVP uses C-terminus only.
+    terminus chains them - 05-RESEARCH.md Sec7 Open Risk 5). MVP uses the
+    N-terminus (NOT the C-terminus): the C-terminus carbonyl C carries an
+    OXT (terminal oxygen) in most structures (e.g. 1ubq), which saturates
+    the C valence and makes the residue-attach primitive fail with "no
+    target attachment vector found" (ObjectMolecule.cpp:3357). The N-terminus
+    N has a free valence for attachment, so it extends cleanly with NO atom
+    removal -- the happy-path sentinel cleanup (``segi GAME``) restores the
+    structure exactly and ``verify_intact`` passes (verified in the Phase 5
+    headless smoke). C-terminus extension is supported by
+    ``insert_cartoon_hider`` (``is_c_terminus=True``) but not exercised by
+    the MVP generator.
 
     Args:
         cas_by_chain: ``{chain: [(resi, ca_id), ...]}``.
@@ -82,7 +91,7 @@ def pick_terminal_residues(cas_by_chain, max_chains=None):
 
     Returns:
         list of ``(chain, terminal_resi, is_c_terminus)`` tuples
-        (``is_c_terminus`` is always ``True`` in the MVP).
+        (``is_c_terminus`` is always ``False`` in the MVP -- N-terminus).
     """
     if not cas_by_chain:
         return []
@@ -93,5 +102,5 @@ def pick_terminal_residues(cas_by_chain, max_chains=None):
     out = []
     for ch in chains:
         resis = [r[0] for r in cas_by_chain[ch]]
-        out.append((ch, max(resis), True))  # C-terminus (max resi)
+        out.append((ch, min(resis), False))  # N-terminus (min resi)
     return out

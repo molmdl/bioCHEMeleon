@@ -176,11 +176,14 @@ class TestPickTerminalResidues(unittest.TestCase):
     - 05-RESEARCH.md Sec3 Q8 Step 1). Returns a list of
     ``(chain, terminal_resi, is_c_terminus)`` tuples, one per chain,
     sorted longest-chain-first (most C-alpha entries), each at the
-    C-terminus (max resi, ``is_c_terminus=True``). Capped at ``max_chains``
+    N-terminus (min resi, ``is_c_terminus=False``). Capped at ``max_chains``
     if not None. Used by ``__init__._on_start`` to build cartoon hider
     payloads (one terminal extension per chain - 05-RESEARCH.md Sec7
     Open Risk 5: attaching many to one terminus chains them, so cap at
-    one per chain).
+    one per chain). MVP uses the N-terminus (NOT the C-terminus): the
+    C-terminus C carries an OXT that blocks the residue-attach primitive
+    at runtime (verified in the Phase 5 headless smoke -- see
+    ``biochemeleon/generators.py`` docstring for the OXT rationale).
     """
 
     def test_empty(self):
@@ -188,22 +191,22 @@ class TestPickTerminalResidues(unittest.TestCase):
         self.assertEqual(pick_terminal_residues({}), [])
 
     def test_single_chain(self):
-        """Single chain -> [(chain, max_resi, True)] (C-terminus = max resi)."""
+        """Single chain -> [(chain, min_resi, False)] (N-terminus = min resi)."""
         cas = {'A': [(1, 'id1'), (2, 'id2'), (76, 'id76')]}
         self.assertEqual(pick_terminal_residues(cas),
-                         [('A', 76, True)])
+                         [('A', 1, False)])
 
     def test_multi_chain_longest_first(self):
-        """Two chains, A strictly longer -> A first, both C-terminus."""
+        """Two chains, A strictly longer -> A first, both N-terminus."""
         cas = {'A': [(1, 1), (2, 2), (3, 3)], 'B': [(1, 1), (2, 2)]}
         self.assertEqual(pick_terminal_residues(cas),
-                         [('A', 3, True), ('B', 2, True)])
+                         [('A', 1, False), ('B', 1, False)])
 
     def test_max_chains_cap(self):
         """max_chains=1 -> only the longest chain (single-element list)."""
         cas = {'A': [(1, 1), (2, 2), (3, 3)], 'B': [(1, 1), (2, 2)]}
         self.assertEqual(pick_terminal_residues(cas, max_chains=1),
-                         [('A', 3, True)])
+                         [('A', 1, False)])
 
     def test_max_chains_none(self):
         """max_chains=None -> no cap (all chains returned)."""
@@ -211,14 +214,14 @@ class TestPickTerminalResidues(unittest.TestCase):
         out = pick_terminal_residues(cas, max_chains=None)
         self.assertEqual(len(out), 2)
 
-    def test_is_c_terminus_always_true(self):
-        """Every returned tuple has is_c_terminus==True (MVP = C-term only)."""
+    def test_is_c_terminus_always_false(self):
+        """Every returned tuple has is_c_terminus==False (MVP = N-term only)."""
         cas = {'A': [(1, 1), (2, 2), (3, 3)], 'B': [(1, 1), (2, 2)],
                'C': [(5, 5), (10, 10)]}
         out = pick_terminal_residues(cas)
         for tup in out:
             self.assertEqual(len(tup), 3)
-            self.assertTrue(tup[2], "is_c_terminus must be True (MVP)")
+            self.assertFalse(tup[2], "is_c_terminus must be False (MVP N-term)")
 
 
 if __name__ == '__main__':

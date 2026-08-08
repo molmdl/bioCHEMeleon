@@ -265,16 +265,29 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
     alter call so the cartoon tube segment blends (research sec Q16:
     cartoon color follows the C-alpha by default).
 
-    The residue-attach primitive is called with a NAMED selection (NOT
-    pk1 -- research Open Risk 2: the general path accepts any sele; the
-    Phase 5 smoke confirms). ``ss=4`` (flat/loop) gives the least
-    conspicuous extension (no helix ribbon or sheet arrow). ``hydro=0``
-    suppresses hydrogens. ``aa='gly'`` (glycine -- smallest side chain;
-    research sec Q6).
+    The residue-attach primitive lives in the ``pymol.editor`` module
+    (``editor.attach_amino_acid``) and is NOT exposed as
+    ``cmd.attach_amino_acid`` in PyMOL 2.5.0 open-source (``cmd.py`` imports
+    ``editor`` lazily inside a function, so ``cmd.editor`` is not a stable
+    attribute). It is imported lazily inside this function (``from pymol
+    import editor``) so the module-level import stays minimal and WSL unit
+    tests (which stub ``pymol`` as ``MagicMock``) never trigger this path.
+    It is called with a NAMED selection (NOT ``pk1`` -- research Open Risk 2:
+    the general path accepts any sele; the Phase 5 smoke confirms).
+    ``ss=4`` (flat/loop) gives the least conspicuous extension (no helix
+    ribbon or sheet arrow). ``hydro=0`` suppresses hydrogens. ``aa='gly'``
+    (glycine -- smallest side chain; research sec Q6).
 
-    MVP uses C-terminus extension only (``is_c_terminus=True`` ->
-    ``new_resi = terminus_resi + 1``); N-terminus is supported but not
-    exercised by the generators (research sec Q8).
+    MVP uses the N-terminus (``is_c_terminus=False`` ->
+    ``new_resi = terminus_resi - 1``, attach at ``name N``); the C-terminus
+    path (``is_c_terminus=True``) is supported but NOT exercised by the
+    generators because the C-terminus carbonyl C carries an OXT (terminal
+    oxygen) in most structures (e.g. 1ubq), which saturates the C valence
+    and makes the residue-attach primitive fail with "no target attachment
+    vector found" (ObjectMolecule.cpp:3357). The N-terminus N has a free
+    valence and extends cleanly with NO atom removal, so the happy-path
+    sentinel cleanup restores the structure exactly (verified in the
+    Phase 5 headless smoke).
 
     Args:
         object (str): existing PyMOL object to attach INTO.
@@ -308,8 +321,15 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
     # 2. Build the attach selection (single N or C atom -- editor.py:125)
     attach_sele = "%s and name %s" % (residue_sele,
                                      "C" if is_c_terminus else "N")
-    # 3. Attach the residue (fuses real backbone geometry; mode=2 internally)
-    cmd.attach_amino_acid(attach_sele, aa, ss=ss, hydro=hydro)  # editor.py:85
+    # 3. Attach the residue (fuses real backbone geometry; mode=2 internally).
+    #    attach_amino_acid lives in the pymol.editor module (editor.py:85) and is
+    #    NOT exposed as cmd.attach_amino_acid in PyMOL 2.5.0 open-source (cmd.py
+    #    imports editor lazily inside a function, so cmd.editor is not a stable
+    #    attribute). Imported lazily here so the module-level import stays
+    #    minimal and WSL unit tests (which stub pymol as MagicMock) never trigger
+    #    this path.
+    from pymol import editor  # editor.py:85; not exposed as cmd.attach_amino_acid
+    editor.attach_amino_acid(attach_sele, aa, ss=ss, hydro=hydro)
     # 4. Compute new residue number (C-term: +1 forward; N-term: -1 backward)
     new_resi = terminus_resi + 1 if is_c_terminus else terminus_resi - 1
     new_sele = "%s and chain %s and resi %d" % (object, n_chain, new_resi)
