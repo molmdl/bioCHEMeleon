@@ -299,11 +299,23 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
     terminal oxygen on the new C. The removed H/OXT atoms are part of the
     GAME residue (removed on cleanup), so verify_intact still passes.
 
-    Coloring (research sec Q15 option c): the neighbor C-alpha's color and
-    secondary structure are copied onto BOTH new residues via alter so the
-    cartoon tube segment blends (research sec Q16: cartoon color follows
-    the C-alpha by default). No sphere fallback -- the tube itself is the
-    visible, blending hider.
+    Coloring (research sec Q15 option c): the neighbor C-alpha's color is
+    copied onto BOTH new residues via alter so the cartoon tube segment
+    blends (research sec Q16: cartoon color follows the C-alpha by default).
+    No sphere fallback -- the tube itself is the visible, blending hider.
+
+    **Secondary structure = 'L' (loop), NOT the neighbor's ss (05-05 fix):**
+    The display ss is set to loop ('L') on BOTH new residues, NOT copied from
+    the neighbor. A 2-residue segment with the neighbor's ss (e.g. 'S' sheet
+    on a beta-strand terminus like 1ubq) renders as a small flat sheet ARROW
+    that looks visually "disconnected" from the main chain tube (05-05
+    human-verify: "disconnected arrow cartoon"). Verified headless: the
+    cartoon trace IS continuous across the segi=GAME boundary (no literal
+    gap; CA-CA ~3.8A normal; pixel counts identical across ss=S/L), so the
+    "disconnected" look is the ARROW SHAPE, not a rendering gap. A loop ('L')
+    renders as a smooth round TUBE that visually connects as a continuous
+    extension. This also aligns the display ss with the geometry ss (the
+    ``ss=4`` parameter = flat/loop dihedrals, already loop-like).
 
     The residue-attach primitive lives in the ``pymol.editor`` module
     (``editor.attach_amino_acid``) and is NOT exposed as
@@ -314,9 +326,10 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
     tests (which stub ``pymol`` as ``MagicMock``) never trigger this path.
     It is called with a NAMED selection (NOT ``pk1`` -- research Open Risk 2:
     the general path accepts any sele; the Phase 5 smoke confirms).
-    ``ss=4`` (flat/loop) gives the least conspicuous extension (no helix
-    ribbon or sheet arrow). ``aa='gly'`` (glycine -- smallest side chain;
-    research sec Q6).
+    ``ss=4`` (flat/loop) controls the DIHEDRAL angles during attach (the
+    geometry). The DISPLAY ss is set to 'L' (loop) in step 8 -- see the
+    "Secondary structure = 'L'" note above (05-05 fix). ``aa='gly'`` (glycine
+    -- smallest side chain; research sec Q6).
 
     MVP uses the N-terminus (``is_c_terminus=False`` -> attach at ``name N``,
     first new resi = ``terminus_resi - 1``, second = ``terminus_resi - 2``);
@@ -369,13 +382,16 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
         C-alpha (the attach or alter did not produce the expected atoms).
     """
     residue_sele = "%s and chain %s and resi %d" % (object, chain, terminus_resi)
-    # 1. Read neighbor (terminal residue) C-alpha props for blending
-    #    (research sec Q13: iterate exposes chain/ss/color lowercase)
+    # 1. Read neighbor (terminal residue) C-alpha color for blending
+    #    (research sec Q13: iterate exposes color lowercase). ss is NOT
+    #    copied -- the display ss is hardcoded to 'L' (loop) in step 8 so the
+    #    2-residue extension renders as a smooth tube (not a sheet arrow);
+    #    see the "Secondary structure = 'L'" docstring note (05-05 fix).
     nbr = []
     cmd.iterate("%s and name CA" % residue_sele,
-                "stored.append((chain, ss, color))",
+                "stored.append(color)",
                 space={'stored': nbr})  # editing.py:1490; hygienic space= dict (RESEARCH sec Q3)
-    n_chain, n_ss, n_color = nbr[0]
+    n_color = nbr[0]
     # 2. Build the attach selection (single N or C atom -- editor.py:125)
     term_atom_name = "C" if is_c_terminus else "N"
     attach_sele = "%s and name %s" % (residue_sele, term_atom_name)
@@ -429,11 +445,14 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
     assert second_new_ids, "2nd attach produced no new atoms"
     all_game_ids = first_new_ids | second_new_ids
     # 8. Sentinel + blend on ALL game atoms: segi='GAME' (cleanup tag),
-    #    color + ss (blend), b=0.0 (default; NOT a fetch sentinel). Single
-    #    hygienic alter (research sec Q14).
+    #    color (blend), b=0.0 (default; NOT a fetch sentinel), ss='L' (loop
+    #    display -- NOT the neighbor's ss; a 2-residue sheet segment renders
+    #    as a flat arrow that looks disconnected; a loop renders as a smooth
+    #    tube that connects to the main chain; 05-05 fix). Single hygienic
+    #    alter (research sec Q14).
     cmd.alter(_id_sele(all_game_ids),
-              "segi='GAME'; b=0.0; color=stored_c; ss=stored_ss",
-              space={'stored_c': n_color, 'stored_ss': n_ss})  # editing.py:1424
+              "segi='GAME'; b=0.0; color=stored_c; ss='L'",
+              space={'stored_c': n_color})  # editing.py:1424
     # 9. Set the b=-999 fetch sentinel on the CLICKABLE C-alpha ONLY (the
     #    first new residue's CA -- closest to the original chain; the atom
     #    the player clicks). fetch_all_hider_ids (segi GAME and b < 0) then

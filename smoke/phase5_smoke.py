@@ -116,6 +116,15 @@ check("cartoon: 2 GAME C-alphas in rep cartoon (2-residue tube, 05-05)",
 # spheres rep -- the hider is now a blended cartoon TUBE, not a sphere.
 check("cartoon: NO GAME atoms in rep spheres (sphere fallback removed, 05-05)",
       cmd.count_atoms("%s and segi GAME and rep spheres" % obj) == 0)
+# 05-05 fix: GAME residues display ss='L' (loop), NOT the neighbor's ss.
+# A 2-residue sheet segment (ss='S' copied from a beta-strand neighbor like
+# 1ubq) renders as a flat ARROW that looks "disconnected" from the main chain
+# tube; a loop (ss='L') renders as a smooth round TUBE that connects as a
+# continuous extension. Verified headless: the cartoon trace IS continuous
+# across the segi=GAME boundary (no literal gap), so the "disconnected" look
+# was the sheet arrow SHAPE. Both GAME C-alphas must be ss='L' (2 residues).
+check("cartoon: GAME C-alphas ss='L' (loop tube, not sheet arrow, 05-05)",
+      cmd.count_atoms("%s and segi GAME and name CA and ss L" % obj) >= 2)
 # Clean sentinel design: b=-999 on the CLICKABLE C-alpha ONLY (so
 # fetch_all_hider_ids returns 1 atom PER cartoon hider -> 1 registry entry);
 # segi=GAME on ALL atoms of BOTH residues (cleanup removes all via segi GAME).
