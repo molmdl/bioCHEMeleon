@@ -108,6 +108,13 @@ class PluginDialog(QtWidgets.QDialog):
         positions = generators.generate_sphere_positions(extent, count)
         hider_specs = [(pos, "spheres") for pos in positions]
         # 3. Start the game (snapshot -> insert -> register; Phase 3 proven)
+        # Bug 3: if a previous game is still active (mid-game, or won but not
+        # yet cleaned up), clean it up first so no stale hiders accumulate in
+        # the object. Without this, old hiders (absent from the new registry)
+        # would make every old-hider click a "Miss!" and the atom count would
+        # grow each round. cleanup() is idempotent (no-op if _started=False).
+        if self._controller is not None and self._controller._started:
+            self._controller.cleanup()
         self._controller = game.GameController(target_obj)
         try:
             self._controller.start(hider_specs)

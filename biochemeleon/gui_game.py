@@ -82,6 +82,10 @@ class GameTab(QtWidgets.QWidget):
             on_win=self._on_win,
         )
         self._start_time = time.time()
+        # Bug 1: win() (game.py) reads the CONTROLLER's _start_time, not the
+        # tab's. The tab's copy feeds _on_tick (timer label); the controller's
+        # copy feeds win()'s elapsed math. Both must be set.
+        self._controller._start_time = self._start_time
         self._timer.start(1000)
         self._update_remaining(self._controller._remaining())
 
@@ -89,6 +93,22 @@ class GameTab(QtWidgets.QWidget):
         self._timer.stop()
         mins = int(elapsed) // 60
         secs = int(elapsed) % 60
+        # Bug 2: the last cmd.color('green', ...) from on_pick must flush to
+        # the viewer BEFORE the modal QMessageBox blocks the Qt event loop,
+        # or the user sees the win dialog but the last hider never turns
+        # green. win() already deactivated the wizard (so the click loop is
+        # closed -- no re-entrant picks during processEvents); force a scene
+        # redraw + drain pending Qt paint events so the green lands.
+        from pymol import cmd
+        cmd.refresh()
+        QtWidgets.QApplication.processEvents()
         QtWidgets.QMessageBox.information(
             self, "You win!",
             "You found all hiders in %d:%02d!" % (mins, secs))
+        # Bug 3: after the user dismisses the win dialog, clean up the hiders
+        # (sentinel remove) + discard the backup so the object is back to its
+        # pre-game state. Without this, _started stays True, old hiders remain
+        # in the object, and a new game accumulates stale hiders whose ids are
+        # absent from the new registry -> every old-hider click is a "Miss!".
+        # cleanup() is idempotent (no-op if already _started=False).
+        self._controller.cleanup()
