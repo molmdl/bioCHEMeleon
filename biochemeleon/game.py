@@ -25,18 +25,22 @@ class GameController:
         self._on_win = lambda elapsed: None
 
     def start(self, hider_specs):
-        """Begin a round. hider_specs: list of (pos, rep) tuples (Phase 3 placeholder;
-        Phase 4/5 generators produce this list).
-        Steps: snapshot -> for each (pos, rep): insert_hider -> register.
+        """Begin a round. hider_specs: list of (payload, rep) tuples where
+        payload is rep-specific ([x,y,z] for spheres, (offset, neighbor_id)
+        for lines/sticks, (chain, terminus_resi, is_c_terminus) for
+        cartoon/ribbon). Phase 4/5 generators produce this list.
+        Steps: snapshot -> for each (payload, rep): per-rep dispatch
+        (the dispatcher hides rep-specific insertion-signature divergence)
+        -> register.
         Returns the backup name on success, None on failure."""
         if self._started:
             raise RuntimeError("game already started; call cleanup() first")
         # Snapshot BEFORE any mutation (RESEARCH: no undo; backup is mandatory)
         self._backup_name = backup.snapshot(self.target_obj)
         self.registry = registry.HiderRegistry()  # fresh per round
-        for i, (pos, rep) in enumerate(hider_specs):
+        for i, (payload, rep) in enumerate(hider_specs):
             handle = "H%03d" % i
-            aid = mutation.insert_hider(self.target_obj, pos=pos, rep=rep, handle=handle)
+            aid = mutation.insert_hider_for_rep(self.target_obj, rep, payload, handle)
             self.registry.register(object=self.target_obj, id=aid, rep=rep)
         self._started = True
         return self._backup_name
