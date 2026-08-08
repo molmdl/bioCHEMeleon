@@ -1,9 +1,23 @@
 """PickWizard -- click-to-find handler (pymol.wizard.Wizard subclass).
 
-Phase 4 click-to-find loop: PyMOL routes atom picks to do_pick, which reads
-the picked atom's STABLE id from pk1 via cmd.identify("pk1", mode=1) and
-forwards it to GameController.on_pick(aid). The id matches the registry key
-(object, id) returned by mutation.insert_hider via cmd.identify(mode=0).
+Phase 4 click-to-find loop: PyMOL routes a clicked atom to GameController.on_pick
+(aid), where `aid` is the STABLE atom id (matches the registry key (object, id)
+returned by mutation.insert_hider via cmd.identify(mode=0)).
+
+Clicks arrive via ONE of two paths depending on the active BUTTON MODE (not
+mouse_selection_mode -- that only sets selection granularity: atom/residue/...):
+
+* PICKING button modes (cButModePickAtom "PkAt", cButModePickAtom1 "Pk1"):
+  the C layer (SceneMouse.cpp:403-467) creates "pk1" + calls WizardDoPick ->
+  do_pick(bondFlag).
+* SELECTION button modes (cButModeSeleSet "Sele", ... -- the DEFAULT in
+  3-Button Viewing): the C layer (SceneMouse.cpp:337-356) creates "sele" +
+  calls WizardDoSelect -> do_select(name). do_pick is NEVER called.
+
+do_select is the canonical select->pick map (pymol.wizard.measurement.do_select):
+it builds pk1 from the just-created selection, cleans it up, and dispatches
+through do_pick. This keeps left-drag rotation working (essential for
+spin-to-find) and avoids fragile button-mode save/restore.
 
 AGENTS.md: NEVER read pk1 through the index primitive -- index is fragile
 (querying.py:1313-1317 warns "use integral atom identifiers instead of
@@ -38,6 +52,23 @@ class PickWizard(Wizard):
             return
         self.controller.on_pick(aid)
         cmd.refresh_wizard()
+
+    def do_select(self, name):
+        # Selection-mode entry point (canonical pattern: pymol.wizard.measurement
+        # .do_select). In the default 3-Button Viewing preset left-click is
+        # cButModeSeleSet, so the C layer (SceneMouse.cpp:337-356) creates "sele"
+        # + WizardDoSelect -- NOT "pk1" + WizardDoPick. do_pick therefore never
+        # fires unless the user is in a Picking button mode. Re-route selection
+        # clicks by building pk1 from the just-created selection, cleaning it up
+        # (the C layer recreates "sele" on the next click), and dispatching
+        # through do_pick. This preserves left-drag rotation (essential for
+        # spin-to-find) and works in any selection button mode without fragile
+        # button-mode save/restore. mouse_selection_mode=0 (set in __init__)
+        # guarantees the selection is exactly one atom -- the clicked hider.
+        cmd.unpick()
+        cmd.select("pk1", name)   # pk1 = the clicked atom
+        cmd.delete(name)          # clean up "sele"; C layer recreates it next click
+        self.do_pick(0)
 
     def activate(self):
         self._saved_wizard = cmd.get_wizard()   # None if no wizard active
