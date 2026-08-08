@@ -165,10 +165,13 @@ class TestGameControllerOnPick(unittest.TestCase):
     # ---- win with wizard ----
 
     def test_win_with_wizard(self):
-        """on_pick(last hider) with _wizard set -> deactivate called, cleared.
+        """on_pick(last hider) with _wizard set -> win_cb fires; wizard NOT
+        deactivated in win() (deferred to GUI _finish_win).
 
-        The wizard's deactivate is called once, and gc._wizard is set to
-        None afterward.
+        Deactivation moved from win() to the GUI's delayed _finish_win
+        callback so the last hider's green color can flush to the viewer
+        before wizard teardown. win() must NOT deactivate the wizard;
+        gc._wizard stays set (the GUI clears it in _finish_win).
         """
         self.gc.registry.register('1ubq', 100, 'spheres')
         log = MagicMock()
@@ -182,8 +185,11 @@ class TestGameControllerOnPick(unittest.TestCase):
         self.gc.on_pick(100)
 
         win_cb.assert_called_once()
-        wiz.deactivate.assert_called_once()
-        self.assertIsNone(self.gc._wizard)
+        # Deactivation moved to GUI _finish_win (not win()), so win() must
+        # NOT deactivate the wizard here.
+        wiz.deactivate.assert_not_called()
+        # gc._wizard stays set -- the GUI clears it in _finish_win.
+        self.assertIs(self.gc._wizard, wiz)
 
     # ---- _remaining ----
 

@@ -75,7 +75,7 @@ class GameTab(QtWidgets.QWidget):
         from .wizard import PickWizard   # lazy: avoid importing wizard at module load
         self._wizard = PickWizard(self._controller, self._controller.target_obj)
         self._wizard.activate()
-        self._controller._wizard = self._wizard   # controller deactivates on win()
+        self._controller._wizard = self._wizard   # _finish_win deactivates on win()
         self._controller.set_callbacks(
             on_log=self._log,
             on_remaining_changed=self._update_remaining,
@@ -90,25 +90,52 @@ class GameTab(QtWidgets.QWidget):
         self._update_remaining(self._controller._remaining())
 
     def _on_win(self, elapsed):
+        """Win callback: schedule the win dialog after a short delay so
+        PyMOL redraws the 3D scene (the last cmd.color('green') from
+        on_pick becomes visible) BEFORE the modal dialog blocks the Qt
+        event loop.
+
+        The wizard is NOT deactivated here -- _finish_win does that in the
+        delayed callback, after the redraw frame has landed. Deactivating
+        in the same call as cmd.color (the previous approach) let the
+        wizard-teardown WizardRefresh clobber the pending green redraw;
+        separating them by 100 ms lets PyMOL render the green first.
+        """
         self._timer.stop()
+        from pymol import cmd
+        cmd.refresh()  # trigger a scene redraw now; 100 ms lets it land
+        QtCore.QTimer.singleShot(100, lambda: self._finish_win(elapsed))
+
+    def _finish_win(self, elapsed):
+        """Delayed win handler: deactivate wizard, show a stay-on-top modal
+        win dialog, then cleanup after dismissal.
+
+        Called 100 ms after _on_win so PyMOL gets a redraw frame between the
+        last cmd.color('green') (in on_pick) and the modal blocking the
+        event loop -- otherwise the last hider never appears green (Bug A).
+        The dialog uses the top-level window as parent + WindowStaysOnTopHint
+        so it appears ABOVE the PyMOL OpenGL window (Bug B). After dismissal,
+        cleanup() restores the object to its pre-game state (Bug C / Phase 4
+        Bug 3: hiders removed, backup discarded, viewer interactive).
+        """
+        # Deactivate the wizard (restores mouse_selection_mode + prior wizard).
+        # Done HERE (delayed) rather than in win() so the click loop stays
+        # open long enough for the green redraw to land.
+        if self._wizard is not None:
+            self._wizard.deactivate()
+            self._wizard = None
+            self._controller._wizard = None
         mins = int(elapsed) // 60
         secs = int(elapsed) % 60
-        # Bug 2: the last cmd.color('green', ...) from on_pick must flush to
-        # the viewer BEFORE the modal QMessageBox blocks the Qt event loop,
-        # or the user sees the win dialog but the last hider never turns
-        # green. win() already deactivated the wizard (so the click loop is
-        # closed -- no re-entrant picks during processEvents); force a scene
-        # redraw + drain pending Qt paint events so the green lands.
-        from pymol import cmd
-        cmd.refresh()
-        QtWidgets.QApplication.processEvents()
-        QtWidgets.QMessageBox.information(
-            self, "You win!",
-            "You found all hiders in %d:%02d!" % (mins, secs))
-        # Bug 3: after the user dismisses the win dialog, clean up the hiders
-        # (sentinel remove) + discard the backup so the object is back to its
-        # pre-game state. Without this, _started stays True, old hiders remain
-        # in the object, and a new game accumulates stale hiders whose ids are
-        # absent from the new registry -> every old-hider click is a "Miss!".
-        # cleanup() is idempotent (no-op if already _started=False).
+        # Use the top-level PluginDialog as parent + stay-on-top so the
+        # dialog appears above the PyMOL OpenGL window (not hidden behind it).
+        msg = QtWidgets.QMessageBox(self.window())
+        msg.setIcon(QtWidgets.QMessageBox.Information)
+        msg.setWindowTitle("You win!")
+        msg.setText("You found all hiders in %d:%02d!" % (mins, secs))
+        msg.setWindowFlags(msg.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
+        msg.exec_()
+        # After the user dismisses the dialog, clean up the hiders (sentinel
+        # remove) + discard the backup so the object is back to its pre-game
+        # state. cleanup() is idempotent (no-op if already _started=False).
         self._controller.cleanup()

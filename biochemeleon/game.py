@@ -87,20 +87,18 @@ class GameController:
             self.win()
 
     def win(self):
-        """All hiders found: deactivate wizard, then fire on_win(elapsed).
+        """All hiders found: fire on_win(elapsed). Wizard deactivation is
+        deferred to the GUI callback (gui_game._finish_win) so the last
+        cmd.color('green', ...) from on_pick can flush to the viewer before
+        the modal win dialog blocks the Qt event loop.
 
-        The wizard is deactivated BEFORE on_win so the click-to-find loop is
-        closed before the (modal, in gui_game._on_win) callback runs. This
-        lets the last cmd.color('green', ...) from on_pick flush to the
-        viewer (on_win calls cmd.refresh() + processEvents() before its
-        modal dialog blocks the event loop). _started STAYS True after win
-        (hiders remain until cleanup(), which gui_game._on_win calls after
-        the user dismisses the win dialog).
+        The GUI owns the wizard lifecycle (it created the wizard in
+        _begin_play; it deactivates it in _finish_win after a 100 ms redraw
+        delay). _started STAYS True after win (hiders remain until
+        cleanup(), which gui_game._finish_win calls after the user dismisses
+        the win dialog).
         """
         elapsed = time.time() - self._start_time if self._start_time else 0.0
-        if self._wizard is not None:
-            self._wizard.deactivate()
-            self._wizard = None
         self._on_win(elapsed)
 
     def reconstruct_registry(self):
