@@ -77,7 +77,7 @@ class PluginDialog(QtWidgets.QDialog):
         """BTN-07: resolve target -> build mixed-rep hider_specs from per_rep
         (spheres + lines/sticks + cartoon) -> start game -> switch to Game
         tab -> 3-2-1 countdown."""
-        from . import generators, game, demos
+        from . import generators, game, demos, mutation
         import random as _random
         state = self.setup_tab.collect_state()
         per_rep = state.get("per_rep", {})  # {rep: count} (Phase 2 collect_state)
@@ -91,21 +91,46 @@ class PluginDialog(QtWidgets.QDialog):
                     "Please select a loaded molecule object first.")
                 return
         elif mode == "fetch":
-            target_obj = demos.fetch_pdb(state.get("pdb_code", ""))
-            if target_obj is None:
-                QtWidgets.QMessageBox.warning(self, "Fetch failed",
-                    "Could not fetch PDB code %r." % state.get("pdb_code", ""))
+            pdb_code = state.get("pdb_code", "")
+            if not pdb_code:
+                QtWidgets.QMessageBox.warning(self, "No PDB code",
+                    "Please enter a PDB code first.")
                 return
+            # Use the already-loaded object if the user clicked Fetch in
+            # the Setup tab. cmd.fetch fails when loading mmCIF into an
+            # existing object ("loading mmCIF into existing object not
+            # supported" — 05-05 human-verify Issue 1).
+            target_obj = pdb_code
+            if target_obj not in demos.list_loaded_molecule_objects():
+                target_obj = demos.fetch_pdb(pdb_code)
+                if target_obj is None:
+                    QtWidgets.QMessageBox.warning(self, "Fetch failed",
+                        "Could not fetch PDB code %r." % pdb_code)
+                    return
         elif mode == "demo":
-            target_obj = demos.load_demo(state.get("demo_id", ""))
-            if target_obj is None:
-                QtWidgets.QMessageBox.warning(self, "Demo failed",
-                    "Could not load demo %r." % state.get("demo_id", ""))
-                return
+            demo_id = state.get("demo_id", "")
+            # Use the already-loaded object if the user loaded this demo
+            # before (avoids re-loading + potential multi-state append).
+            target_obj = demo_id.lower() if demo_id else ""
+            if not target_obj or target_obj not in demos.list_loaded_molecule_objects():
+                target_obj = demos.load_demo(demo_id)
+                if target_obj is None:
+                    QtWidgets.QMessageBox.warning(self, "Demo failed",
+                        "Could not load demo %r." % demo_id)
+                    return
         else:
             QtWidgets.QMessageBox.warning(self, "No target", "Unknown target mode.")
             return
-        # 2. Build mixed-rep hider_specs from per_rep (one (payload, rep)
+        # 2. Prepare target: collapse multi-state objects BEFORE data
+        #    collection. Multi-state objects (e.g. NMR ensembles like 1znf
+        #    with 37 models) break backup/verify_intact (mutations only
+        #    affect the current state; atom counts diverge across states).
+        #    Collapsing to state 1 FIRST ensures extent, neighbor_ids, and
+        #    cas_list are collected from the single-state object (atom IDs
+        #    are reassigned by the delete+create in collapse, so data
+        #    collected before collapse would be stale — 05-05 fix).
+        mutation.collapse_to_single_state(target_obj)
+        # 3. Build mixed-rep hider_specs from per_rep (one (payload, rep)
         #    tuple per hider; payload is rep-specific -- the shared contract
         #    with GameController.start, which dispatches each spec per rep).
         extent = cmd.get_extent(target_obj)
@@ -151,7 +176,16 @@ class PluginDialog(QtWidgets.QDialog):
             count = int(state.get("hider_count", 0))
             positions = generators.generate_sphere_positions(extent, count)
             hider_specs = [(pos, "spheres") for pos in positions]
-        # 3. Start the game (snapshot -> insert -> register; Phase 3 proven)
+        # 3b. Free N-terminal valences for cartoon/ribbon hiders. Removes
+        #     ACE/formyl caps and H atoms bonded to the terminal N so
+        #     editor.attach_amino_acid finds a free valence. MUST happen
+        #     before backup.snapshot (inside gc.start) so verify_intact
+        #     matches (backup and target both have caps/H removed).
+        #     05-05 human-verify Issues 2+3.
+        for payload, rep in hider_specs:
+            if rep in ('cartoon', 'ribbon') and not payload[2]:
+                mutation.free_nterminal_valence(target_obj, payload[0], payload[1])
+        # 4. Start the game (snapshot -> insert -> register; Phase 3 proven)
         # Bug 3: if a previous game is still active (mid-game, or won but not
         # yet cleaned up), clean it up first so no stale hiders accumulate in
         # the object. Without this, old hiders (absent from the new registry)
