@@ -9,6 +9,17 @@ atoms FROM an object by sentinel (happy-path cleanup -- the remove primitive
 deletes atoms FROM the object, not the object itself) and returns the count
 removed (idempotent; gates the remove call on a non-zero sentinel count).
 
+Phase 5 adds three line/stick + cartoon inserters: insert_line_stick_hider
+(pseudoatom + bond for lines/sticks), insert_cartoon_hider (attached
+residue at a terminus for cartoon/ribbon), and insert_hider_for_rep (per-rep
+dispatcher). The coloring strategy (research sec Q15 option c) keeps the
+GAME sentinel UNCHANGED (so Phase 3 cleanup + read path need zero migration)
+AND copies the neighbor's color/elem/ss onto the hider via alter so the
+default rendering blends -- NOT the Phase 4 sphere elem, which would stand
+out in line/stick/cartoon. Runtime behavior (same-object bond, named attach
+selection, segi-doesn't-break-polymer, color-follows-C-alpha) is deferred to
+the Phase 5 headless smoke.
+
 This module is the cmd-coupled mutation primitive for Phase 3. It lives in
 the cmd layer (imports the pymol cmd module) alongside demos.py and
 backup.py, and is NOT WSL-runnable at runtime -- only syntax-checked
@@ -146,3 +157,231 @@ def cleanup_hiders(object):
     if before:
         cmd.remove(f"{object} and segi GAME")  # editing.py:800; remove atoms FROM object (NOT delete the object)
     return before
+
+
+# ---- Line/stick + cartoon inserters (Phase 5) ----
+
+def insert_line_stick_hider(object, offset, neighbor_id, handle,
+                             rep='sticks', segi='GAME', b=-999.0,
+                             bond_order=1):
+    """Insert a bonded pseudoatom near *neighbor_id* (line/stick hider)
+    and return the new atom's stable id.
+
+    Lines and sticks are BOND-based representations -- a lone pseudoatom
+    is invisible (RESEARCH sec Q1). This function places a pseudoatom at
+    ``neighbor_coord + offset``, bonds it to the neighbor (same-object
+    bond -- the bond primitive requires both atoms in one object;
+    RESEARCH sec Q2/Q4), and shows the *rep* on the new atom only (by id,
+    NOT all GAME atoms -- avoids cross-contamination with sphere/cartoon
+    hiders; RESEARCH sec Q11: newly-inserted atoms do NOT inherit shown
+    reps).
+
+    Coloring (research sec Q15 option c): the GAME sentinel
+    (``segi='GAME'`` + ``b=-999``) is KEPT UNCHANGED so Phase 3 cleanup
+    (``segi GAME``) and the sentinel read path need zero migration. The
+    neighbor's color and elem are copied onto the hider via a single
+    alter call so the DEFAULT rendering blends (NOT the Phase 4 sphere
+    elem, which would stand out in line/stick -- research sec Q12/Q17).
+
+    The neighbor's coords are read via iterate-state (the iterate
+    primitive does NOT expose x/y/z -- RESEARCH sec Q6 / Phase 3
+    finding). The neighbor's elem and color are read in the same
+    iterate-state call (research sec Q13 confirms color/elem are
+    exposed; if iterate-state does NOT expose elem/color at runtime, the
+    Phase 5 smoke will catch it -- LOW risk, research Open Risk 6).
+
+    Args:
+        object (str): existing PyMOL object to insert INTO.
+        offset (sequence of 3 floats): [dx, dy, dz] offset from the
+            neighbor's coords (pure RNG from generators.py).
+        neighbor_id (int): stable atom id of the real neighbor to bond
+            to (same object).
+        handle (str): throwaway atom *name* used to re-select the new
+            atom for the alter + identify calls.
+        rep (str): 'lines' or 'sticks' -- shown on the new atom by id.
+        segi (str): sentinel segment id (default 'GAME').
+        b (float): sentinel b-factor (default -999.0).
+        bond_order (int): bond order (default 1 = single bond).
+
+    Returns:
+        int: the new atom's stable id.
+
+    Raises:
+        AssertionError: if identify does not return exactly one id.
+    """
+    # 1. Read neighbor coords + elem + color (iterate-state exposes x/y/z;
+    #    research sec Q13: color/elem exposed by iterate; combined here in
+    #    one call -- LOW risk if iterate-state doesn't expose elem/color at
+    #    runtime, smoke will catch it).
+    nbr = []
+    cmd.iterate_state(1, "%s and id %d" % (object, neighbor_id),
+                      "stored.append((x, y, z, elem, color))",
+                      space={'stored': nbr})  # editing.py:1490; hygienic space= dict (RESEARCH sec Q3)
+    nx, ny, nz, n_elem, n_color = nbr[0]
+    # 2. Insert pseudoatom at neighbor + offset, plausible elem (neighbor's)
+    pos = [nx + offset[0], ny + offset[1], nz + offset[2]]
+    cmd.pseudoatom(object=object, pos=pos, name=handle,  # creating.py:1082
+                   segi=segi, b=b, hetatm=0, elem=n_elem,
+                   resn='HIDER', chain='H', resi='9001')
+    # 3. Sentinel + blend alter (single hygienic call -- research sec Q14):
+    #    KEEP segi='GAME' + b=-999 sentinel (option c), ADD color=neighbor.
+    cmd.alter("%s and name %s" % (object, handle),
+              "segi='GAME'; b=-999.0; color=stored_c",
+              space={'stored_c': n_color})  # editing.py:1424; space= hygienic (RESEARCH sec Q3)
+    cmd.sort(object)  # defensive -- editing.py:1457 alter warning: sort after altering segi/chain
+    # 4. Fetch the new atom's stable id (NEVER the pseudoatom return value; RESEARCH sec Q1)
+    hider_ids = cmd.identify("%s and name %s and segi GAME" % (object, handle),
+                             mode=0)  # querying.py:1269; mode=0 returns id list, NOT index
+    assert len(hider_ids) == 1, "expected 1 new line/stick hider id, got %r" % (hider_ids,)
+    hider_id = hider_ids[0]
+    # 5. Bond to neighbor (same-object bond -- editing.py:717 satisfied)
+    cmd.bond("%s and id %d" % (object, hider_id),
+             "%s and id %d" % (object, neighbor_id),
+             order=bond_order)  # editing.py:694; order=1 single bond
+    # 6. Show ONLY this atom's rep (NOT all GAME -- avoids cross-contamination; Q11)
+    cmd.show(rep, "%s and id %d" % (object, hider_id))  # viewing.py:491
+    return hider_id
+
+
+def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
+                         handle, aa='gly', ss=4, hydro=0,
+                         segi='GAME', b=-999.0):
+    """Attach a residue at a terminus (cartoon/ribbon hider) and return
+    the new residue's C-alpha stable id.
+
+    Cartoon and ribbon are POLYMER-TRACE representations -- a lone
+    pseudoatom is invisible (Pitfall 8; research sec Q5). This function
+    attaches a real glycine residue at a chain terminus via the
+    residue-attach primitive (which fuses real backbone geometry via
+    mode-2 fuse internally -- research sec Q6), applies the GAME
+    sentinel + neighbor blend, shows the cartoon rep on the new residue
+    only, and returns the new C-alpha's stable id (the cartoon-
+    representative atom the player clicks).
+
+    Coloring (research sec Q15 option c): the GAME sentinel
+    (``segi='GAME'`` + ``b=-999``) is KEPT UNCHANGED so Phase 3 cleanup
+    + read path need zero migration. The neighbor C-alpha's color and
+    secondary structure are copied onto the new residue via a single
+    alter call so the cartoon tube segment blends (research sec Q16:
+    cartoon color follows the C-alpha by default).
+
+    The residue-attach primitive is called with a NAMED selection (NOT
+    pk1 -- research Open Risk 2: the general path accepts any sele; the
+    Phase 5 smoke confirms). ``ss=4`` (flat/loop) gives the least
+    conspicuous extension (no helix ribbon or sheet arrow). ``hydro=0``
+    suppresses hydrogens. ``aa='gly'`` (glycine -- smallest side chain;
+    research sec Q6).
+
+    MVP uses C-terminus extension only (``is_c_terminus=True`` ->
+    ``new_resi = terminus_resi + 1``); N-terminus is supported but not
+    exercised by the generators (research sec Q8).
+
+    Args:
+        object (str): existing PyMOL object to attach INTO.
+        chain (str): chain identifier of the terminal residue.
+        terminus_resi (int): residue number of the terminal residue.
+        is_c_terminus (bool): True for C-terminus extension (forward,
+            new_resi = terminus_resi + 1); False for N-terminus
+            (backward, new_resi = terminus_resi - 1).
+        handle (str): throwaway atom *name* (unused here but kept for
+            signature symmetry with insert_hider).
+        aa (str): amino acid fragment name (default 'gly').
+        ss (int): secondary structure for dihedrals (default 4 = flat).
+        hydro (int): hydrogen handling (default 0 = no hydrogens).
+        segi (str): sentinel segment id (default 'GAME').
+        b (float): sentinel b-factor (default -999.0).
+
+    Returns:
+        int: the new residue's C-alpha stable id.
+
+    Raises:
+        AssertionError: if identify does not return exactly one C-alpha.
+    """
+    residue_sele = "%s and chain %s and resi %d" % (object, chain, terminus_resi)
+    # 1. Read neighbor (terminal residue) C-alpha props for blending
+    #    (research sec Q13: iterate exposes chain/ss/color lowercase)
+    nbr = []
+    cmd.iterate("%s and name CA" % residue_sele,
+                "stored.append((chain, ss, color))",
+                space={'stored': nbr})  # editing.py:1490; hygienic space= dict (RESEARCH sec Q3)
+    n_chain, n_ss, n_color = nbr[0]
+    # 2. Build the attach selection (single N or C atom -- editor.py:125)
+    attach_sele = "%s and name %s" % (residue_sele,
+                                     "C" if is_c_terminus else "N")
+    # 3. Attach the residue (fuses real backbone geometry; mode=2 internally)
+    cmd.attach_amino_acid(attach_sele, aa, ss=ss, hydro=hydro)  # editor.py:85
+    # 4. Compute new residue number (C-term: +1 forward; N-term: -1 backward)
+    new_resi = terminus_resi + 1 if is_c_terminus else terminus_resi - 1
+    new_sele = "%s and chain %s and resi %d" % (object, n_chain, new_resi)
+    # 5. Sentinel + blend alter (single hygienic call -- research sec Q14):
+    #    KEEP segi='GAME' + b=-999 sentinel (option c), ADD color + ss for blend
+    cmd.alter(new_sele,
+              "segi='GAME'; b=-999.0; color=stored_c; ss=stored_ss",
+              space={'stored_c': n_color, 'stored_ss': n_ss})  # editing.py:1424
+    cmd.sort(object)  # defensive -- editing.py:1457; research sec Q23
+    # 6. Show cartoon on ONLY the new residue (NOT all GAME; Q11: fused atoms
+    #    start with no reps; same atoms render in ribbon too -- Q10)
+    cmd.show('cartoon', "%s and resi %d and segi GAME" % (object, new_resi))  # viewing.py:491
+    # 7. Fetch the new C-alpha stable id (the cartoon-representative atom)
+    ids = cmd.identify("%s and name CA and segi GAME and resi %d" % (object, new_resi),
+                       mode=0)  # querying.py:1269; mode=0 returns id list, NOT index
+    assert len(ids) == 1, "expected 1 new cartoon C-alpha, got %r" % (ids,)
+    return ids[0]
+
+
+def insert_hider_for_rep(object, rep, payload, handle):
+    """Dispatch hider insertion per representation.
+
+    Lets ``GameController.start`` stay a thin ``(payload, rep)`` loop --
+    the dispatcher hides the rep-specific insertion signature divergence
+    (research sec Q19): spheres need ``pos``, line/stick need
+    ``(offset, neighbor_id)``, cartoon/ribbon need
+    ``(chain, terminus_resi, is_c_terminus)``.
+
+    For spheres: calls the UNCHANGED Phase 3 ``insert_hider`` (which does
+    NOT show the rep) then shows spheres BY ID (NOT all GAME atoms -- the
+    dispatcher owns the sphere show so ``_on_start`` no longer shows ALL
+    GAME atoms as spheres, which would cross-contaminate stick/cartoon
+    hiders).
+
+    For lines/sticks: unpacks ``(offset, neighbor_id)`` and delegates to
+    ``insert_line_stick_hider`` (which shows its own rep by id).
+
+    For cartoon/ribbon: unpacks ``(chain, terminus_resi, is_c_terminus)``
+    and delegates to ``insert_cartoon_hider`` (which shows its own rep;
+    for ribbon, the same residue renders in both -- research sec Q10).
+
+    Args:
+        object (str): existing PyMOL object to insert INTO.
+        rep (str): one of GAME_REPS ('spheres', 'lines', 'sticks',
+            'cartoon', 'ribbon').
+        payload: rep-specific -- ``pos`` (spheres), ``(offset,
+            neighbor_id)`` (lines/sticks), or ``(chain, terminus_resi,
+            is_c_terminus)`` (cartoon/ribbon).
+        handle (str): throwaway atom *name* passed to the insert fn.
+
+    Returns:
+        int: the new hider atom's stable id.
+
+    Raises:
+        ValueError: if *rep* is not a recognized GAME_REP.
+    """
+    if rep == 'spheres':
+        aid = insert_hider(object, pos=payload, rep=rep, handle=handle)
+        # Dispatcher owns the sphere show (by id, NOT all GAME -- avoids
+        # cross-contamination with stick/cartoon hiders)
+        cmd.show("spheres", "%s and id %d" % (object, aid))  # viewing.py:491
+        return aid
+    elif rep in ('lines', 'sticks'):
+        offset, neighbor_id = payload
+        return insert_line_stick_hider(object, offset=offset,
+                                       neighbor_id=neighbor_id,
+                                       handle=handle, rep=rep)
+    elif rep in ('cartoon', 'ribbon'):
+        chain, terminus_resi, is_c_terminus = payload
+        return insert_cartoon_hider(object, chain=chain,
+                                    terminus_resi=terminus_resi,
+                                    is_c_terminus=is_c_terminus,
+                                    handle=handle)
+    else:
+        raise ValueError("unknown rep %r" % (rep,))
