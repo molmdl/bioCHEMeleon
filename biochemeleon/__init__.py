@@ -135,6 +135,7 @@ class PluginDialog(QtWidgets.QDialog):
         #    with GameController.start, which dispatches each spec per rep).
         extent = cmd.get_extent(target_obj)
         hider_specs = []
+        _gen_warnings = []  # collected under-generation warnings (05-05 Issue 1)
         # Pre-fetch the data the pure generators need (cmd-coupled, here in
         # _on_start so generators.py stays pure):
         # For line/stick: pool of real neighbor atom ids (to bond hiders to).
@@ -167,15 +168,36 @@ class PluginDialog(QtWidgets.QDialog):
                 # Cap: one terminal extension per chain (attaching many to
                 # one terminus chains them -- 05-RESEARCH.md Open Risk 5).
                 terminals = generators.pick_terminal_residues(cas_by_chain,
-                                                              max_chains=count)
+                                                               max_chains=count)
                 for term in terminals:
                     hider_specs.append((term, rep))
+                # 05-05 Issue 1: warn the user when fewer cartoon/ribbon hiders
+                # were generated than requested (1ubq has 1 chain -> max 1
+                # cartoon hider even if count=5). This is by-design (Open Risk 5:
+                # attaching many to one terminus chains them), NOT a bug, but
+                # the user needs feedback so the "remaining" counter makes
+                # sense (showing 1 when 5 were requested is confusing silently).
+                if len(terminals) < count:
+                    n_chains = len(cas_by_chain)
+                    _gen_warnings.append(
+                        "Requested %d %s hider%s but only %d chain%s available; "
+                        "%d hider%s generated (cartoon/ribbon hiders attach one "
+                        "per chain to avoid chaining them at a terminus)." %
+                        (count, rep, "" if count == 1 else "s",
+                         n_chains, "" if n_chains == 1 else "s",
+                         len(terminals), "" if len(terminals) == 1 else "s"))
         # Fallback: if per_rep is empty (random mode unset), default to
         # spheres (Phase 4 behavior) using the total hider_count.
         if not hider_specs:
             count = int(state.get("hider_count", 0))
             positions = generators.generate_sphere_positions(extent, count)
             hider_specs = [(pos, "spheres") for pos in positions]
+        # 05-05 Issue 1: show under-generation warnings (cartoon/ribbon capped
+        # at one-per-chain). Non-blocking -- the game still starts with the
+        # hiders that WERE generated.
+        if _gen_warnings:
+            QtWidgets.QMessageBox.warning(self, "Fewer hiders generated",
+                "\n\n".join(_gen_warnings))
         # 3b. Free N-terminal valences for cartoon/ribbon hiders. Removes
         #     ACE/formyl caps and H atoms bonded to the terminal N so
         #     editor.attach_amino_acid finds a free valence. MUST happen
