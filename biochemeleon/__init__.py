@@ -74,10 +74,13 @@ class PluginDialog(QtWidgets.QDialog):
         layout.addWidget(self.tabs)
 
     def _on_start(self):
-        """BTN-07: resolve target -> generate sphere hiders -> start game ->
-        show spheres -> switch to Game tab -> 3-2-1 countdown."""
+        """BTN-07: resolve target -> build mixed-rep hider_specs from per_rep
+        (spheres + lines/sticks + cartoon) -> start game -> switch to Game
+        tab -> 3-2-1 countdown."""
         from . import generators, game, demos
+        import random as _random
         state = self.setup_tab.collect_state()
+        per_rep = state.get("per_rep", {})  # {rep: count} (Phase 2 collect_state)
         # 1. Resolve target object
         mode = state.get("target_mode", "loaded")
         target_obj = None
@@ -102,11 +105,49 @@ class PluginDialog(QtWidgets.QDialog):
         else:
             QtWidgets.QMessageBox.warning(self, "No target", "Unknown target mode.")
             return
-        # 2. Generate sphere hider positions
+        # 2. Build mixed-rep hider_specs from per_rep (one (payload, rep)
+        #    tuple per hider; payload is rep-specific -- the shared contract
+        #    with GameController.start, which dispatches each spec per rep).
         extent = cmd.get_extent(target_obj)
-        count = int(state.get("hider_count", 0))
-        positions = generators.generate_sphere_positions(extent, count)
-        hider_specs = [(pos, "spheres") for pos in positions]
+        hider_specs = []
+        # Pre-fetch the data the pure generators need (cmd-coupled, here in
+        # _on_start so generators.py stays pure):
+        # For line/stick: pool of real neighbor atom ids (to bond hiders to).
+        neighbor_ids = []
+        cmd.iterate("%s and not segi GAME" % target_obj,
+                    "stored.append(ID)", space={'stored': neighbor_ids})
+        # For cartoon: terminal C-alpha per chain (extend-at-terminus).
+        cas_list = []
+        cmd.iterate("%s and polymer and name CA" % target_obj,
+                    "stored.append((chain, int(resi), ID))",
+                    space={'stored': cas_list})
+        cas_by_chain = {}
+        for chain, resi, ca_id in cas_list:
+            cas_by_chain.setdefault(chain, []).append((resi, ca_id))
+        _rng = _random.Random()  # neighbor sampling (non-deterministic is fine)
+        for rep, count in per_rep.items():
+            if rep == 'spheres':
+                positions = generators.generate_sphere_positions(extent, count)
+                hider_specs += [(p, 'spheres') for p in positions]
+            elif rep in ('lines', 'sticks'):
+                offsets = generators.generate_line_stick_offsets(count)
+                n_avail = min(count, len(neighbor_ids))
+                chosen = _rng.sample(neighbor_ids, n_avail) if neighbor_ids else []
+                for off, nbr_id in zip(offsets, chosen):
+                    hider_specs.append(((off, nbr_id), rep))
+            elif rep in ('cartoon', 'ribbon'):
+                # Cap: one terminal extension per chain (attaching many to
+                # one terminus chains them -- 05-RESEARCH.md Open Risk 5).
+                terminals = generators.pick_terminal_residues(cas_by_chain,
+                                                              max_chains=count)
+                for term in terminals:
+                    hider_specs.append((term, rep))
+        # Fallback: if per_rep is empty (random mode unset), default to
+        # spheres (Phase 4 behavior) using the total hider_count.
+        if not hider_specs:
+            count = int(state.get("hider_count", 0))
+            positions = generators.generate_sphere_positions(extent, count)
+            hider_specs = [(pos, "spheres") for pos in positions]
         # 3. Start the game (snapshot -> insert -> register; Phase 3 proven)
         # Bug 3: if a previous game is still active (mid-game, or won but not
         # yet cleaned up), clean it up first so no stale hiders accumulate in
@@ -122,8 +163,6 @@ class PluginDialog(QtWidgets.QDialog):
             QtWidgets.QMessageBox.warning(self, "Game already running",
                 str(exc))
             return
-        # 4. Show hiders as spheres (mutation.insert_hider uses elem='PS')
-        cmd.show("spheres", "%s and segi GAME" % target_obj)
-        # 5. Switch to Game tab + start the 3-2-1 countdown
+        # 4. Switch to Game tab + start the 3-2-1 countdown
         self.tabs.setCurrentWidget(self.game_tab)
         self.game_tab.start_countdown(self._controller)
