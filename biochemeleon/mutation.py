@@ -258,6 +258,19 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
     only, and returns the new C-alpha's stable id (the cartoon-
     representative atom the player clicks).
 
+    **Visibility fallback (05-05 human-verify):** PyMOL's cartoon renderer
+    does NOT produce visible geometry for a single isolated residue at a
+    polymer terminus -- the cartoon tube/arrow is drawn BETWEEN consecutive
+    C-alpha atoms, so a one-residue extension has no segment to draw
+    (verified headless: ss S/L/H all render identically to a blank control).
+    To make the hider VISIBLE (the player must find it by eye, not just by
+    ``select segi GAME``), the C-alpha is ALSO shown as a sphere. The
+    sphere blends (it carries the neighbor's color via the alter above) but
+    its shape is visible against the cartoon. The cartoon show is kept
+    (harmless -- it renders if the residue ever connects to 2+ residues).
+    The player clicks the C-alpha (now rendered as a sphere); clickability
+    is preserved (the CA id is what's registered + returned).
+
     Coloring (research sec Q15 option c): the GAME sentinel
     (``segi='GAME'`` + ``b=-999``) is KEPT UNCHANGED so Phase 3 cleanup
     + read path need zero migration. The neighbor C-alpha's color and
@@ -347,8 +360,18 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
               space={'stored_c': n_color, 'stored_ss': n_ss})  # editing.py:1424
     cmd.sort(object)  # defensive -- editing.py:1457; research sec Q23
     # 6. Show cartoon on ONLY the new residue (NOT all GAME; Q11: fused atoms
-    #    start with no reps; same atoms render in ribbon too -- Q10)
-    cmd.show('cartoon', "%s and resi %d and segi GAME" % (object, new_resi))  # viewing.py:491
+    #    start with no reps; same atoms render in ribbon too -- Q10).
+    #    BUT PyMOL cartoon CANNOT render a visible segment for a single
+    #    isolated terminal residue (tube/arrow drawn BETWEEN consecutive
+    #    C-alphas; 1 residue = no segment -- verified headless 05-05: ss
+    #    S/L/H all render identical to blank). As a VISIBLE fallback that
+    #    preserves clickability (player clicks the C-alpha) AND blends
+    #    (sphere carries the neighbor color set in step 5), ALSO show the
+    #    C-alpha as a sphere. The cartoon show is kept (harmless -- renders
+    #    if the residue ever connects to 2+ residues).
+    new_resi_sele = "%s and resi %d and segi GAME" % (object, new_resi)
+    cmd.show('cartoon', new_resi_sele)  # viewing.py:491
+    cmd.show('spheres', "%s and name CA" % new_resi_sele)  # visible fallback (05-05)
     # 7. Fetch the new C-alpha stable id (the cartoon-representative atom)
     ids = cmd.identify("%s and name CA and segi GAME and resi %d" % (object, new_resi),
                        mode=0)  # querying.py:1269; mode=0 returns id list, NOT index

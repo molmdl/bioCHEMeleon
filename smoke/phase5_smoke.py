@@ -100,6 +100,12 @@ check("cartoon: GAME atoms in polymer (Open Risk 1)",
 # mutagenesis.py:570 pattern: count_atoms("... and name CA and rep cartoon"))
 check("cartoon: GAME C-alpha in rep cartoon",
       cmd.count_atoms("%s and segi GAME and name CA and rep cartoon" % obj) > 0)
+# 05-05 visibility fix: PyMOL cartoon cannot render a single isolated terminal
+# residue (tube drawn BETWEEN C-alphas; 1 residue = no segment, verified
+# headless). The C-alpha is ALSO shown as a sphere so the hider is visible to
+# the eye. Verify the sphere fallback is present (regression guard).
+check("cartoon: GAME C-alpha in rep spheres (visible fallback, 05-05)",
+      cmd.count_atoms("%s and segi GAME and name CA and rep spheres" % obj) > 0)
 check("cartoon: residue has N-C-C-alpha backbone",
       cmd.count_atoms("%s and segi GAME and (name N or name CA or name C)" % obj) >= 3)
 # sentinel on the new residue's C-alpha
