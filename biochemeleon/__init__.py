@@ -138,9 +138,13 @@ class PluginDialog(QtWidgets.QDialog):
         _gen_warnings = []  # collected under-generation warnings (05-05 Issue 1)
         # Pre-fetch the data the pure generators need (cmd-coupled, here in
         # _on_start so generators.py stays pure):
-        # For line/stick: pool of real neighbor atom ids (to bond hiders to).
+        # For line/stick: pool of real neighbor CA atom ids (to bond hiders to).
+        # MUST use 'name CA' (NOT all atoms) — CA atoms survive free_nterminal_valence
+        # removal (which only removes H + cap residue atoms); non-CA atoms sampled as
+        # neighbors could be removed before insert_line_stick_hider runs, causing
+        # IndexError on nbr[0] (05-05 GUI bug, 05-07 fix).
         neighbor_ids = []
-        cmd.iterate("%s and not segi GAME" % target_obj,
+        cmd.iterate("%s and not segi GAME and name CA" % target_obj,
                     "stored.append(ID)", space={'stored': neighbor_ids})
         # For cartoon: terminal C-alpha per chain (extend-at-terminus).
         cas_list = []
