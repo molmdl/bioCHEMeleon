@@ -244,7 +244,7 @@ def insert_line_stick_hider(object, offset, neighbor_id, handle,
 
 
 def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
-                         handle, aa='gly', ss=4, hydro=0,
+                         handle, aa='gly', ss=4, hydro=1,
                          segi='GAME', b=-999.0):
     """Attach a residue at a terminus (cartoon/ribbon hider) and return
     the new residue's C-alpha stable id.
@@ -300,7 +300,14 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
             signature symmetry with insert_hider).
         aa (str): amino acid fragment name (default 'gly').
         ss (int): secondary structure for dihedrals (default 4 = flat).
-        hydro (int): hydrogen handling (default 0 = no hydrogens).
+        hydro (int): hydrogen handling (default 1 = keep hydrogens).
+            CRITICAL: hydro=0 causes attach_amino_acid to remove ALL
+            hydrogens from the ENTIRE object (pkmol scope), not just the
+            new residue. This was discovered in the 05-05 human-verify:
+            1znf (which has H atoms) lost ~200 atoms on attach with
+            hydro=0, causing verify_intact to fail. hydro=1 keeps
+            existing H and only adds/fixes H on the new residue (which
+            gets segi=GAME and is removed on cleanup).
         segi (str): sentinel segment id (default 'GAME').
         b (float): sentinel b-factor (default -999.0).
 
@@ -405,3 +412,85 @@ def insert_hider_for_rep(object, rep, payload, handle):
                                     handle=handle)
     else:
         raise ValueError("unknown rep %r" % (rep,))
+
+
+# ---- Target preparation (Phase 5 05-05 human-verify fixes) ----
+
+def collapse_to_single_state(obj):
+    """Collapse a multi-state object to a single state (state 1).
+
+    Multi-state objects (e.g. NMR ensembles like 1znf with 37 models)
+    break the backup/verify_intact mechanism: mutations (attach, remove,
+    pseudoatom) only affect the current state, while backup.snapshot
+    copies all states, causing atom-count mismatches in verify_intact.
+
+    Replaces *obj* in-place with a single-state copy of its state 1.
+    No-op if the object already has exactly 1 state.
+
+    Args:
+        obj (str): the PyMOL object to collapse.
+
+    Returns:
+        bool: True if the object was collapsed, False if it was already
+            single-state (no-op).
+    """
+    if cmd.count_states(obj) <= 1:
+        return False
+    tmp = "_bchm_single"
+    cmd.delete(tmp)                # idempotent — clear any stale temp
+    cmd.create(tmp, obj, 1, 1)     # copy state 1 only (creating.py:960)
+    cmd.delete(obj)                # remove the multi-state original
+    cmd.create(obj, tmp)           # recreate as single-state
+    cmd.delete(tmp)
+    return True
+
+
+def free_nterminal_valence(obj, chain, terminus_resi):
+    """Free the N-terminal N valence for attach_amino_acid.
+
+    editor.attach_amino_acid needs a free valence on the target N atom.
+    Two things can saturate the N valence (3 bonds max):
+
+    1. **Hydrogen atoms** on N (structures with H, or after cmd.h_add).
+       The N-terminal N has bonds to CA + H (or CA + H + H for NH2),
+       leaving 0-1 free valences.
+    2. **N-terminal caps** (ACE/formyl groups). The cap's carbonyl C is
+       bonded to N, using up a valence. E.g. 1znf has an ACE cap at
+       resi 0 whose C is bonded to the TYR 1 N.
+
+    This function removes:
+    - All atoms in cap residues (residues of atoms bonded to N that are
+      NOT in the terminal residue) — removes the entire ACE/formyl group.
+    - H atoms bonded to N in the terminal residue — frees the H valence.
+
+    After removal, N has 1 bond (CA only) = 2 free valences, and
+    attach_amino_acid succeeds. The new residue's resi (terminus_resi - 1)
+    will NOT collide with the cap's resi (the cap is gone).
+
+    CRITICAL: must be called BEFORE backup.snapshot (inside
+    GameController.start) so verify_intact matches (both backup and
+    target have caps/H removed).
+
+    Args:
+        obj (str): the PyMOL object.
+        chain (str): chain identifier of the N-terminal residue.
+        terminus_resi (int): residue number of the N-terminal residue.
+    """
+    n_sele = "%s and chain %s and resi %d and name N" % (obj, chain, terminus_resi)
+    # Step 1: identify cap residues (residues of atoms bonded to N that
+    # are NOT in the terminal residue). Uses explicit outer parens around
+    # neighbor (...) to avoid PyMOL selector precedence swallowing the
+    # intersect into the neighbor argument (05-04 smoke pitfall).
+    cap_resis = []
+    cmd.iterate(
+        "(neighbor (%s)) and not (%s and chain %s and resi %d)" %
+        (n_sele, obj, chain, terminus_resi),
+        "stored.append((chain, resv))",
+        space={'stored': cap_resis})
+    # Step 2: remove all atoms in cap residues (entire ACE/formyl group)
+    for cap_chain, cap_resi in set(cap_resis):
+        cmd.remove("%s and chain %s and resi %d" % (obj, cap_chain, cap_resi))
+    # Step 3: remove H atoms bonded to N in the terminal residue
+    cmd.remove(
+        "(neighbor (%s)) and (%s and chain %s and resi %d and elem H)" %
+        (n_sele, obj, chain, terminus_resi))
