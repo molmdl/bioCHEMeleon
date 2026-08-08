@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Plugin Bootstrap & Dialog Scaffold** - Install + menu item + empty tabbed dialog
 - [x] **Phase 2: Setup Tab Configuration & Bundled Demos** - Full Setup form + config buttons + bundled demo PDBs
 - [x] **Phase 3: Mutation Safety & Hider Registry Foundation** - De-risk object mutation + registry (highest-risk area)
-- [ ] **Phase 4: MVP Core Loop (Sphere)** - THE core value: load → generate spheres → click-to-find → win
+- [x] **Phase 4: MVP Core Loop (Sphere)** - THE core value: load → generate spheres → click-to-find → win
 - [ ] **Phase 5: Line/Stick & Cartoon Generators** - The harder blend-in generators (cartoon = L-complexity swing)
 - [ ] **Phase 6: Hint & Reveal** - Get-help / give-up mechanics with usage tracking
 - [ ] **Phase 7: Found-Hider Management, Restart & Cleanup** - Manage found hiders, reset, and clean the model
@@ -103,12 +103,12 @@ Plans:
 **Plans**: 6 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — TDD pure sphere generator (generators.py + tests/test_generators.py)
+- [x] 04-01-PLAN.md — TDD pure sphere generator (generators.py + tests/test_generators.py)
 - [x] 04-02-PLAN.md — Populate PickWizard in wizard.py (click-to-find handler)
 - [x] 04-03-PLAN.md — TDD GameController.on_pick/win/set_callbacks/_remaining (game.py)
 - [x] 04-04-PLAN.md — Populate GameTab UI (log/timer/remaining/countdown/begin_play/on_win)
 - [x] 04-05-PLAN.md — Wire Start button → _on_start (BTN-07 core loop fan-in)
-- [ ] 04-06-PLAN.md — Headless smoke + human-verify checkpoint (4 success criteria)
+- [x] 04-06-PLAN.md — Headless smoke + human-verify checkpoint (4 success criteria)
 
 ### Phase 5: Line/Stick & Cartoon Generators
 **Goal**: Hiders can blend into line/stick and cartoon/ribbon representations, not just spheres. Cartoon/ribbon is the "L"-complexity swing feature (novel C-alpha geometry) and the phase most likely to need deeper research.
@@ -204,7 +204,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 1. Plugin Bootstrap & Dialog Scaffold | 1/1 | ✓ Complete | 2026-08-03 |
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
 | 3. Mutation Safety & Hider Registry Foundation | 20/20 | ✓ Complete | 2026-08-06 |
-| 4. MVP Core Loop (Sphere) | 5/6 | In progress | - |
+| 4. MVP Core Loop (Sphere) | 6/6 | ✓ Complete | 2026-08-08 |
 | 5. Line/Stick & Cartoon Generators | 0/TBD | Not started | - |
 | 6. Hint & Reveal | 0/TBD | Not started | - |
 | 7. Found-Hider Management, Restart & Cleanup | 0/TBD | Not started | - |
