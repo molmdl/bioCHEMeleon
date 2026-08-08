@@ -1,5 +1,5 @@
 ---
-status: fixing
+status: resolved
 trigger: "Three remaining GUI win-flow bugs (Phase 4 human-verify iteration 3): last hider no color, win dialog behind PyMOL window, viewer frozen"
 created: 2026-08-08T12:00:00Z
 updated: 2026-08-08T12:05:00Z
@@ -59,5 +59,8 @@ fix: |
   Bug B: In _finish_win, create a QMessageBox instance with self.window() as parent + WindowStaysOnTopHint, then exec_().
   Bug C: Fixed by Bug B (dialog visible/on-top) + delayed deactivation (mouse mode restored in _finish_win).
   Test: Update test_win_with_wizard — win() no longer deactivates; gc._wizard stays set (GUI clears it in _finish_win).
-verification: [pending]
+verification: |
+  WSL gates: py_compile CLEAN; 160 unit tests OK (test_win_with_wizard updated); pitfall-1 gate 0; exec_ gate 1 (QMessageBox.exec_() on child dialog — allowed per AGENTS.md).
+  Headless smoke (Windows PyMOL -cq): 19/19 ALL PASSED (no regression).
+  GUI click-cycle (Bugs A/B/C symptoms): DEFERRED to human-verify checkpoint — cannot run Qt/GUI from WSL.
 files_changed: [biochemeleon/game.py, biochemeleon/gui_game.py, tests/test_game_controller.py]
