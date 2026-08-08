@@ -106,7 +106,7 @@ Plans:
 - [ ] 04-01-PLAN.md — TDD pure sphere generator (generators.py + tests/test_generators.py)
 - [x] 04-02-PLAN.md — Populate PickWizard in wizard.py (click-to-find handler)
 - [x] 04-03-PLAN.md — TDD GameController.on_pick/win/set_callbacks/_remaining (game.py)
-- [ ] 04-04-PLAN.md — Populate GameTab UI (log/timer/remaining/countdown/begin_play/on_win)
+- [x] 04-04-PLAN.md — Populate GameTab UI (log/timer/remaining/countdown/begin_play/on_win)
 - [ ] 04-05-PLAN.md — Wire Start button → _on_start (BTN-07 core loop fan-in)
 - [ ] 04-06-PLAN.md — Headless smoke + human-verify checkpoint (4 success criteria)
 
@@ -204,7 +204,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 1. Plugin Bootstrap & Dialog Scaffold | 1/1 | ✓ Complete | 2026-08-03 |
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
 | 3. Mutation Safety & Hider Registry Foundation | 20/20 | ✓ Complete | 2026-08-06 |
-| 4. MVP Core Loop (Sphere) | 3/6 | In progress | - |
+| 4. MVP Core Loop (Sphere) | 4/6 | In progress | - |
 | 5. Line/Stick & Cartoon Generators | 0/TBD | Not started | - |
 | 6. Hint & Reveal | 0/TBD | Not started | - |
 | 7. Found-Hider Management, Restart & Cleanup | 0/TBD | Not started | - |
