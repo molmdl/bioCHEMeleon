@@ -217,6 +217,12 @@ def insert_line_stick_hider(object, offset, neighbor_id, handle,
     cmd.iterate_state(1, "%s and id %d" % (object, neighbor_id),
                       "stored.append((x, y, z, elem, color))",
                       space={'stored': nbr})  # editing.py:1490; hygienic space= dict (RESEARCH sec Q3)
+    if not nbr:
+        raise ValueError(
+            "neighbor_id %d not found in state 1 of %s — the atom may have been "
+            "removed after the id was captured (ensure neighbor_ids are sampled "
+            "from 'name CA' atoms that survive free_nterminal_valence; 05-07 fix)"
+            % (neighbor_id, object))
     nx, ny, nz, n_elem, n_color = nbr[0]
     # 2. Insert pseudoatom at neighbor + offset, plausible elem (neighbor's)
     pos = [nx + offset[0], ny + offset[1], nz + offset[2]]
