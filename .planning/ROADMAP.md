@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Setup Tab Configuration & Bundled Demos** - Full Setup form + config buttons + bundled demo PDBs
 - [x] **Phase 3: Mutation Safety & Hider Registry Foundation** - De-risk object mutation + registry (highest-risk area)
 - [x] **Phase 4: MVP Core Loop (Sphere)** - THE core value: load → generate spheres → click-to-find → win
-- [ ] **Phase 5: Line/Stick & Cartoon Generators** - The harder blend-in generators (cartoon = L-complexity swing)
+- [x] **Phase 5: Line/Stick & Cartoon Generators** - The harder blend-in generators (cartoon = L-complexity swing)
 - [ ] **Phase 6: Hint & Reveal** - Get-help / give-up mechanics with usage tracking
 - [ ] **Phase 7: Found-Hider Management, Restart & Cleanup** - Manage found hiders, reset, and clean the model
 - [ ] **Phase 8: Persistence & Shareable Puzzles** - Save/load game state + generate&export / import
@@ -128,13 +128,12 @@ Plans:
 - [x] 05-04-PLAN.md — Headless smoke (line/stick + cartoon + mixed-rep + 3 MEDIUM open-risk assertions + cleanup)
 - [x] 05-05-PLAN.md — Human-verify checkpoint (visual blend for success criterion 3) — PARTIAL APPROVAL (cartoon disconnected on 1ubq, line/stick IndexError, ribbon unsupported)
 - [x] 05-07-PLAN.md — Gap closure: line/stick IndexError fix (align _on_start neighbor selection with smoke + defensive ValueError) — cherry-picked
-- [ ] 05-09-PLAN.md — Gap closure: ribbon rep support (parameterize insert_cartoon_hider rep + forward rep from dispatcher; smoke section 5c)
+- [x] 05-09-PLAN.md — Gap closure: ribbon rep support (parameterize insert_cartoon_hider rep + forward rep from dispatcher; smoke section 5c) — 41/41 headless smoke ALL PASSED
 - [-] 05-06-PLAN.md — Alt-conf research spike (gap closure) — DEFERRED to Phase 11 (spike proved mechanism viable in isolation but multi-rep integration failed; reverted)
 - [-] 05-08-PLAN.md — Alt-conf cartoon/ribbon implementation (gap closure) — DEFERRED to Phase 11 (4 failed GUI fix cycles, each passed headless verification but failed in GUI)
 
-**Phase 5 status: PARTIAL** — Line/stick/sphere + terminal-extension cartoon hiders work (1znf mixed-rep confirmed). Remaining gaps deferred to Phase 11:
-- Cartoon terminal-extension renders disconnected on 1ubq (cosmetic — hiders clickable, game playable) → Phase 11 alt-conf
-- Ribbon rep unsupported (cartoon hardcoded in show call — simple fix possible, gap closure planned)
+**Phase 5 status: COMPLETE (v1 scope)** — Line/stick/sphere + terminal-extension cartoon + ribbon hiders all work (1znf mixed-rep confirmed; ribbon verified via 05-09 headless smoke 41/41 ALL PASSED, independently re-verified by gsd-verifier 5/5 must-haves). Remaining cosmetic gap deferred to Phase 11:
+- Cartoon terminal-extension renders disconnected on 1ubq (cosmetic — hiders clickable, game playable) → Phase 11 alt-conf (connected blend via segment replication as alternate position)
 
 ### Phase 6: Hint & Reveal
 **Goal**: The player can get spatial help finding a hider or give up on specific/all hiders, with reveal usage tracked across the game.
@@ -245,7 +244,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
 | 3. Mutation Safety & Hider Registry Foundation | 20/20 | ✓ Complete | 2026-08-06 |
 | 4. MVP Core Loop (Sphere) | 6/6 | ✓ Complete | 2026-08-08 |
-| 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 | ✓ Partial (alt-conf deferred) | 2026-08-09 |
+| 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 + 05-09 | ✓ Complete (v1 scope; alt-conf deferred to Phase 11) | 2026-08-10 |
 | 6. Hint & Reveal | 0/TBD | Not started | - |
 | 7. Found-Hider Management, Restart & Cleanup | 0/TBD | Not started | - |
 | 8. Persistence & Shareable Puzzles | 0/TBD | Not started | - |
@@ -259,7 +258,7 @@ Phases likely needing deeper `/gsd-research-phase` during planning (from researc
 
 - **Phase 1**: Qt-vs-Tk runtime validation — confirm `pymol.Qt` import works in the `setenv.bat`-launched PyMOL (closes the last LOW-confidence gap). Light research — mostly a smoke test.
 - **Phase 3**: `cmd.create` merge-append vs replace semantics (MEDIUM); `.pse` round-trip `id`/`index` stability (MEDIUM). A small smoke test resolves both.
-- **Phase 5 (HIGHEST research flag — PARTIALLY RESOLVED, alt-conf DEFERRED to Phase 11)**: Cartoon/ribbon hider geometry — "replicate a segment (loop) as alternate position" via C-alpha. The terminal-extension approach shipped (works, cosmetic disconnection on 1ubq). The alt-conf approach was spike-verified in isolation but multi-rep integration failed (4 GUI-only bug cycles, reverted). Deferred to Phase 11 — see Phase 11 details for re-research requirements + lessons.
+- **Phase 5 (HIGHEST research flag — v1 RESOLVED, alt-conf DEFERRED to Phase 11)**: Cartoon/ribbon hider geometry — "replicate a segment (loop) as alternate position" via C-alpha. The terminal-extension approach shipped (works; ribbon rep support added via 05-09 gap closure — `cmd.show(rep, ...)` parameterized, 41/41 headless smoke). The cosmetic disconnection on 1ubq remains (terminal-extension limitation). The alt-conf approach was spike-verified in isolation but multi-rep integration failed (4 GUI-only bug cycles, reverted). Deferred to Phase 11 — see Phase 11 details for re-research requirements + lessons.
 - **Phase 11 (HIGHEST research flag)**: Alt-conf cartoon/ribbon integration — re-research `cmd.create` append side effects (state/rep/coord corruption) + GUI-runnable verification (headless auto_zoom gap was the methodology failure) + unique-id strategy for alt-conf atoms. Prior attempt's spike proved the mechanism; re-research must focus on INTEGRATION, not re-proving the mechanism.
 - **Phase 8**: `.pse` + companion `.bcm` co-location UX — two-file share is awkward; decide zip-together vs document "keep both files".
 - **Phase 9**: MemProtMD per-entry license verification (site was unreachable at research time) — must verify before bundling membrane coordinates.

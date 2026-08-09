@@ -36,9 +36,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **HIDER-01**: Hiders are new atoms/coordinates inserted INTO the same PyMOL object as the molecule (via `cmd.pseudoatom(object=existing)`/`cmd.fuse`), not a separate object
 - [x] **HIDER-02**: Every hider is tagged with a `segi='GAME'` + `b=-999` sentinel and tracked by `id` in a HiderRegistry
-- [ ] **HIDER-03**: Line/stick hiders — new atoms mimic connected atoms or alternate positions
+- [x] **HIDER-03**: Line/stick hiders — new atoms mimic connected atoms or alternate positions
 - [ ] **HIDER-04**: Sphere hiders — place anywhere in the bounding region
-- [ ] **HIDER-05**: Cartoon/ribbon hiders — extend at a terminal, or replicate a segment (e.g. a loop) as an alternate position; uses C-alpha
+- [x] **HIDER-05**: Cartoon/ribbon hiders — extend at a terminal, or replicate a segment (e.g. a loop) as an alternate position; uses C-alpha
 - [x] **HIDER-06**: Hider generation records every generated hider's `(object, atom-ID)` in the registry (foundation for cleanup, hint, reveal, found-status)
 
 ### Game Status Tab
@@ -154,8 +154,8 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 | GAME-01 | Phase 4 | Complete |
 | GAME-02 | Phase 4 | Complete |
 | GAME-03 | Phase 4 | Complete |
-| HIDER-03 | Phase 5 | Pending |
-| HIDER-05 | Phase 5 | Pending |
+| HIDER-03 | Phase 5 | Complete |
+| HIDER-05 | Phase 5 | Complete |
 | GAME-05 | Phase 6 | Pending |
 | GAME-06 | Phase 6 | Pending |
 | GAME-07 | Phase 6 | Pending |
@@ -183,4 +183,4 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 
 ---
 *Requirements defined: 2026-08-02*
-*Last updated: 2026-08-03 after roadmap creation (traceability populated)*
+*Last updated: 2026-08-10 after Phase 5 v1 completion (HIDER-03, HIDER-05 marked Complete — alt-conf enhancement deferred to Phase 11)*
