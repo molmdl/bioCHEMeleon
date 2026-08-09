@@ -32,6 +32,18 @@ class GameTab(QtWidgets.QWidget):
         row.addStretch(1)
         row.addWidget(self._remaining_label)
         layout.addLayout(row)
+        # --- Hint / Reveal buttons + reveal counter (Phase 6) ---
+        self._hint_btn = QtWidgets.QPushButton("Hint")
+        self._reveal_one_btn = QtWidgets.QPushButton("Reveal one")
+        self._reveal_all_btn = QtWidgets.QPushButton("Reveal all")
+        self._reveal_label = QtWidgets.QLabel("Reveals: 0")
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.addWidget(self._hint_btn)
+        btn_row.addWidget(self._reveal_one_btn)
+        btn_row.addWidget(self._reveal_all_btn)
+        btn_row.addStretch(1)
+        btn_row.addWidget(self._reveal_label)
+        layout.addLayout(btn_row)
         # --- 1 Hz QTimer (main thread; PITFALLS.md Pitfall 6) ---
         self._timer = QtCore.QTimer()
         self._timer.setInterval(1000)
