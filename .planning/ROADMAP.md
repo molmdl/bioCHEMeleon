@@ -144,10 +144,12 @@ Plans:
   2. Pressing Reveal-one (after a confirm prompt) marks one random unfound hider as found
   3. Pressing Reveal-all (after a confirm prompt) marks all remaining hiders as found
   4. The number of reveals used is tracked and visible across the game
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 06-01: TBD during planning
+- [ ] 06-01-PLAN.md — TDD GameController hint/reveal_one/reveal_all/_mark_found + counters + on_counts_changed callback (RED/GREEN/REFACTOR)
+- [ ] 06-02-PLAN.md — GUI: Hint/Reveal-one/Reveal-all buttons + reveal counter label + confirm dialogs + 4th callback wiring
+- [ ] 06-03-PLAN.md — Headless smoke (hint+reveal+counter) + human-verify checkpoint (4 success criteria)
 
 ### Phase 7: Found-Hider Management, Restart & Cleanup
 **Goal**: The player can manage how found hiders are displayed, restart for a fresh round, and clean the model back to its original state.
@@ -245,7 +247,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 3. Mutation Safety & Hider Registry Foundation | 20/20 | ✓ Complete | 2026-08-06 |
 | 4. MVP Core Loop (Sphere) | 6/6 | ✓ Complete | 2026-08-08 |
 | 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 + 05-09 | ✓ Complete (v1 scope; alt-conf deferred to Phase 11) | 2026-08-10 |
-| 6. Hint & Reveal | 0/TBD | Not started | - |
+| 6. Hint & Reveal | 0/3 | Not started | - |
 | 7. Found-Hider Management, Restart & Cleanup | 0/TBD | Not started | - |
 | 8. Persistence & Shareable Puzzles | 0/TBD | Not started | - |
 | 9. Large Demo Fetch & Source Attribution | 0/TBD | Not started | - |
