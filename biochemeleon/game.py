@@ -98,8 +98,7 @@ class GameController:
         if rec.status == registry.HIDER_STATUS_FOUND:
             self._on_log("Already found!")
             return
-        self.registry.mark_found(self.target_obj, picked_id)
-        cmd.color('green', "%s and id %s" % (self.target_obj, picked_id))
+        self._mark_found(picked_id)
         remaining = self._remaining()
         self._on_log("Found one! %d remaining" % remaining)
         self._on_remaining_changed(remaining)
