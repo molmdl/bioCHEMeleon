@@ -288,6 +288,31 @@ class TestGameControllerHintReveal(unittest.TestCase):
         self.assertEqual(self.gc._hint_count, 0)
         game.cmd.color.assert_not_called()
 
+    def test_hint_no_neighbors(self):
+        """hint() when all hidden hiders have 0 neighbors within HINT_RADIUS
+        -> no-op: _hint_count stays 0, cmd.color NOT called, no log lie.
+
+        Regression test: previously hint() picked a random hidden hider,
+        found 0 neighbors, skipped coloring but STILL incremented _hint_count
+        + fired on_counts_changed + logged 'highlighted neighbors' (a lie).
+        Now it filters to candidates with neighbors first; no candidates ->
+        silent no-op (don't count a useless hint).
+        """
+        self.gc.registry.register('1ubq', 100, 'spheres')
+        self.gc.registry.register('1ubq', 101, 'spheres')
+        # count_atoms returns 0 for every sele -> no hider has neighbors
+        game.cmd.count_atoms.return_value = 0
+        counts = MagicMock()
+        log = MagicMock()
+        self.gc.set_callbacks(on_log=log, on_counts_changed=counts)
+
+        self.gc.hint()
+
+        self.assertEqual(self.gc._hint_count, 0)
+        game.cmd.color.assert_not_called()
+        counts.assert_not_called()
+        log.assert_not_called()
+
     # ---- reveal_one (GAME-06 + DIFF-01): mark one hidden found ----
 
     def test_reveal_one(self):

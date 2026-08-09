@@ -134,6 +134,10 @@ class GameController:
         GAME atoms. Does NOT mark_found (status stays hidden). No confirm
         dialog (Hint is help, not give-up). Increments _hint_count + fires
         on_counts_changed.
+
+        Filters to hiders that HAVE neighbors within HINT_RADIUS before
+        picking (a hider in a sparse region produces no visible hint). If
+        no hidden hider has neighbors, returns without counting (no-op).
         """
         if not self._started:
             return
@@ -141,11 +145,19 @@ class GameController:
                   if r.status == registry.HIDER_STATUS_HIDDEN]
         if not hidden:
             return
-        rec = random.choice(hidden)
+        # Prefer hiders that HAVE neighbors within HINT_RADIUS (a hider in a
+        # sparse region would produce no visible hint; counting a no-op would
+        # mislead the player + the log).
+        candidates = [r for r in hidden
+                      if cmd.count_atoms(
+                          "(byres (%s and id %d around %s)) and not segi GAME" % (
+                              self.target_obj, r.id, HINT_RADIUS)) > 0]
+        if not candidates:
+            return  # no hider has neighbors to highlight; don't count a no-op
+        rec = random.choice(candidates)
         sele = "(byres (%s and id %d around %s)) and not segi GAME" % (
             self.target_obj, rec.id, HINT_RADIUS)
-        if cmd.count_atoms(sele) > 0:
-            cmd.color(HINT_COLOR, sele)
+        cmd.color(HINT_COLOR, sele)
         self._hint_count += 1
         self._on_counts_changed(self._hint_count, self._reveal_count)
         self._on_log("Hint: highlighted neighbors of one hider.")
