@@ -144,11 +144,11 @@ Plans:
   2. Pressing Reveal-one (after a confirm prompt) marks one random unfound hider as found
   3. Pressing Reveal-all (after a confirm prompt) marks all remaining hiders as found
   4. The number of reveals used is tracked and visible across the game
-**Plans**: 3 plans
+**Plans**: 3 plans (2/3 complete)
 
 Plans:
-- [ ] 06-01-PLAN.md — TDD GameController hint/reveal_one/reveal_all/_mark_found + counters + on_counts_changed callback (RED/GREEN/REFACTOR)
-- [ ] 06-02-PLAN.md — GUI: Hint/Reveal-one/Reveal-all buttons + reveal counter label + confirm dialogs + 4th callback wiring
+- [x] 06-01-PLAN.md — TDD GameController hint/reveal_one/reveal_all/_mark_found + counters + on_counts_changed callback (RED/GREEN/REFACTOR)
+- [x] 06-02-PLAN.md — GUI: Hint/Reveal-one/Reveal-all buttons + reveal counter label + confirm dialogs + 4th callback wiring
 - [ ] 06-03-PLAN.md — Headless smoke (hint+reveal+counter) + human-verify checkpoint (4 success criteria)
 
 ### Phase 7: Found-Hider Management, Restart & Cleanup
