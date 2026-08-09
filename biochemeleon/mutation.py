@@ -251,7 +251,7 @@ def insert_line_stick_hider(object, offset, neighbor_id, handle,
 
 def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
                          handle, aa='gly', ss=4, hydro=1,
-                         segi='GAME', b=-999.0):
+                         segi='GAME', b=-999.0, rep='cartoon'):
     """Attach TWO residues at a terminus (cartoon/ribbon hider) and return
     the clickable residue's C-alpha stable id.
 
@@ -470,12 +470,13 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
     clickable_id = ca_ids[0]
     cmd.alter("%s and id %d" % (object, clickable_id), "b=-999.0", space={})
     cmd.sort(object)  # defensive -- editing.py:1457; research sec Q23
-    # 10. Show cartoon on BOTH residues (the tube renders BETWEEN consecutive
-    #     C-alphas; the 2nd residue provides the "next" C-alpha so the
-    #     segment is visible). NO sphere fallback -- the tube itself blends
-    #     (neighbor color + ss copied in step 8). Same atoms render in ribbon
-    #     too (research sec Q10).
-    cmd.show('cartoon', _id_sele(all_game_ids))  # viewing.py:491
+    # 10. Show rep (cartoon or ribbon) on BOTH residues (the tube renders
+    #     BETWEEN consecutive C-alphas; the 2nd residue provides the "next"
+    #     C-alpha so the segment is visible). NO sphere fallback -- the tube
+    #     itself blends (neighbor color + ss copied in step 8). Same atoms
+    #     render in ribbon too (research sec Q10). 05-09: was hardcoded
+    #     'cartoon'; now parameterized via rep= so ribbon hiders show in ribbon.
+    cmd.show(rep, _id_sele(all_game_ids))  # viewing.py:491 -- rep param (05-09)
     return clickable_id
 
 
@@ -532,7 +533,7 @@ def insert_hider_for_rep(object, rep, payload, handle):
         return insert_cartoon_hider(object, chain=chain,
                                     terminus_resi=terminus_resi,
                                     is_c_terminus=is_c_terminus,
-                                    handle=handle)
+                                    handle=handle, rep=rep)
     else:
         raise ValueError("unknown rep %r" % (rep,))
 
