@@ -1,10 +1,15 @@
 """GameController — thin orchestrator wiring backup + mutation + registry (Phase 3). Generators (sphere/line/stick/cartoon) plug into start() in Phase 4/5; Phase 3 proves the mechanism with a placeholder insert."""
 
+import random
 import time
 
 from pymol import cmd
 
 from . import backup, mutation, registry
+
+# Phase 6 hint parameters
+HINT_RADIUS = 5.0  # CA-CA ~3.8 A; captures adjacent residues
+HINT_COLOR = 'orange'  # distinct from green=found + blend colors
 
 
 class GameController:
@@ -23,6 +28,10 @@ class GameController:
         self._on_log = lambda msg: None
         self._on_remaining_changed = lambda r: None
         self._on_win = lambda elapsed: None
+        # Phase 6 hint/reveal counters (DIFF-01; reset per round in start())
+        self._reveal_count = 0
+        self._hint_count = 0
+        self._on_counts_changed = lambda h, r: None
 
     def start(self, hider_specs):
         """Begin a round. hider_specs: list of (payload, rep) tuples where
@@ -38,6 +47,8 @@ class GameController:
         # Snapshot BEFORE any mutation (RESEARCH: no undo; backup is mandatory)
         self._backup_name = backup.snapshot(self.target_obj)
         self.registry = registry.HiderRegistry()  # fresh per round
+        self._reveal_count = 0  # reset per round (DIFF-01)
+        self._hint_count = 0  # reset per round (DIFF-01)
         for i, (payload, rep) in enumerate(hider_specs):
             handle = "H%03d" % i
             aid = mutation.insert_hider_for_rep(self.target_obj, rep, payload, handle)
@@ -47,7 +58,8 @@ class GameController:
 
     # ---- Phase 4 play-loop (click-to-find) ----
 
-    def set_callbacks(self, on_log=None, on_remaining_changed=None, on_win=None):
+    def set_callbacks(self, on_log=None, on_remaining_changed=None,
+                      on_win=None, on_counts_changed=None):
         """Register GUI callbacks. Each defaults to a no-op lambda when None.
 
         on_log(msg): called with a string log message (Miss! / Found one! /
@@ -56,10 +68,14 @@ class GameController:
             after a find.
         on_win(elapsed): called with a float elapsed seconds when all hiders
             are found.
+        on_counts_changed(hint_count, reveal_count): called with the running
+            hint + reveal usage counters (Phase 6 DIFF-01; GUI updates a
+            reveal-counter label).
         """
         self._on_log = on_log or (lambda msg: None)
         self._on_remaining_changed = on_remaining_changed or (lambda r: None)
         self._on_win = on_win or (lambda elapsed: None)
+        self._on_counts_changed = on_counts_changed or (lambda h, r: None)
 
     def _remaining(self):
         """Return the count of registry records with status == 'hidden'."""
@@ -90,6 +106,11 @@ class GameController:
         if remaining == 0:
             self.win()
 
+    def _mark_found(self, hider_id):
+        """Shared mark+color helper. Does NOT log or fire win (callers do those)."""
+        self.registry.mark_found(self.target_obj, hider_id)
+        cmd.color('green', "%s and id %s" % (self.target_obj, hider_id))
+
     def win(self):
         """All hiders found: fire on_win(elapsed). Wizard deactivation is
         deferred to the GUI callback (gui_game._finish_win) so the last
@@ -104,6 +125,77 @@ class GameController:
         """
         elapsed = time.time() - self._start_time if self._start_time else 0.0
         self._on_win(elapsed)
+
+    # ---- Phase 6 hint / reveal ----
+
+    def hint(self):
+        """Color the residues near a random hidden hider orange (GAME-05).
+
+        Highlights NEIGHBORS (byres vicinity), not the hider itself; excludes
+        GAME atoms. Does NOT mark_found (status stays hidden). No confirm
+        dialog (Hint is help, not give-up). Increments _hint_count + fires
+        on_counts_changed.
+        """
+        if not self._started:
+            return
+        hidden = [r for r in self.registry.all()
+                  if r.status == registry.HIDER_STATUS_HIDDEN]
+        if not hidden:
+            return
+        rec = random.choice(hidden)
+        sele = "(byres (%s and id %d around %s)) and not segi GAME" % (
+            self.target_obj, rec.id, HINT_RADIUS)
+        if cmd.count_atoms(sele) > 0:
+            cmd.color(HINT_COLOR, sele)
+        self._hint_count += 1
+        self._on_counts_changed(self._hint_count, self._reveal_count)
+        self._on_log("Hint: highlighted neighbors of one hider.")
+
+    def reveal_one(self):
+        """Mark one random hidden hider found + green; count the reveal (GAME-06).
+
+        Picks a random hidden hider, marks it found (via _mark_found),
+        increments _reveal_count, fires on_counts_changed + on_remaining_changed.
+        If no hiders remain, fires win(). NO confirm dialog here (the GUI shows
+        it before calling).
+        """
+        if not self._started:
+            return
+        hidden = [r for r in self.registry.all()
+                  if r.status == registry.HIDER_STATUS_HIDDEN]
+        if not hidden:
+            return
+        rec = random.choice(hidden)
+        self._mark_found(rec.id)
+        self._reveal_count += 1
+        self._on_counts_changed(self._hint_count, self._reveal_count)
+        remaining = self._remaining()
+        self._on_log("Revealed one! %d remaining" % remaining)
+        self._on_remaining_changed(remaining)
+        if remaining == 0:
+            self.win()
+
+    def reveal_all(self):
+        """Mark all hidden hiders found + green; count reveals (GAME-07).
+
+        Marks ALL hidden hiders found (via _mark_found per hider), increments
+        _reveal_count by the number revealed (NOT +1 for the action), fires
+        on_counts_changed + on_remaining_changed(0), logs, then calls win()
+        (all found -> win fires).
+        """
+        if not self._started:
+            return
+        hidden = [r for r in self.registry.all()
+                  if r.status == registry.HIDER_STATUS_HIDDEN]
+        if not hidden:
+            return
+        for rec in hidden:
+            self._mark_found(rec.id)
+        self._reveal_count += len(hidden)
+        self._on_counts_changed(self._hint_count, self._reveal_count)
+        self._on_remaining_changed(0)
+        self._on_log("Revealed all %d hiders. Game over." % len(hidden))
+        self.win()
 
     def reconstruct_registry(self):
         """Rebuild the registry from sentinel atoms after .pse reload (RESEARCH §Q4).

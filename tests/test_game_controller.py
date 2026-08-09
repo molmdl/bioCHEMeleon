@@ -232,6 +232,9 @@ class TestGameControllerHintReveal(unittest.TestCase):
         # Reset mock cmd call history (shared via sys.modules) so call_count
         # assertions are isolated per test.
         game.cmd.reset_mock()
+        # count_atoms must return an int for the hint() gate `> 0` comparison
+        # (MagicMock default returns NotImplemented for `>`). 5 = any positive.
+        game.cmd.count_atoms.return_value = 5
 
     # ---- hint (GAME-05): color neighbors orange ----
 
