@@ -248,6 +248,71 @@ mutation.cleanup_hiders(obj)
 check("gui-align: cleanup restores count after CA-path insert",
       cmd.count_atoms(obj) == orig_count_5b)
 
+# --- 5c. RIBBON REP SUPPORT (05-09 gap closure: rep forwarding) ---
+# The 05-05 human-verify found ribbon hiders render in CARTOON, not ribbon --
+# insert_cartoon_hider's show call was hardcoded to 'cartoon' (line 478). The
+# 05-09 fix: insert_cartoon_hider accepts rep= (default 'cartoon') and the
+# insert_hider_for_rep dispatcher forwards rep=rep. This section verifies a
+# cartoon-geometry insert with rep='ribbon' renders in RIBBON (not cartoon).
+# Object is clean after section 5b (count==orig_count_5b, no GAME atoms).
+fetch_before_ribbon = len(mutation.fetch_all_hider_ids(obj))
+check("ribbon-prep: clean slate (no GAME atoms before ribbon insert)",
+      fetch_before_ribbon == 0)
+# Re-derive the N-terminus (self-contained; mirrors section 3/5b approach).
+cas_5c = []
+cmd.iterate("%s and polymer and name CA" % obj,
+            "stored.append((chain, resv, ID))", space={'stored': cas_5c})
+check("ribbon: 1ubq has polymer CA", len(cas_5c) > 0)
+cas_by_5c = {}
+for ch5c, ri5c, cid5c in cas_5c:
+    cas_by_5c.setdefault(ch5c, []).append((ri5c, cid5c))
+chain5c = max(cas_by_5c, key=lambda c: len(cas_by_5c[c]))
+term_resi5c = min(r[0] for r in cas_by_5c[chain5c])  # N-terminus (min resi)
+# Insert a cartoon-GEOMETRY hider but show it in RIBBON (rep='ribbon').
+ribbon_ca_id = mutation.insert_cartoon_hider(obj, chain=chain5c,
+                                             terminus_resi=term_resi5c,
+                                             is_c_terminus=False,
+                                             handle="R001", rep='ribbon')
+check("ribbon: returns C-alpha int id", isinstance(ribbon_ca_id, int))
+# THE CORE GAP FIX: the hider renders in RIBBON (was hardcoded 'cartoon').
+check("ribbon: GAME C-alpha in rep ribbon",
+      cmd.count_atoms("%s and segi GAME and name CA and rep ribbon" % obj) > 0)
+check("ribbon: 2 GAME C-alphas in rep ribbon (2-residue tube, 05-05 geometry)",
+      cmd.count_atoms("%s and segi GAME and name CA and rep ribbon" % obj) >= 2)
+# Regression guard: rep='ribbon' was forwarded (NOT the hardcoded 'cartoon').
+# A freshly-fetched 1ubq polymer has cartoon shown by DEFAULT (PyMOL shows
+# cartoon for fetched proteins; ~602 atoms) but NO ribbon -- so newly-attached
+# GAME residues INHERIT cartoon from the polymer, and ribbon can ONLY appear
+# on GAME atoms via the explicit cmd.show('ribbon', GAME) call. With the old
+# hardcoded 'cartoon' show call, GAME rep ribbon would be 0. The correct
+# distinguishing assertion: ribbon is on GAME atoms but NOT on the rest of the
+# polymer (proves the rep= kwarg was forwarded). The original plan's
+# "rep cartoon == 0" guard was wrong -- cartoon is inherited from the polymer's
+# default rep, not set by the show call. (05-09 Rule 1 fix: smoke-check bug,
+# NOT a mutation.py bug -- the fix is verified by rep_ribbon=13 on GAME atoms.)
+check("ribbon: rep ribbon ONLY on GAME atoms (polymer has no ribbon default -> rep= forwarded)",
+      cmd.count_atoms("%s and segi GAME and rep ribbon" % obj) > 0 and
+      cmd.count_atoms("%s and polymer and not segi GAME and rep ribbon" % obj) == 0)
+# Clean sentinel: exactly 1 new sentinel atom (the clickable CA) -- so
+# fetch_all_hider_ids returns 1 per ribbon hider -> 1 registry entry.
+check("ribbon: fetch_all_hider_ids += 1 (clean sentinel)",
+      len(mutation.fetch_all_hider_ids(obj)) - fetch_before_ribbon == 1)
+# Diag: print the PRE-cleanup rep counts (this is the state the gap
+# assertions above tested). Must show GAME_rep_ribbon>=2 (CA) and
+# polymer_rep_ribbon=0 (proves rep= forwarded, not a global show). GAME_rep_cartoon
+# is nonzero (inherited from the polymer default cartoon, NOT a bug).
+# Printed BEFORE cleanup so the counts reflect the inserted hider, not
+# the post-cleanup empty state.
+print("diag: ribbon_ca_id=%r chain5c=%r N-term_resi5c=%r GAME_rep_ribbon=%r GAME_rep_cartoon=%r polymer_rep_ribbon=%r" %
+      (ribbon_ca_id, chain5c, term_resi5c,
+       cmd.count_atoms("%s and segi GAME and name CA and rep ribbon" % obj),
+       cmd.count_atoms("%s and segi GAME and rep cartoon" % obj),
+       cmd.count_atoms("%s and polymer and not segi GAME and rep ribbon" % obj)))
+# Cleanup restores (sentinel-only via segi GAME; AGENTS.md domain rule).
+mutation.cleanup_hiders(obj)
+check("ribbon: cleanup restores (no GAME atoms remain)",
+      cmd.count_atoms("%s and segi GAME" % obj) == 0)
+
 # --- 6. (optional spike) iterate_state exposes elem/color? (Open Risk 6 LOW) ---
 # insert_line_stick_hider reads (x,y,z,elem,color) via ONE iterate_state call.
 # If elem/color come back None at runtime, the inserter would need to split into
