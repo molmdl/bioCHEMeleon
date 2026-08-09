@@ -213,5 +213,195 @@ class TestGameControllerOnPick(unittest.TestCase):
         self.assertIsNone(gc2._on_win(0.0))
 
 
+class TestGameControllerHintReveal(unittest.TestCase):
+    """Test GameController.hint / reveal_one / reveal_all / _mark_found /
+    counters / on_counts_changed (Phase 6).
+
+    Each test builds a GameController('1ubq') WITHOUT calling start() and
+    manually populates the registry. _started is set True (hint/reveal guard
+    on _started; the existing on_pick tests don't set it because on_pick has
+    no such guard — but hint/reveal do). Mock callbacks verify the hint/reveal
+    wiring. The mocked cmd.color / cmd.count_atoms are inspected to confirm
+    recolor + gate behavior.
+    """
+
+    def setUp(self):
+        """Build a fresh GameController with _started=True and clean mock cmd."""
+        self.gc = GameController('1ubq')
+        self.gc._started = True
+        # Reset mock cmd call history (shared via sys.modules) so call_count
+        # assertions are isolated per test.
+        game.cmd.reset_mock()
+
+    # ---- hint (GAME-05): color neighbors orange ----
+
+    def test_hint_colors_neighbors(self):
+        """hint() with 3 hidden -> _hint_count==1; counts(1,0); color 'orange'
+        with a sele containing 'around' and 'not segi GAME'; all 3 still hidden;
+        count_atoms called (the gate before cmd.color)."""
+        self.gc.registry.register('1ubq', 100, 'spheres')
+        self.gc.registry.register('1ubq', 101, 'spheres')
+        self.gc.registry.register('1ubq', 102, 'spheres')
+        counts = MagicMock()
+        self.gc.set_callbacks(on_counts_changed=counts)
+
+        self.gc.hint()
+
+        self.assertEqual(self.gc._hint_count, 1)
+        counts.assert_called_once_with(1, 0)
+        game.cmd.color.assert_called_once()
+        # First arg is 'orange'
+        self.assertEqual(game.cmd.color.call_args[0][0], 'orange')
+        # Second arg (sele) contains 'around' and 'not segi GAME'
+        sele_arg = game.cmd.color.call_args[0][1]
+        self.assertIn('around', sele_arg)
+        self.assertIn('not segi GAME', sele_arg)
+        # count_atoms was called (the gate before cmd.color)
+        self.assertGreaterEqual(game.cmd.count_atoms.call_count, 1)
+        # All 3 records still hidden (hint does NOT mark_found)
+        for rid in (100, 101, 102):
+            rec = self.gc.registry.get('1ubq', rid)
+            self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+
+    def test_hint_no_started(self):
+        """hint() before start (_started=False) -> no-op: _hint_count stays 0,
+        cmd.color NOT called."""
+        gc2 = GameController('1ubq')  # _started stays False
+        gc2.registry.register('1ubq', 100, 'spheres')
+        game.cmd.reset_mock()
+
+        gc2.hint()
+
+        self.assertEqual(gc2._hint_count, 0)
+        game.cmd.color.assert_not_called()
+
+    def test_hint_no_hidden(self):
+        """hint() with all found (no hidden) -> no-op: _hint_count stays 0."""
+        self.gc.registry.register('1ubq', 100, 'spheres',
+                                  status=HIDER_STATUS_FOUND)
+
+        self.gc.hint()
+
+        self.assertEqual(self.gc._hint_count, 0)
+        game.cmd.color.assert_not_called()
+
+    # ---- reveal_one (GAME-06 + DIFF-01): mark one hidden found ----
+
+    def test_reveal_one(self):
+        """reveal_one() with 3 hidden -> exactly 1 found; _reveal_count==1;
+        counts(0,1); rem(2); color 'green' once; win NOT fired (2 remaining)."""
+        self.gc.registry.register('1ubq', 100, 'spheres')
+        self.gc.registry.register('1ubq', 101, 'spheres')
+        self.gc.registry.register('1ubq', 102, 'spheres')
+        counts = MagicMock()
+        rem = MagicMock()
+        win_cb = MagicMock()
+        self.gc.set_callbacks(on_remaining_changed=rem, on_win=win_cb,
+                              on_counts_changed=counts)
+
+        self.gc.reveal_one()
+
+        # Exactly 1 of the 3 is now found
+        found_count = sum(1 for r in self.gc.registry.all()
+                          if r.status == HIDER_STATUS_FOUND)
+        self.assertEqual(found_count, 1)
+        self.assertEqual(self.gc._reveal_count, 1)
+        counts.assert_called_once_with(0, 1)
+        rem.assert_called_once_with(2)
+        game.cmd.color.assert_called_once()
+        self.assertEqual(game.cmd.color.call_args[0][0], 'green')
+        win_cb.assert_not_called()
+
+    def test_reveal_one_last(self):
+        """reveal_one() with 1 hidden -> found; _reveal_count==1; win fires."""
+        self.gc.registry.register('1ubq', 100, 'spheres')
+        self.gc._start_time = 1000.0
+        win_cb = MagicMock()
+        self.gc.set_callbacks(on_win=win_cb)
+
+        self.gc.reveal_one()
+
+        rec = self.gc.registry.get('1ubq', 100)
+        self.assertEqual(rec.status, HIDER_STATUS_FOUND)
+        self.assertEqual(self.gc._reveal_count, 1)
+        win_cb.assert_called_once()
+
+    # ---- reveal_all (GAME-07 + DIFF-01): mark all hidden found ----
+
+    def test_reveal_all(self):
+        """reveal_all() with 3 hidden -> all 3 found; _reveal_count==3;
+        counts(0,3); rem(0); win fires once."""
+        self.gc.registry.register('1ubq', 100, 'spheres')
+        self.gc.registry.register('1ubq', 101, 'spheres')
+        self.gc.registry.register('1ubq', 102, 'spheres')
+        self.gc._start_time = 1000.0
+        counts = MagicMock()
+        rem = MagicMock()
+        win_cb = MagicMock()
+        self.gc.set_callbacks(on_remaining_changed=rem, on_win=win_cb,
+                              on_counts_changed=counts)
+
+        self.gc.reveal_all()
+
+        for rid in (100, 101, 102):
+            rec = self.gc.registry.get('1ubq', rid)
+            self.assertEqual(rec.status, HIDER_STATUS_FOUND)
+        self.assertEqual(self.gc._reveal_count, 3)
+        counts.assert_called_once_with(0, 3)
+        rem.assert_called_once_with(0)
+        win_cb.assert_called_once()
+
+    def test_reveal_all_no_started(self):
+        """reveal_all() before start -> no-op: _reveal_count stays 0, record
+        still hidden, cmd.color NOT called."""
+        gc2 = GameController('1ubq')  # _started stays False
+        gc2.registry.register('1ubq', 100, 'spheres')
+        game.cmd.reset_mock()
+
+        gc2.reveal_all()
+
+        self.assertEqual(gc2._reveal_count, 0)
+        rec = gc2.registry.get('1ubq', 100)
+        self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        game.cmd.color.assert_not_called()
+
+    # ---- _mark_found helper ----
+
+    def test_mark_found_helper(self):
+        """_mark_found(id) -> registry status 'found'; cmd.color called once
+        with ('green', '1ubq and id 100')."""
+        self.gc.registry.register('1ubq', 100, 'spheres')
+        game.cmd.reset_mock()
+
+        self.gc._mark_found(100)
+
+        self.assertEqual(self.gc.registry.get('1ubq', 100).status,
+                         HIDER_STATUS_FOUND)
+        game.cmd.color.assert_called_once_with('green', '1ubq and id 100')
+
+    # ---- counters init zero ----
+
+    def test_counters_init_zero(self):
+        """Fresh GameController has _reveal_count==0 and _hint_count==0."""
+        gc2 = GameController('1ubq')
+        self.assertEqual(gc2._reveal_count, 0)
+        self.assertEqual(gc2._hint_count, 0)
+
+    # ---- set_callbacks 4th param (on_counts_changed) ----
+
+    def test_set_callbacks_4th_param(self):
+        """set_callbacks() with no args -> _on_counts_changed is a no-op
+        (returns None). set_callbacks(on_counts_changed=cb) -> cb(h, r) fires."""
+        gc2 = GameController('1ubq')
+        gc2.set_callbacks()  # all None
+        self.assertIsNone(gc2._on_counts_changed(0, 0))
+
+        cb = MagicMock()
+        gc3 = GameController('1ubq')
+        gc3.set_callbacks(on_counts_changed=cb)
+        gc3._on_counts_changed(1, 2)
+        cb.assert_called_once_with(1, 2)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
