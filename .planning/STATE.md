@@ -9,7 +9,7 @@ See: .planning/PROJECT.md (updated 2026-08-02)
 
 ## Current Position
 
-Phase: 5 of 10 — Line/Stick & Cartoon Generators — PARTIAL (5/5 original plans + 8 fix commits + 05-07 line/stick IndexError fix; alt-conf gap closure REVERTED/DEFERRED 2026-08-09). Phase 4 COMPLETE (6/6, 2026-08-08). Phase 3 COMPLETE (20/20, 2026-08-06).
+Phase: 5 of 11 — Line/Stick & Cartoon Generators — PARTIAL (5/5 original plans + 8 fix commits + 05-07 line/stick IndexError fix; alt-conf gap closure REVERTED/DEFERRED to Phase 11, 2026-08-09). Phase 4 COMPLETE (6/6, 2026-08-08). Phase 3 COMPLETE (20/20, 2026-08-06). Phase 11 (Alt-conf Cartoon/Ribbon Hider v1 Follow-up) ADDED — after Phase 10, research-required, closes the HIDER-03/HIDER-05 alt-conf gap.
 Plan: 05-05 PARTIAL APPROVAL + 05-07 cherry-picked. Working state confirmed 2026-08-09: 1znf mixed-rep (lines+sticks+spheres+cartoon:2) generates 4 hiders (cartoon capped at 1/chain with warning), all clickable, `select segi GAME` highlights all, win after finding all 4, cleanup restores. The 05-07 fix (name CA neighbor selection + defensive ValueError) resolved the GUI-only IndexError. Alt-conf segment replication (05-06 spike + 05-08 implementation) attempted and reverted: the spike proved the mechanism viable in isolation (10/10 headless) but multi-rep integration revealed 4 cascading GUI-only bug classes that headless smoke systematically could not catch (auto_zoom=1 GUI vs -1 headless; multi-state display; retroactive coord corruption via cmd.create merge). The 4 fix cycles each passed headless verification but failed in the GUI. Decision: revert to working state, defer alt-conf to post-v1, preserve work in `backup/05-08-attempts` branch. Commits since 05-05: fb310a3 (05-07 fix), e9bbeac (05-07 smoke 5b), ad9d33c (AGENTS.md pymol-src note), 0c18cbf (oc_stats), 0e19ba2 (05-07 SUMMARY).
 Status: Phase 5 PARTIAL — working state restored (05-05 + 05-07). Alt-conf deferred to post-v1 (backup branch preserves work). Remaining v1 gaps: cartoon disconnected-look on 1ubq (cosmetic), ribbon unsupported.
 Last activity: 2026-08-09 — reverted alt-conf gap closure (4 failed GUI fix cycles), cherry-picked 05-07 line/stick fix, confirmed 1znf working state, pushed to origin (main + backup/05-08-attempts).
@@ -53,6 +53,9 @@ Progress: [█████████░] 90% (39 of 39 plans done + 8 fix comm
 | 001 | Add parallel-subagent worktree/branch protocol to AGENTS.md | 2026-08-08 | 531d92e | [001-parallel-execution-worktree-protocol](./quick/001-parallel-execution-worktree-protocol/) |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+- Phase 11 added (2026-08-09): Alt-conf Cartoon/Ribbon Hider (v1 Follow-up) — appended after Phase 10. Closes the HIDER-03/HIDER-05 alt-conf gap from Phase 5 (terminal-extension cartoon renders disconnected on 1ubq; the alt-conf "segment replication as alternate position" approach was spike-verified in isolation but multi-rep integration failed across 4 GUI-only bug cycles). Phase 11 has the HIGHEST research flag — requires re-research on `cmd.create` append side effects + GUI-runnable verification (headless auto_zoom gap was the methodology failure). Prior attempt's work preserved in `backup/05-08-attempts` branch but should NOT be used as implementation reference (re-research from scratch).
 
 ### Wave 1 outputs (02-01 + 02-02 — STILL AVAILABLE)
 
