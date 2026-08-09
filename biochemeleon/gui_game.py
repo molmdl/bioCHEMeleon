@@ -44,6 +44,9 @@ class GameTab(QtWidgets.QWidget):
         btn_row.addStretch(1)
         btn_row.addWidget(self._reveal_label)
         layout.addLayout(btn_row)
+        self._hint_btn.clicked.connect(self._on_hint_clicked)
+        self._reveal_one_btn.clicked.connect(self._on_reveal_one_clicked)
+        self._reveal_all_btn.clicked.connect(self._on_reveal_all_clicked)
         # --- 1 Hz QTimer (main thread; PITFALLS.md Pitfall 6) ---
         self._timer = QtCore.QTimer()
         self._timer.setInterval(1000)
@@ -60,6 +63,43 @@ class GameTab(QtWidgets.QWidget):
 
     def _update_remaining(self, remaining):
         self._remaining_label.setText("Remaining: %d" % remaining)
+
+    def _confirm(self, title, text):
+        """Yes/No confirm. Uses top-level window as parent so the dialog
+        appears above the PyMOL OpenGL window (same fix as _finish_win)."""
+        btns = QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No
+        return QtWidgets.QMessageBox.question(
+            self.window(), title, text, btns) == QtWidgets.QMessageBox.Yes
+
+    def _on_counts_changed(self, hint_count, reveal_count):
+        self._reveal_label.setText("Reveals: %d" % reveal_count)
+
+    def _on_hint_clicked(self):
+        if self._controller is None or not self._controller._started:
+            return
+        if self._controller._remaining() == 0:
+            return
+        self._controller.hint()
+
+    def _on_reveal_one_clicked(self):
+        if self._controller is None or not self._controller._started:
+            return
+        if self._controller._remaining() == 0:
+            return
+        if not self._confirm("Reveal one hider?",
+                "Give up on one random hider? This counts as a reveal use."):
+            return
+        self._controller.reveal_one()
+
+    def _on_reveal_all_clicked(self):
+        if self._controller is None or not self._controller._started:
+            return
+        if self._controller._remaining() == 0:
+            return
+        if not self._confirm("Reveal all hiders?",
+                "Give up and reveal ALL remaining hiders? This ends the game."):
+            return
+        self._controller.reveal_all()
 
     def _on_tick(self):
         elapsed = time.time() - self._start_time
@@ -92,6 +132,7 @@ class GameTab(QtWidgets.QWidget):
             on_log=self._log,
             on_remaining_changed=self._update_remaining,
             on_win=self._on_win,
+            on_counts_changed=self._on_counts_changed,
         )
         self._start_time = time.time()
         # Bug 1: win() (game.py) reads the CONTROLLER's _start_time, not the
