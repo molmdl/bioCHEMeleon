@@ -47,9 +47,9 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **GAME-02**: Timer — counts up after the game starts, stops on win
 - [ ] **GAME-03**: Remaining hiders count — total, and per-representation when the easy difficulty toggle is set
 - [ ] **GAME-04**: Import button — import a game prepared by Generate & export
-- [ ] **GAME-05**: Hint button — change color of the N atoms/residues around a hider (colors neighbors, not the hider itself)
-- [ ] **GAME-06**: Reveal-one hider button — asks the user to confirm giving up, then marks one random hider "found" and counts the reveal use
-- [ ] **GAME-07**: Reveal-all hiders button — asks the user to confirm giving up, then marks all hiders "found"
+- [x] **GAME-05**: Hint button — change color of the N atoms/residues around a hider (colors neighbors, not the hider itself)
+- [x] **GAME-06**: Reveal-one hider button — asks the user to confirm giving up, then marks one random hider "found" and counts the reveal use
+- [x] **GAME-07**: Reveal-all hiders button — asks the user to confirm giving up, then marks all hiders "found"
 - [ ] **GAME-08**: Found-hider management dropdown — hide/show/change color of hiders with a "found" status
 - [ ] **GAME-09**: Save button — save the game state as a PyMOL session (`.pse`) + a companion `.bcm` JSON sidecar (registry, timer, reveal counts, setup) for checkpointing
 - [ ] **GAME-10**: Restart button — restart the game from the stored initial state
@@ -77,7 +77,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Differentiators (v1)
 
-- [ ] **DIFF-01**: Reveal counter — track how many reveals were used across the game
+- [x] **DIFF-01**: Reveal counter — track how many reveals were used across the game
 - [ ] **DIFF-02**: Win-screen stats — show time taken, hints used, and reveals used on the winning message
 - [ ] **DIFF-03**: Post-game debrief — after win, highlight all hiders and explain why each was hard to spot (the teachable moment)
 - [ ] **DIFF-04**: Color picker for found-hider highlight — player chooses how found hiders are marked (accessibility / color-blind support)
@@ -156,10 +156,10 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 | GAME-03 | Phase 4 | Complete |
 | HIDER-03 | Phase 5 | Complete |
 | HIDER-05 | Phase 5 | Complete |
-| GAME-05 | Phase 6 | Pending |
-| GAME-06 | Phase 6 | Pending |
-| GAME-07 | Phase 6 | Pending |
-| DIFF-01 | Phase 6 | Pending |
+| GAME-05 | Phase 6 | Complete |
+| GAME-06 | Phase 6 | Complete |
+| GAME-07 | Phase 6 | Complete |
+| DIFF-01 | Phase 6 | Complete |
 | GAME-08 | Phase 7 | Pending |
 | GAME-10 | Phase 7 | Pending |
 | BTN-06 | Phase 7 | Pending |
@@ -183,4 +183,4 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 
 ---
 *Requirements defined: 2026-08-02*
-*Last updated: 2026-08-10 after Phase 5 v1 completion (HIDER-03, HIDER-05 marked Complete — alt-conf enhancement deferred to Phase 11)*
+*Last updated: 2026-08-11 after Phase 6 completion (GAME-05, GAME-06, GAME-07, DIFF-01 marked Complete)*
