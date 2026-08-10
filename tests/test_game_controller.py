@@ -259,6 +259,9 @@ class TestGameControllerHintReveal(unittest.TestCase):
         sele_arg = game.cmd.color.call_args[0][1]
         self.assertIn('around', sele_arg)
         self.assertIn('not segi GAME', sele_arg)
+        # CRITICAL: selection restricted to target object (the `around` operator
+        # crosses object boundaries; without `and <obj>` it colors backup atoms)
+        self.assertIn('and 1ubq', sele_arg)
         # count_atoms was called (the gate before cmd.color)
         self.assertGreaterEqual(game.cmd.count_atoms.call_count, 1)
         # All 3 records still hidden (hint does NOT mark_found)
@@ -429,6 +432,54 @@ class TestGameControllerHintReveal(unittest.TestCase):
         gc3.set_callbacks(on_counts_changed=cb)
         gc3._on_counts_changed(1, 2)
         cb.assert_called_once_with(1, 2)
+
+    # ---- cleanup / abort_on_error reset counters (Phase 6 deviation) ----
+
+    def test_cleanup_resets_counters(self):
+        """cleanup() restores from backup + resets _reveal_count + _hint_count
+        to 0 (Phase 6 deviation: cleanup now restores from backup to clear hint
+        orange coloring on real neighbor atoms; counters reset because the
+        game is over)."""
+        self.gc._started = True
+        self.gc._backup_name = '_bchm_backup'
+        self.gc._reveal_count = 3
+        self.gc._hint_count = 2
+
+        result = self.gc.cleanup()
+
+        self.assertTrue(result)  # backup.restore returns True (mocked)
+        self.assertEqual(self.gc._reveal_count, 0)
+        self.assertEqual(self.gc._hint_count, 0)
+        self.assertFalse(self.gc._started)
+        self.assertIsNone(self.gc._backup_name)
+
+    def test_abort_on_error_resets_counters(self):
+        """abort_on_error() resets _reveal_count + _hint_count to 0 (consistency
+        with cleanup; game aborting -> counters reset)."""
+        self.gc._started = True
+        self.gc._backup_name = '_bchm_backup'
+        self.gc._reveal_count = 3
+        self.gc._hint_count = 2
+
+        result = self.gc.abort_on_error()
+
+        self.assertTrue(result)  # backup.restore returns True (mocked)
+        self.assertEqual(self.gc._reveal_count, 0)
+        self.assertEqual(self.gc._hint_count, 0)
+        self.assertFalse(self.gc._started)
+        self.assertIsNone(self.gc._backup_name)
+
+    def test_cleanup_idempotent_not_started(self):
+        """cleanup() when not started -> returns True, no-op, counters stay 0."""
+        gc2 = GameController('1ubq')  # _started stays False
+        gc2._reveal_count = 0
+        gc2._hint_count = 0
+
+        result = gc2.cleanup()
+
+        self.assertTrue(result)
+        self.assertEqual(gc2._reveal_count, 0)
+        self.assertEqual(gc2._hint_count, 0)
 
 
 if __name__ == '__main__':

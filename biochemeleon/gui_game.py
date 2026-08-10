@@ -112,6 +112,7 @@ class GameTab(QtWidgets.QWidget):
         GameController.start + tab switch). On GO!, _begin_play activates the
         PickWizard, registers callbacks, and starts the timer."""
         self._controller = controller
+        self._reveal_label.setText("Reveals: 0")  # reset for new round (C8)
         self._log("Get ready...")
         self._countdown_step(3)
 

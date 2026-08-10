@@ -51,6 +51,7 @@ gc.set_callbacks(on_log=lambda m: logs.append(m),
 gc._start_time = 1234.0   # so win()'s elapsed math works without a real timer
 
 # --- 6. HINT test: neighbor coloring orange, no GAME atoms, no mark_found ---
+orange_pre_hint = cmd.count_atoms("%s and color orange" % obj)  # baseline (likely 0 for 1ubq)
 gc.hint()
 check("hint: _hint_count == 1", gc._hint_count == 1)
 check("hint: on_counts_changed fired", len(counts) >= 1 and counts[-1] == (1, 0))
@@ -98,10 +99,19 @@ green_game_all = cmd.count_atoms("%s and color green and segi GAME" % obj)
 check("reveal_all: all hider atoms green",
       green_game_all >= len(gc.registry.all()))
 
-# --- 9. CLEANUP the first game (sentinel remove + verify_intact + discard) ---
+# --- 9. CLEANUP the first game (restore from backup -> hiders gone + hint orange cleared) ---
 intact = gc.cleanup()
 check("cleanup: returned True", intact is True)
 check("cleanup: count back to orig", cmd.count_atoms(obj) == orig_count)
+# After cleanup, hint-colored real atoms should be restored to original
+# (restore from backup brings back the pre-hint colors; the hint selection is
+# object-restricted so it never colored the backup -- the backup is pristine)
+orange_after = cmd.count_atoms("%s and color orange" % obj)
+check("cleanup: hint orange cleared (restore from backup)",
+      orange_after == orange_pre_hint)
+# No GAME atoms remain (restore from backup removes all hiders + support atoms)
+game_after = cmd.count_atoms("%s and segi GAME" % obj)
+check("cleanup: no GAME atoms remain", game_after == 0)
 
 # --- 10. COUNTER RESET test: fresh GameController zeroes counters ---
 gc2 = game.GameController(obj)

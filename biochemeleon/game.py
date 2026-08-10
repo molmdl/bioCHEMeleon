@@ -138,6 +138,12 @@ class GameController:
         Filters to hiders that HAVE neighbors within HINT_RADIUS before
         picking (a hider in a sparse region produces no visible hint). If
         no hidden hider has neighbors, returns without counting (no-op).
+
+        CRITICAL: the selection is restricted to self.target_obj via a
+        trailing `and <obj>` because PyMOL's `around` operator crosses object
+        boundaries — without it, the selection would also color atoms in the
+        backup object (_bchm_backup, a coordinate-identical copy), corrupting
+        the backup's colors and defeating cleanup's restore-from-backup.
         """
         if not self._started:
             return
@@ -145,19 +151,20 @@ class GameController:
                   if r.status == registry.HIDER_STATUS_HIDDEN]
         if not hidden:
             return
+        # Hint selection: residues near a hidden hider, excluding GAME atoms,
+        # restricted to the target object (the `around` operator crosses
+        # object boundaries — without `and <obj>` it matches backup atoms too).
+        def hint_sele(hider_id):
+            return "(byres (%s and id %d around %s)) and not segi GAME and %s" % (
+                self.target_obj, hider_id, HINT_RADIUS, self.target_obj)
         # Prefer hiders that HAVE neighbors within HINT_RADIUS (a hider in a
         # sparse region would produce no visible hint; counting a no-op would
         # mislead the player + the log).
-        candidates = [r for r in hidden
-                      if cmd.count_atoms(
-                          "(byres (%s and id %d around %s)) and not segi GAME" % (
-                              self.target_obj, r.id, HINT_RADIUS)) > 0]
+        candidates = [r for r in hidden if cmd.count_atoms(hint_sele(r.id)) > 0]
         if not candidates:
             return  # no hider has neighbors to highlight; don't count a no-op
         rec = random.choice(candidates)
-        sele = "(byres (%s and id %d around %s)) and not segi GAME" % (
-            self.target_obj, rec.id, HINT_RADIUS)
-        cmd.color(HINT_COLOR, sele)
+        cmd.color(HINT_COLOR, hint_sele(rec.id))
         self._hint_count += 1
         self._on_counts_changed(self._hint_count, self._reveal_count)
         self._on_log("Hint: highlighted neighbors of one hider.")
@@ -216,19 +223,37 @@ class GameController:
         return self.registry
 
     def cleanup(self):
-        """Happy-path cleanup: remove all hiders by sentinel, verify structure intact, discard backup.
-        Returns True if the structure matches the pre-game backup exactly (criterion 4 happy path),
-        False if the verify_intact check fails (caller should call abort_on_error).
-        Idempotent: safe to call when not started (returns True, no-op)."""
+        """Happy-path cleanup: restore from backup (removes hiders + restores
+        hint-colored real atoms to their original colors), then discard backup.
+        Returns True on successful restore, False on failure (caller should
+        call abort_on_error).
+        Idempotent: safe to call when not started (returns True, no-op).
+
+        Phase 6 deviation: previously this removed hiders by sentinel
+        (mutation.cleanup_hiders) + verified structure (backup.verify_intact).
+        But hint() colors REAL (non-GAME) neighbor atoms orange, and sentinel
+        removal alone does NOT restore those colors. The backup (created in
+        start() before any mutation or hint coloring) has the original atoms +
+        colors, so restore from backup removes hiders AND restores colors in
+        one step. mutation.cleanup_hiders + backup.verify_intact remain
+        available as primitives but are no longer called here.
+        """
         if not self._started:
             return True
-        removed = mutation.cleanup_hiders(self.target_obj)
-        intact = backup.verify_intact(self.target_obj, self._backup_name)
+        # Restore from backup: removes hiders + restores hint-colored real
+        # atoms to their original colors. The backup was created in start()
+        # before any mutation or hint coloring, so it has the original atoms
+        # + colors. (Phase 6: hint() colors real neighbor atoms orange;
+        # sentinel-remove alone does NOT restore those colors, so we restore
+        # from backup instead of just removing hiders.)
+        ok = backup.restore(self.target_obj, self._backup_name)
         backup.discard(self._backup_name)
         self._backup_name = None
         self._started = False
         self.registry = registry.HiderRegistry()  # reset
-        return intact
+        self._reveal_count = 0  # game over -> counters reset
+        self._hint_count = 0
+        return ok
 
     def abort_on_error(self):
         """Failure-path restore: restore from backup (delete+create), then discard.
@@ -241,4 +266,6 @@ class GameController:
         self._backup_name = None
         self._started = False
         self.registry = registry.HiderRegistry()  # reset
+        self._reveal_count = 0  # game over -> counters reset (consistency w/ cleanup)
+        self._hint_count = 0
         return ok
