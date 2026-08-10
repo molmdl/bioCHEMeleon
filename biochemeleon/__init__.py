@@ -68,6 +68,9 @@ class PluginDialog(QtWidgets.QDialog):
 
         # Wire the Start button (BTN-07) -> _on_start (defined below).
         self.setup_tab.start_btn.clicked.connect(self._on_start)
+        # Phase 7: Cleanup (Setup tab) + Restart (Game tab) button wiring.
+        self.setup_tab.cleanup_btn.clicked.connect(self._on_cleanup)
+        self.game_tab._restart_btn.clicked.connect(self._on_restart)
 
         # Layout
         layout = QtWidgets.QVBoxLayout(self)
@@ -216,7 +219,17 @@ class PluginDialog(QtWidgets.QDialog):
         # yet cleaned up), clean it up first so no stale hiders accumulate in
         # the object. Without this, old hiders (absent from the new registry)
         # would make every old-hider click a "Miss!" and the atom count would
-        # grow each round. cleanup() is idempotent (no-op if _started=False).
+        #     grow each round. cleanup() is idempotent (no-op if _started=False).
+        # Wizard lifecycle fix (Phase 7): deactivate the old PickWizard before
+        # cleanup. Without this, _on_start creates a new wizard in _begin_play
+        # without deactivating the old one, corrupting mouse_selection_mode
+        # (stays at 0) + losing the prior-wizard reference. Fixes the bug for
+        # BOTH Start-mid-game AND Restart (Restart calls _on_start).
+        if self.game_tab._wizard is not None:
+            self.game_tab._wizard.deactivate()
+            self.game_tab._wizard = None
+            if self._controller is not None:
+                self._controller._wizard = None
         if self._controller is not None and self._controller._started:
             self._controller.cleanup()
         self._controller = game.GameController(target_obj)
@@ -229,3 +242,45 @@ class PluginDialog(QtWidgets.QDialog):
         # 4. Switch to Game tab + start the 3-2-1 countdown
         self.tabs.setCurrentWidget(self.game_tab)
         self.game_tab.start_countdown(self._controller)
+
+    def _on_restart(self):
+        """Restart (GAME-10): fresh round with new hiders.
+
+        Deactivates the old wizard + stops the timer, then calls _on_start
+        which handles: prior-game cleanup, new hider_specs from Setup tab
+        state, new GameController, tab switch, countdown. The log is cleared
+        in start_countdown (Phase 7 fix in gui_game.py). The wizard
+        deactivation here is defensive (belt + suspenders) -- _on_start also
+        deactivates the wizard (wizard-lifecycle fix), so if the wizard is
+        already None, this is a no-op.
+        """
+        if self.game_tab._wizard is not None:
+            self.game_tab._wizard.deactivate()
+            self.game_tab._wizard = None
+            if self._controller is not None:
+                self._controller._wizard = None
+        self.game_tab._timer.stop()
+        self._on_start()
+
+    def _on_cleanup(self):
+        """Cleanup (BTN-06): restore original object + END round (no new hiders).
+
+        Deactivates the wizard, stops the timer, restores the object from
+        backup (via controller.cleanup), resets the Game tab UI, and releases
+        the controller (_controller = None). After cleanup, the model is back
+        to its pre-Start state (atom count matches, no GAME atoms). The user
+        can Start a new game from the Setup tab.
+        """
+        if self._controller is None:
+            return  # no game to clean up
+        if self.game_tab._wizard is not None:
+            self.game_tab._wizard.deactivate()
+            self.game_tab._wizard = None
+            self._controller._wizard = None
+        self.game_tab._timer.stop()
+        self._controller.cleanup()
+        self.game_tab._info_log.clear()
+        self.game_tab._timer_label.setText("0:00")
+        self.game_tab._remaining_label.setText("Remaining: -")
+        self.game_tab._reveal_label.setText("Reveals: 0")
+        self._controller = None  # released; Start re-creates via _on_start
