@@ -188,10 +188,16 @@ class SetupTab(QtWidgets.QWidget):
         self.random_btn = QtWidgets.QPushButton("Randomize")
         self.save_btn = QtWidgets.QPushButton("Save Setup…")
         self.load_btn = QtWidgets.QPushButton("Load Setup…")
+        # Phase 7: Cleanup button (BTN-06) -- restore the model to its original
+        # state (no hiders). Wired in __init__.py (same pattern as start_btn).
+        self.cleanup_btn = QtWidgets.QPushButton("Cleanup model")
+        self.cleanup_btn.setToolTip(
+            "Remove all game-generated hiders and restore the model to its "
+            "original state. (Does not start a new round — use Start for that.)")
         self.start_btn = QtWidgets.QPushButton("Start")
         self.start_btn.setStyleSheet("font-weight: bold;")  # primary action
         for b in (self.reset_btn, self.random_btn, self.save_btn,
-                  self.load_btn, self.start_btn):
+                 self.load_btn, self.cleanup_btn, self.start_btn):
             brow.addWidget(b)
         outer.addWidget(btns)
 
