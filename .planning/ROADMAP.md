@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Mutation Safety & Hider Registry Foundation** - De-risk object mutation + registry (highest-risk area)
 - [x] **Phase 4: MVP Core Loop (Sphere)** - THE core value: load → generate spheres → click-to-find → win
 - [x] **Phase 5: Line/Stick & Cartoon Generators** - The harder blend-in generators (cartoon = L-complexity swing)
-- [ ] **Phase 6: Hint & Reveal** - Get-help / give-up mechanics with usage tracking
+- [x] **Phase 6: Hint & Reveal** - Get-help / give-up mechanics with usage tracking
 - [ ] **Phase 7: Found-Hider Management, Restart & Cleanup** - Manage found hiders, reset, and clean the model
 - [ ] **Phase 8: Persistence & Shareable Puzzles** - Save/load game state + generate&export / import
 - [ ] **Phase 9: Large Demo Fetch & Source Attribution** - Membrane/glycoprotein fetch + DATA_SOURCES.md
@@ -144,12 +144,12 @@ Plans:
   2. Pressing Reveal-one (after a confirm prompt) marks one random unfound hider as found
   3. Pressing Reveal-all (after a confirm prompt) marks all remaining hiders as found
   4. The number of reveals used is tracked and visible across the game
-**Plans**: 3 plans (2/3 complete)
+**Plans**: 3 plans (3/3 complete)
 
 Plans:
 - [x] 06-01-PLAN.md — TDD GameController hint/reveal_one/reveal_all/_mark_found + counters + on_counts_changed callback (RED/GREEN/REFACTOR)
 - [x] 06-02-PLAN.md — GUI: Hint/Reveal-one/Reveal-all buttons + reveal counter label + confirm dialogs + 4th callback wiring
-- [ ] 06-03-PLAN.md — Headless smoke (hint+reveal+counter) + human-verify checkpoint (4 success criteria)
+- [x] 06-03-PLAN.md — Headless smoke (hint+reveal+counter) + human-verify checkpoint (4 success criteria) — APPROVED; 3 Rule-1 bug fixes during verification (hint sparse-hider, reveal-counter reset, hint-orange-persist via backup-restore + object-scoped selection)
 
 ### Phase 7: Found-Hider Management, Restart & Cleanup
 **Goal**: The player can manage how found hiders are displayed, restart for a fresh round, and clean the model back to its original state.
@@ -247,7 +247,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 3. Mutation Safety & Hider Registry Foundation | 20/20 | ✓ Complete | 2026-08-06 |
 | 4. MVP Core Loop (Sphere) | 6/6 | ✓ Complete | 2026-08-08 |
 | 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 + 05-09 | ✓ Complete (v1 scope; alt-conf deferred to Phase 11) | 2026-08-10 |
-| 6. Hint & Reveal | 0/3 | Not started | - |
+| 6. Hint & Reveal | 3/3 | ✓ Complete | 2026-08-10 |
 | 7. Found-Hider Management, Restart & Cleanup | 0/TBD | Not started | - |
 | 8. Persistence & Shareable Puzzles | 0/TBD | Not started | - |
 | 9. Large Demo Fetch & Source Attribution | 0/TBD | Not started | - |
