@@ -270,3 +270,44 @@ class HiderRegistry(object):
             self._records[(obj, int(aid))] = HiderRecord(aid, obj, rep=None,
                                                          status=HIDER_STATUS_HIDDEN)
         return self
+
+
+# ---- Phase 7 found-hider selection helpers ----
+
+def build_found_selection(records, object_name):
+    """Build a PyMOL selection string for all FOUND hiders.
+
+    Pure (no cmd, no Qt). Returns ``'<object_name> and id X+Y+Z'`` for
+    records with ``status == HIDER_STATUS_FOUND``, or ``None`` if no
+    records are found. Used by the Game tab dropdown (GAME-08) to select
+    found hiders for hide/show/recolor.
+
+    ``records`` is a list of :class:`HiderRecord` (typically
+    ``registry.all()``). The selection uses atom ``id`` (stable across
+    add/remove; Pitfall 4) joined with ``+`` — PyMOL's ``id`` selector
+    accepts the ``id 1+2+3`` form. ``None`` (not an empty string) signals
+    "no found hiders" so the caller can early-return without issuing a
+    malformed selection.
+    """
+    found_ids = [r.id for r in records if r.status == HIDER_STATUS_FOUND]
+    if not found_ids:
+        return None
+    return "%s and id %s" % (object_name,
+                             "+".join(str(i) for i in found_ids))
+
+
+def group_found_by_rep(records):
+    """Return ``{rep: [ids]}`` for all FOUND records with ``rep is not None``.
+
+    Pure dict building. Skips ``rep=None`` records (the post-``.pse``
+    reload reconstruction case — the sentinel carries no rep; Phase 8
+    ``.bcm`` sidecar reconciles). Used by the Game tab dropdown 'show'
+    mode: iterate the dict and ``cmd.show(rep, '<obj> and id X+Y')`` per
+    rep so each found hider is re-shown in its ORIGINAL rep (not a single
+    uniform rep for all).
+    """
+    out = {}
+    for r in records:
+        if r.status == HIDER_STATUS_FOUND and r.rep is not None:
+            out.setdefault(r.rep, []).append(r.id)
+    return out

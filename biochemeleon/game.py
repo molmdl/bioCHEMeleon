@@ -32,6 +32,12 @@ class GameController:
         self._reveal_count = 0
         self._hint_count = 0
         self._on_counts_changed = lambda h, r: None
+        # Phase 7 DIFF-04: player-chosen found-hider highlight color.
+        # Default 'green' preserves the legacy _mark_found behavior so
+        # existing tests asserting cmd.color('green', ...) pass unchanged.
+        # The GUI color picker (Plan 02) overrides via cmd.set_color +
+        # assignment: self._found_color = 'found_highlight'.
+        self._found_color = 'green'
 
     def start(self, hider_specs):
         """Begin a round. hider_specs: list of (payload, rep) tuples where
@@ -108,7 +114,7 @@ class GameController:
     def _mark_found(self, hider_id):
         """Shared mark+color helper. Does NOT log or fire win (callers do those)."""
         self.registry.mark_found(self.target_obj, hider_id)
-        cmd.color('green', "%s and id %s" % (self.target_obj, hider_id))
+        cmd.color(self._found_color, "%s and id %s" % (self.target_obj, hider_id))
 
     def win(self):
         """All hiders found: fire on_win(elapsed). Wizard deactivation is
