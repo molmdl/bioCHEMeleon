@@ -41,12 +41,31 @@ class GameTab(QtWidgets.QWidget):
         btn_row.addWidget(self._hint_btn)
         btn_row.addWidget(self._reveal_one_btn)
         btn_row.addWidget(self._reveal_all_btn)
+        # Phase 7: found-hider management dropdown + color picker + restart
+        self._found_mgmt_combo = QtWidgets.QComboBox()
+        self._found_mgmt_combo.addItem("Found hiders: (select)")
+        self._found_mgmt_combo.addItem("Hide found")
+        self._found_mgmt_combo.addItem("Show found")
+        self._found_mgmt_combo.addItem("Recolor found")
+        btn_row.addWidget(self._found_mgmt_combo)
+        self._color_btn = QtWidgets.QPushButton("Color…")
+        self._color_btn.setToolTip("Choose highlight color for found hiders")
+        btn_row.addWidget(self._color_btn)
+        self._restart_btn = QtWidgets.QPushButton("Restart")
+        self._restart_btn.setToolTip("Start a fresh round with new hiders")
+        btn_row.addWidget(self._restart_btn)
         btn_row.addStretch(1)
         btn_row.addWidget(self._reveal_label)
         layout.addLayout(btn_row)
         self._hint_btn.clicked.connect(self._on_hint_clicked)
         self._reveal_one_btn.clicked.connect(self._on_reveal_one_clicked)
         self._reveal_all_btn.clicked.connect(self._on_reveal_all_clicked)
+        # Phase 7: found-mgmt combo + color picker wiring (restart wired in
+        # __init__.py — same pattern as start_btn). Use `activated` (NOT
+        # currentIndexChanged) so the index-0 placeholder doesn't fire on
+        # construction.
+        self._found_mgmt_combo.activated.connect(self._on_found_mgmt_activated)
+        self._color_btn.clicked.connect(self._on_pick_color)
         # --- 1 Hz QTimer (main thread; PITFALLS.md Pitfall 6) ---
         self._timer = QtCore.QTimer()
         self._timer.setInterval(1000)
@@ -101,6 +120,65 @@ class GameTab(QtWidgets.QWidget):
             return
         self._controller.reveal_all()
 
+    def _on_found_mgmt(self, mode):
+        """Found-hider management core (GAME-08): hide/show/recolor the found
+        hiders. Called by the combo handler AND _on_pick_color. Filters the
+        registry by HIDER_STATUS_FOUND (NOT by color -- found hiders may be
+        recolored to any color, so status is the only reliable predicate).
+        """
+        if self._controller is None or not self._controller._started:
+            return
+        from pymol import cmd
+        from .registry import (HIDER_STATUS_FOUND, build_found_selection,
+                               group_found_by_rep)
+        found = [r for r in self._controller.registry.all()
+                 if r.status == HIDER_STATUS_FOUND]
+        if not found:
+            return
+        sele = build_found_selection(found, self._controller.target_obj)
+        if sele is None:
+            return  # defensive -- build_found_selection returns None for no found
+        if mode == 'hide':
+            cmd.hide("everything", sele)
+        elif mode == 'show':
+            by_rep = group_found_by_rep(found)
+            for rep, ids in by_rep.items():
+                cmd.show(rep, "%s and id %s" % (
+                    self._controller.target_obj,
+                    "+".join(str(i) for i in ids)))
+        elif mode == 'recolor':
+            cmd.color(self._controller._found_color, sele)
+
+    def _on_found_mgmt_activated(self, index):
+        """Combo handler. Maps combo index to mode (1=hide, 2=show, 3=recolor).
+        Index 0 is the placeholder (no-op). Resets to 0 after handling so the
+        user can re-select the same action."""
+        mode = {1: 'hide', 2: 'show', 3: 'recolor'}.get(index)
+        if mode:
+            self._on_found_mgmt(mode)
+        self._found_mgmt_combo.setCurrentIndex(0)  # reset for re-selection
+
+    def _on_pick_color(self):
+        """Color picker (DIFF-04): let the player choose a highlight color.
+        QColorDialog.getColor() is a static method that runs its own modal
+        event loop internally -- it does NOT use the exec_ modal call from our
+        code, so the modeless-main rule is preserved and the exec_ grep gate
+        stays at 1 (the existing _finish_win modal message only).
+        Sets a PyMOL named color 'found_highlight' then assigns it to the
+        controller's _found_color so new finds use it. Auto-recolors existing
+        found hiders so the change is immediately visible.
+        """
+        if self._controller is None or not self._controller._started:
+            return
+        color = QtWidgets.QColorDialog.getColor()
+        if not color.isValid():
+            return  # cancelled
+        r, g, b, _ = color.getRgbF()
+        from pymol import cmd
+        cmd.set_color('found_highlight', [r, g, b])
+        self._controller._found_color = 'found_highlight'
+        self._on_found_mgmt('recolor')  # auto-recolor existing found
+
     def _on_tick(self):
         elapsed = time.time() - self._start_time
         mins = int(elapsed) // 60
@@ -113,6 +191,7 @@ class GameTab(QtWidgets.QWidget):
         PickWizard, registers callbacks, and starts the timer."""
         self._controller = controller
         self._reveal_label.setText("Reveals: 0")  # reset for new round (C8)
+        self._info_log.clear()  # fresh round = clean log (Phase 7 fix)
         self._log("Get ready...")
         self._countdown_step(3)
 
@@ -140,6 +219,7 @@ class GameTab(QtWidgets.QWidget):
         # tab's. The tab's copy feeds _on_tick (timer label); the controller's
         # copy feeds win()'s elapsed math. Both must be set.
         self._controller._start_time = self._start_time
+        self._timer.stop()  # defensive: stop any prior timer (Restart mid-game)
         self._timer.start(1000)
         self._update_remaining(self._controller._remaining())
 
