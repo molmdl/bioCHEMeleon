@@ -481,6 +481,33 @@ class TestGameControllerHintReveal(unittest.TestCase):
         self.assertEqual(gc2._reveal_count, 0)
         self.assertEqual(gc2._hint_count, 0)
 
+    # ---- _found_color threading (Phase 7 DIFF-04) ----
+
+    def test_found_color_default_green(self):
+        """Fresh GameController._found_color == 'green' (default; DIFF-04
+        overrides via cmd.set_color + assignment in the GUI). The default
+        preserves the legacy behavior so existing tests asserting
+        cmd.color('green', ...) pass unchanged."""
+        gc = GameController('1ubq')
+        self.assertEqual(gc._found_color, 'green')
+
+    def test_found_color_threading(self):
+        """_mark_found uses self._found_color instead of hardcoded 'green'.
+        Set gc._found_color = 'cyan'; _mark_found(100) -> cmd.color called
+        with 'cyan' (NOT 'green'). This is the WSL-testable proof that
+        DIFF-04's parameterization works; the GUI color picker (Plan 02)
+        assigns _found_color + cmd.set_color('found_highlight', ...) and
+        relies on _mark_found reading it back here."""
+        self.gc.registry.register('1ubq', 100, 'spheres')
+        self.gc._found_color = 'cyan'
+        game.cmd.reset_mock()
+
+        self.gc._mark_found(100)
+
+        self.assertEqual(self.gc.registry.get('1ubq', 100).status,
+                         HIDER_STATUS_FOUND)
+        game.cmd.color.assert_called_once_with('cyan', "1ubq and id 100")
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

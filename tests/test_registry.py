@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from biochemeleon.registry import (
     HiderRecord, HiderRegistry,
     HIDER_STATUS_HIDDEN, HIDER_STATUS_FOUND,
+    build_found_selection, group_found_by_rep,
 )
 from biochemeleon.setup_state import GAME_REPS
 
@@ -573,6 +574,106 @@ class TestHiderRegistryEdgeCases(unittest.TestCase):
         for rep in GAME_REPS:
             with self.subTest(rep=rep):
                 self.assertEqual(counts[rep], 0)
+
+
+class TestFoundSelectionHelpers(unittest.TestCase):
+    """Test the Phase 7 pure module-level helpers build_found_selection +
+    group_found_by_rep (Phase 7 Plan 01, GAME-08 dropdown foundation).
+
+    These are MODULE-LEVEL functions in registry.py (NOT HiderRegistry
+    methods) placed AFTER the HiderRegistry class. They encode the
+    selection logic the Game tab dropdown (Plan 02) uses: filter the
+    registry records by status==found, build a PyMOL selection string
+    (or a per-rep {rep: [ids]} dict) for the found hiders. Pure (no cmd,
+    no Qt) — WSL-testable like the rest of registry.py.
+
+    Build HiderRecord instances directly: HiderRecord(id, object, rep,
+    status=...). The helpers take a list of records (typically
+    registry.all()) and return either a selection string or a dict.
+    """
+
+    # ---- build_found_selection ----
+
+    def test_build_found_selection_empty(self):
+        """build_found_selection([], 'obj') -> None (no records)."""
+        self.assertIsNone(build_found_selection([], "obj"))
+
+    def test_build_found_selection_no_found(self):
+        """All hidden -> None (no found records to select)."""
+        recs = [
+            HiderRecord(100, 'obj', 'spheres', status=HIDER_STATUS_HIDDEN),
+            HiderRecord(101, 'obj', 'spheres', status=HIDER_STATUS_HIDDEN),
+        ]
+        self.assertIsNone(build_found_selection(recs, "obj"))
+
+    def test_build_found_selection_one_found(self):
+        """[found(100)] -> 'obj and id 100'."""
+        recs = [HiderRecord(100, 'obj', 'spheres', status=HIDER_STATUS_FOUND)]
+        self.assertEqual(build_found_selection(recs, "obj"), "obj and id 100")
+
+    def test_build_found_selection_three_found(self):
+        """[found(100), found(101), found(102)] -> 'obj and id 100+101+102'."""
+        recs = [
+            HiderRecord(100, 'obj', 'spheres', status=HIDER_STATUS_FOUND),
+            HiderRecord(101, 'obj', 'sticks', status=HIDER_STATUS_FOUND),
+            HiderRecord(102, 'obj', 'cartoon', status=HIDER_STATUS_FOUND),
+        ]
+        self.assertEqual(build_found_selection(recs, "obj"),
+                         "obj and id 100+101+102")
+
+    def test_build_found_selection_mixed(self):
+        """[hidden(100), found(101), hidden(102)] -> 'obj and id 101'
+        (only FOUND records are included; hidden skipped)."""
+        recs = [
+            HiderRecord(100, 'obj', 'spheres', status=HIDER_STATUS_HIDDEN),
+            HiderRecord(101, 'obj', 'sticks', status=HIDER_STATUS_FOUND),
+            HiderRecord(102, 'obj', 'cartoon', status=HIDER_STATUS_HIDDEN),
+        ]
+        self.assertEqual(build_found_selection(recs, "obj"), "obj and id 101")
+
+    # ---- group_found_by_rep ----
+
+    def test_group_found_by_rep_empty(self):
+        """group_found_by_rep([]) -> {} (no records)."""
+        self.assertEqual(group_found_by_rep([]), {})
+
+    def test_group_found_by_rep_no_found(self):
+        """All hidden -> {} (no found records to group)."""
+        recs = [
+            HiderRecord(100, 'obj', 'spheres', status=HIDER_STATUS_HIDDEN),
+            HiderRecord(101, 'obj', 'sticks', status=HIDER_STATUS_HIDDEN),
+        ]
+        self.assertEqual(group_found_by_rep(recs), {})
+
+    def test_group_found_by_rep_one_found(self):
+        """[found(100, spheres)] -> {'spheres': [100]}."""
+        recs = [HiderRecord(100, 'obj', 'spheres', status=HIDER_STATUS_FOUND)]
+        self.assertEqual(group_found_by_rep(recs), {"spheres": [100]})
+
+    def test_group_found_by_rep_mixed_reps(self):
+        """[found(100, spheres), found(101, sticks)] ->
+        {'spheres': [100], 'sticks': [101]} (per-rep grouping)."""
+        recs = [
+            HiderRecord(100, 'obj', 'spheres', status=HIDER_STATUS_FOUND),
+            HiderRecord(101, 'obj', 'sticks', status=HIDER_STATUS_FOUND),
+        ]
+        self.assertEqual(group_found_by_rep(recs),
+                         {"spheres": [100], "sticks": [101]})
+
+    def test_group_found_by_rep_rep_none_skipped(self):
+        """[found(100, None)] -> {} (rep=None records skipped — post-.pse
+        reload reconstruction case; sentinel carries no rep)."""
+        recs = [HiderRecord(100, 'obj', None, status=HIDER_STATUS_FOUND)]
+        self.assertEqual(group_found_by_rep(recs), {})
+
+    def test_group_found_by_rep_mixed_rep_and_none(self):
+        """[found(100, spheres), found(101, None)] -> {'spheres': [100]}
+        (rep=None record skipped, rep=spheres record kept)."""
+        recs = [
+            HiderRecord(100, 'obj', 'spheres', status=HIDER_STATUS_FOUND),
+            HiderRecord(101, 'obj', None, status=HIDER_STATUS_FOUND),
+        ]
+        self.assertEqual(group_found_by_rep(recs), {"spheres": [100]})
 
 
 if __name__ == '__main__':
