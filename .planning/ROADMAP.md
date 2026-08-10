@@ -159,10 +159,12 @@ Plans:
   1. The found-hider management dropdown lets the player hide, show, or recolor all found hiders, with a player-chosen highlight color (accessibility / color-blind support)
   2. Pressing Restart restores the object from the stored initial state and regenerates hiders for a fresh round
   3. Pressing Cleanup removes all game-generated atoms/representations (by `segi='GAME'` sentinel only), leaving the original object exactly as it was (atom count matches pre-Start)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01: TBD during planning
+- [ ] 07-01-PLAN.md — TDD pure helpers (build_found_selection + group_found_by_rep in registry.py) + _found_color threading in game.py _mark_found (RED/GREEN/REFACTOR, WSL-tested)
+- [ ] 07-02-PLAN.md — GUI wiring: found-hider dropdown QComboBox + color picker QColorDialog + Restart button in gui_game.py; Cleanup button in gui_setup.py; _on_restart + _on_cleanup + wizard-lifecycle fix in __init__.py + button wiring
+- [ ] 07-03-PLAN.md — Headless smoke (Restart/Cleanup/found-mgmt/color via pure cmd) + human-verify checkpoint (all 4 success criteria + Qt paths + wizard lifecycle)
 
 ### Phase 8: Persistence & Shareable Puzzles
 **Goal**: The player can checkpoint a game in progress and reload it later, and an educator can prepare a puzzle (Generate & export) and share it for a player to Import.
@@ -248,7 +250,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 4. MVP Core Loop (Sphere) | 6/6 | ✓ Complete | 2026-08-08 |
 | 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 + 05-09 | ✓ Complete (v1 scope; alt-conf deferred to Phase 11) | 2026-08-10 |
 | 6. Hint & Reveal | 3/3 | ✓ Complete | 2026-08-10 |
-| 7. Found-Hider Management, Restart & Cleanup | 0/TBD | Not started | - |
+| 7. Found-Hider Management, Restart & Cleanup | 0/3 | Planned (ready for execution) | - |
 | 8. Persistence & Shareable Puzzles | 0/TBD | Not started | - |
 | 9. Large Demo Fetch & Source Attribution | 0/TBD | Not started | - |
 | 10. Polish, Endgame & Help | 0/TBD | Not started | - |
