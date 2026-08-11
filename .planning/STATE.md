@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-08-02)
 
 **Core value:** The player can load a molecule, generate blended "hider" atoms that match the local representation style, and reliably find them by clicking — with a working timer and win condition.
-**Current focus:** Phase 8 (Persistence & Shareable Puzzles) IN PROGRESS — Plan 02 COMPLETE (TDD build_bcm_dict + parse_bcm_dict in new persistence.py). Plan 01 COMPLETE (TDD reconcile_with_bcm pure method). Phase 7 COMPLETE + VERIFIED (gsd-verifier PASSED, 8/8 must-haves). Phase 6 COMPLETE + VERIFIED. Phase 5 COMPLETE (v1 scope). Next: 08-03 (apply_bcm_dict + .bcmz file I/O).
+**Current focus:** Phase 8 (Persistence & Shareable Puzzles) IN PROGRESS — Plan 03 COMPLETE (apply_bcm_dict + write_bcmz/read_bcmz + resolve_target in persistence.py + GameController.import_state + _is_imported/_imported_bcm in game.py). Plan 02 COMPLETE (TDD build_bcm_dict + parse_bcm_dict). Plan 01 COMPLETE (TDD reconcile_with_bcm pure method). Phase 7 COMPLETE + VERIFIED. Next: 08-04 (GUI wiring: _on_export/_on_import/_on_save/_on_restart_imported).
 
 ## Current Position
 
-Phase: 8 of 11 — Persistence & Shareable Puzzles — IN PROGRESS (Plan 02 of 5 complete). Phase 7 COMPLETE + VERIFIED. Phase 6 COMPLETE + VERIFIED. Phase 5 COMPLETE (v1 scope). Phase 4 COMPLETE (6/6). Phase 3 COMPLETE (20/20). Phase 11 (Alt-conf Cartoon/Ribbon Hider v1 Follow-up) ADDED — after Phase 10, research-required.
-Plan: 08-02 of 5 in Phase 8 — COMPLETE. TDD plan (RED/GREEN/REFACTOR): RED 69a5edc (15 failing tests, ImportError for biochemeleon.persistence); GREEN 005bf65 (build_bcm_dict + parse_bcm_dict + BCM_MAGIC/BCM_VERSION in NEW persistence.py, all 15 tests pass); REFACTOR gates-only (clean on first pass, no commit). 2 deviations: Rule 1 test format-string typo fixed (test_parse_then_build_round_trip), Rule 3 docstring reworded "NO `from pymol import cmd`" -> "NO `pymol` import" to avoid purity-grep false-positive (mirrors 03-10/08-01 precedent). persistence.py is PURE (no pymol at module level; Plan 03 adds cmd-coupled I/O with lazy import). kind='puzzle' forces started=False (educator did not play). found_color_rgb forward-compat hook (None in Phase 8). All WSL gates green (py_compile + 182 tests + Pitfall-1=0 + exec_=1 unchanged + persistence purity=0 + build_bcm_dict=1 + parse_bcm_dict=1). Next: 08-03-PLAN.md (apply_bcm_dict + .bcmz file I/O).
-Status: Phase 8 IN PROGRESS (Plan 02 of 5 complete). Next: 08-03-PLAN.md (apply_bcm_dict + write_bcmz/read_bcmz cmd-coupled I/O).
-Last activity: 2026-08-12 — Completed 08-02-PLAN.md (TDD build_bcm_dict + parse_bcm_dict in new persistence.py).
+Phase: 8 of 11 — Persistence & Shareable Puzzles — IN PROGRESS (Plan 03 of 5 complete). Phase 7 COMPLETE + VERIFIED. Phase 6 COMPLETE + VERIFIED. Phase 5 COMPLETE (v1 scope). Phase 4 COMPLETE (6/6). Phase 3 COMPLETE (20/20). Phase 11 (Alt-conf Cartoon/Ribbon Hider v1 Follow-up) ADDED — after Phase 10, research-required.
+Plan: 08-03 of 5 in Phase 8 — COMPLETE. persistence.py extended with 4 new PURE functions (apply_bcm_dict + write_bcmz + read_bcmz + resolve_target — stdlib zipfile/json/tempfile + dict/set ops, 0 from pymol). game.py extended with GameController.import_state (reconstruct_registry + apply_bcm_dict + cmd.color re-apply + backup.snapshot + _is_imported/_imported_bcm) + _is_imported/_imported_bcm fields in __init__. 13 new tests (TestApplyBcmDict 6 + TestWriteReadBcmz 3 + TestResolveTarget 3 + TestBuildApplyRoundTrip 1) = 28 total persistence tests. 2 deviations: Rule 1 docstring fix (persistence.py "cmd-coupled" → "pure file-I/O" — pre-existing Plan 02 inaccuracy), Rule 1 test class rename (TestBcmRoundTrip → TestBuildApplyRoundTrip — plan's name collided with existing class, would shadow 2 tests). Lazy import pattern (from . import persistence inside import_state) breaks circular dep. All WSL gates green (py_compile all + 206 tests [28 persistence + 167 setup_state/registry + 24 game_controller] + Pitfall-1=0 + exec_=1 unchanged + persistence purity=0). Next: 08-04-PLAN.md (GUI wiring).
+Status: Phase 8 IN PROGRESS (Plan 03 of 5 complete). Next: 08-04-PLAN.md (GUI wiring: export_btn + _on_export/_on_import/_on_save/_on_restart_imported + _is_imported flag routing).
+Last activity: 2026-08-12 — Completed 08-03-PLAN.md (apply_bcm_dict + write/read_bcmz + GameController.import_state).
 
-Progress: ██████████████████████████████████████████████████░ 98% (50 of 51 plans done; Phase 8 Plan 02 of 5 complete)
+Progress: ███████████████████████████████████████████████████░░ 96% (51 of 53 plans done; Phase 8 Plan 03 of 5 complete)
 
 ## Performance Metrics
 
@@ -301,6 +301,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-12 (Plan 08-02 executed — TDD build_bcm_dict + parse_bcm_dict in NEW persistence.py. RED 69a5edc [15 failing tests, ImportError for biochemeleon.persistence] → GREEN 005bf65 [build_bcm_dict + parse_bcm_dict + BCM_MAGIC/BCM_VERSION, all 15 tests pass] → REFACTOR gates-only [clean on first pass, no commit]. 2 deviations: Rule 1 test format-string typo fixed, Rule 3 docstring reworded to avoid from-pymol grep false-positive. persistence.py is PURE (no pymol at module level; Plan 03 adds cmd-coupled I/O with lazy import). kind='puzzle' forces started=False. found_color_rgb forward-compat hook (None in Phase 8). All WSL gates green. Next: 08-03-PLAN.md.)
-Stopped at: Completed 08-02-PLAN.md (Phase 8 Plan 02 of 5). Next: 08-03-PLAN.md (apply_bcm_dict + write_bcmz/read_bcmz cmd-coupled I/O).
+Last session: 2026-08-12 (Plan 08-03 executed — apply_bcm_dict + write_bcmz/read_bcmz/resolve_target in persistence.py [PURE — 0 from pymol] + GameController.import_state + _is_imported/_imported_bcm in game.py [lazy import breaks circular dep]. 3 tasks, 1 combined commit 91e8049 per plan's step 6. 13 new tests = 28 total persistence tests. 2 Rule-1 deviations: docstring fix [persistence.py "cmd-coupled" → "pure file-I/O"] + test class rename [TestBcmRoundTrip → TestBuildApplyRoundTrip, collision avoidance]. All WSL gates green [py_compile all + 206 tests + Pitfall-1=0 + exec_=1 + persistence purity=0]. Next: 08-04-PLAN.md.)
+Stopped at: Completed 08-03-PLAN.md (Phase 8 Plan 03 of 5). Next: 08-04-PLAN.md (GUI wiring: export_btn + _on_export/_on_import/_on_save/_on_restart_imported + _is_imported flag routing).
 Resume file: None
