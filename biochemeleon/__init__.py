@@ -353,44 +353,160 @@ class PluginDialog(QtWidgets.QDialog):
         self.game_tab._timer.start(1000)
         self.game_tab._log("Saved checkpoint to %s" % path)
 
-    def _on_restart(self):
-        """Restart (GAME-10): fresh round with new hiders.
+    def _on_import(self):
+        """GAME-04: load a previously-exported game and let the player play it.
+        Unzip .bcmz -> refuse-first collision check -> cmd.load(partial=1,
+        MERGE) -> resolve_target -> GameController.import_state -> switch
+        to Game tab -> start_countdown(elapsed). NO re-generation.
 
-        Deactivates the old wizard + stops the timer, then calls _on_start
-        which handles: prior-game cleanup, new hider_specs from Setup tab
-        state, new GameController, tab switch, countdown. The log is cleared
-        in start_countdown (Phase 7 fix in gui_game.py). The wizard
-        deactivation here is defensive (belt + suspenders) -- _on_start also
-        deactivates the wizard (wizard-lifecycle fix), so if the wizard is
-        already None, this is a no-op.
+        Discrepancy 1 resolution: cmd.load(pse_path, partial=1) MERGES the
+        .pse into the current session (preserves the player's scene). A
+        refuse-first collision check defends against the unverified C-level
+        collision: if the .bcm's target_object is already loaded, refuse
+        BEFORE the load with a clear message.
         """
+        from . import game, persistence, demos
+        from pymol import cmd
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Import bioCHEMeleon game", "",
+            "bioCHEMeleon Game (*.bcmz);;All Files (*)")
+        if not path:
+            return
+        # 1. Unzip + read .bcm (read_bcmz returns (pse_path, bcm_dict))
+        try:
+            pse_path, bcm_dict = persistence.read_bcmz(path)
+        except (OSError, ValueError) as exc:
+            QtWidgets.QMessageBox.warning(
+                self, "Import failed", "Could not read game file:\n%s" % exc)
+            return
+        # 2. Refuse-first collision check (Discrepancy 1 resolution):
+        #    if the .bcm's target_object is already loaded, refuse BEFORE
+        #    the load -- defends against the unverified C-level collision.
+        target_in_bcm = bcm_dict.get('target_object')
+        if (target_in_bcm and
+                target_in_bcm in demos.list_loaded_molecule_objects()):
+            QtWidgets.QMessageBox.warning(
+                self, "Name collision",
+                "An object named '%s' is already loaded. Please rename or "
+                "delete it before importing this game (or re-export with a "
+                "unique object name)." % target_in_bcm)
+            return
+        # 3. Clean any prior game (mirror _prepare_and_start wizard teardown)
+        if self.game_tab._wizard is not None:
+            self.game_tab._wizard.deactivate()
+            self.game_tab._wizard = None
+            if self._controller is not None:
+                self._controller._wizard = None
+        if self._controller is not None and self._controller._started:
+            self._controller.cleanup()
+        # 4. Record names, then MERGE the .pse (partial=1 preserves scene)
+        names_before = set(cmd.get_names('public_objects', enabled_only=True))
+        try:
+            cmd.load(pse_path, partial=1)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(
+                self, "Import failed",
+                "Could not load the game session:\n%s" % exc)
+            return
+        # 5. Resolve target (Fact 2: name comes from the .pse, not filename)
+        target_obj = persistence.resolve_target(
+            bcm_dict, names_before,
+            demos.list_loaded_molecule_objects())
+        if target_obj is None:
+            QtWidgets.QMessageBox.warning(
+                self, "Import failed",
+                "Could not identify the game's target object. Please ensure "
+                "the game file is valid.")
+            return
+        # 6. Build controller + import state (reconstruct + apply + backup)
+        self._controller = game.GameController(target_obj)
+        try:
+            self._controller.import_state(bcm_dict)
+        except (RuntimeError, ValueError) as exc:
+            QtWidgets.QMessageBox.warning(
+                self, "Import failed",
+                "Could not restore game state:\n%s" % exc)
+            self._controller = None
+            return
+        # 7. Switch to Game tab + start countdown with resumed timer
+        self.tabs.setCurrentWidget(self.game_tab)
+        elapsed = float(bcm_dict.get('timer_elapsed', 0.0))
+        self.game_tab.start_countdown(self._controller, elapsed=elapsed)
+
+    def _on_restart(self):
+        """Restart: fresh round. Routes on _is_imported -- imported games
+        restore from the post-import backup (no re-generation); non-imported
+        games re-generate from the Setup tab via _on_start."""
         if self.game_tab._wizard is not None:
             self.game_tab._wizard.deactivate()
             self.game_tab._wizard = None
             if self._controller is not None:
                 self._controller._wizard = None
         self.game_tab._timer.stop()
-        self._on_start()
+        if (self._controller is not None
+                and getattr(self._controller, '_is_imported', False)):
+            self._on_restart_imported()
+        else:
+            self._on_start()
+
+    def _on_restart_imported(self):
+        """Restart an imported game: restore from the post-import backup
+        (re-hides all hiders, resets found-status to the imported state,
+        clears hint colors), reset runtime counters, re-snapshot, restart
+        countdown. NO re-generation.
+
+        Restore brings the object back to the post-import snapshot (hiders
+        present, found-status as imported). Re-reconcile rep from the saved
+        _imported_bcm (rep is lost on restore -- sentinels carry no rep).
+        Fresh backup.snapshot so the NEXT Restart/Cleanup restores to the
+        same imported initial state.
+        """
+        from . import backup, registry, persistence
+        c = self._controller
+        if c is None:
+            return
+        backup.restore(c.target_obj, c._backup_name)
+        backup.discard(c._backup_name)
+        c.reconstruct_registry()  # sentinel rebuild (rep=None, all hidden)
+        # Re-reconcile rep from the saved .bcm (rep is lost on restore)
+        if c._imported_bcm is not None:
+            persistence.apply_bcm_dict(c, c._imported_bcm)
+        c._reveal_count = 0
+        c._hint_count = 0
+        c._start_time = None  # _begin_play sets it fresh
+        c._backup_name = backup.snapshot(c.target_obj)  # fresh backup
+        c._started = True
+        self.game_tab.start_countdown(c)
 
     def _on_cleanup(self):
-        """Cleanup (BTN-06): restore original object + END round (no new hiders).
-
-        Deactivates the wizard, stops the timer, restores the object from
-        backup (via controller.cleanup), resets the Game tab UI, and releases
-        the controller (_controller = None). After cleanup, the model is back
-        to its pre-Start state (atom count matches, no GAME atoms). The user
-        can Start a new game from the Setup tab.
-        """
+        """Cleanup: restore original object + END round. For non-imported
+        games, the backup is the pre-game snapshot (no hiders) so restore
+        gives a clean molecule. For imported games, the backup is the
+        post-import snapshot (WITH hiders), so restore brings hiders back
+        -- two-step: restore (fixes hint-orange real atoms) THEN
+        mutation.cleanup_hiders (removes the restored hiders)."""
+        from . import backup, mutation, registry
         if self._controller is None:
-            return  # no game to clean up
+            return
         if self.game_tab._wizard is not None:
             self.game_tab._wizard.deactivate()
             self.game_tab._wizard = None
             self._controller._wizard = None
         self.game_tab._timer.stop()
-        self._controller.cleanup()
+        c = self._controller
+        if getattr(c, '_is_imported', False):
+            # Imported: two-step (restore real-atom colors, then remove hiders)
+            backup.restore(c.target_obj, c._backup_name)
+            backup.discard(c._backup_name)
+            mutation.cleanup_hiders(c.target_obj)
+            c._started = False
+            c.registry = registry.HiderRegistry()
+            c._reveal_count = 0
+            c._hint_count = 0
+        else:
+            c.cleanup()  # existing path: backup is pre-game, restore removes hiders
         self.game_tab._info_log.clear()
         self.game_tab._timer_label.setText("0:00")
         self.game_tab._remaining_label.setText("Remaining: -")
         self.game_tab._reveal_label.setText("Reveals: 0")
-        self._controller = None  # released; Start re-creates via _on_start
+        self._controller = None
