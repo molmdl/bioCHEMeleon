@@ -188,6 +188,17 @@ class SetupTab(QtWidgets.QWidget):
         self.random_btn = QtWidgets.QPushButton("Randomize")
         self.save_btn = QtWidgets.QPushButton("Save Setup…")
         self.load_btn = QtWidgets.QPushButton("Load Setup…")
+        # Phase 8: Generate & export button (BTN-05) -- generate hiders and
+        # save the initial game state to a .bcmz file for sharing or later
+        # loading, WITHOUT starting play. Wired in __init__.py (same pattern
+        # as start_btn). Stays on Setup; the educator's model keeps the
+        # generated hiders (press Cleanup to restore the scene).
+        self.export_btn = QtWidgets.QPushButton("Generate & export")
+        self.export_btn.setToolTip(
+            "Generate hiders and save the initial game state to a "
+            "file for sharing or later loading. Does NOT start play — "
+            "your model keeps the generated hiders (press Cleanup to "
+            "restore your scene).")
         # Phase 7: Cleanup button (BTN-06) -- restore the model to its original
         # state (no hiders). Wired in __init__.py (same pattern as start_btn).
         self.cleanup_btn = QtWidgets.QPushButton("Cleanup model")
@@ -197,7 +208,8 @@ class SetupTab(QtWidgets.QWidget):
         self.start_btn = QtWidgets.QPushButton("Start")
         self.start_btn.setStyleSheet("font-weight: bold;")  # primary action
         for b in (self.reset_btn, self.random_btn, self.save_btn,
-                 self.load_btn, self.cleanup_btn, self.start_btn):
+                 self.load_btn, self.export_btn, self.cleanup_btn,
+                 self.start_btn):
             brow.addWidget(b)
         outer.addWidget(btns)
 

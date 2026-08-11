@@ -56,6 +56,21 @@ class GameTab(QtWidgets.QWidget):
         btn_row.addWidget(self._restart_btn)
         btn_row.addStretch(1)
         btn_row.addWidget(self._reveal_label)
+        # Phase 8: begin_row (Import + Save) -- "begin/end" actions, visually
+        # separate from the in-game Hint/Reveal/Found-mgmt btn_row below.
+        # Added BEFORE btn_row so it renders ABOVE it (a QHBoxLayout added
+        # later still renders below).
+        begin_row = QtWidgets.QHBoxLayout()
+        self._import_btn = QtWidgets.QPushButton("Import puzzle…")
+        self._import_btn.setToolTip(
+            "Load a puzzle prepared by 'Generate & export' and play it.")
+        self._save_btn = QtWidgets.QPushButton("Save checkpoint")
+        self._save_btn.setToolTip(
+            "Save the current game state to resume later.")
+        begin_row.addWidget(self._import_btn)
+        begin_row.addWidget(self._save_btn)
+        begin_row.addStretch(1)
+        layout.addLayout(begin_row)
         layout.addLayout(btn_row)
         self._hint_btn.clicked.connect(self._on_hint_clicked)
         self._reveal_one_btn.clicked.connect(self._on_reveal_one_clicked)
@@ -185,14 +200,28 @@ class GameTab(QtWidgets.QWidget):
         secs = int(elapsed) % 60
         self._timer_label.setText("%d:%02d" % (mins, secs))
 
-    def start_countdown(self, controller):
-        """Begin the 3-2-1 countdown (called by PluginDialog._on_start after
-        GameController.start + tab switch). On GO!, _begin_play activates the
-        PickWizard, registers callbacks, and starts the timer."""
+    def start_countdown(self, controller, elapsed=0):
+        """Begin the 3-2-1 countdown. On GO!, _begin_play activates the
+        PickWizard, registers callbacks, and starts the timer.
+
+        Args:
+            controller (GameController): the active controller (just
+                .start()ed for a fresh game, or reconstructed+reconciled
+                for an imported checkpoint).
+            elapsed (float): saved elapsed seconds to resume from
+                (checkpoint import); 0.0 for a fresh game or puzzle
+                import. The timer displays ``elapsed + (now - _begin_play_time)``
+                so a checkpoint resumes counting up from the saved time.
+        """
         self._controller = controller
-        self._reveal_label.setText("Reveals: 0")  # reset for new round (C8)
+        self._saved_elapsed = float(elapsed)   # consumed by _begin_play
+        self._reveal_label.setText("Reveals: %d" % (controller._reveal_count,))
         self._info_log.clear()  # fresh round = clean log (Phase 7 fix)
         self._log("Get ready...")
+        if elapsed > 0:
+            mins = int(elapsed) // 60
+            secs = int(elapsed) % 60
+            self._timer_label.setText("%d:%02d" % (mins, secs))
         self._countdown_step(3)
 
     def _countdown_step(self, n):
@@ -214,11 +243,14 @@ class GameTab(QtWidgets.QWidget):
             on_win=self._on_win,
             on_counts_changed=self._on_counts_changed,
         )
-        self._start_time = time.time()
-        # Bug 1: win() (game.py) reads the CONTROLLER's _start_time, not the
-        # tab's. The tab's copy feeds _on_tick (timer label); the controller's
-        # copy feeds win()'s elapsed math. Both must be set.
-        self._controller._start_time = self._start_time
+        elapsed = getattr(self, '_saved_elapsed', 0.0)
+        self._start_time = time.time() - elapsed   # resume from saved elapsed
+        # Bug fix for checkpoint import: if the controller already has a
+        # _start_time (set by import_state for a checkpoint resume), do NOT
+        # clobber it -- the controller's copy feeds win()'s elapsed math.
+        if self._controller._start_time is None:
+            self._controller._start_time = self._start_time
+        self._saved_elapsed = 0.0   # reset for next round
         self._timer.stop()  # defensive: stop any prior timer (Restart mid-game)
         self._timer.start(1000)
         self._update_remaining(self._controller._remaining())
