@@ -24,7 +24,7 @@ if 'pymol' not in sys.modules:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from biochemeleon.registry import (
-    HiderRecord, HiderRegistry,
+    HiderRecord, HiderRegistry, ReconcileMismatches,
     HIDER_STATUS_HIDDEN, HIDER_STATUS_FOUND,
     build_found_selection, group_found_by_rep,
 )
@@ -674,6 +674,206 @@ class TestFoundSelectionHelpers(unittest.TestCase):
             HiderRecord(101, 'obj', None, status=HIDER_STATUS_FOUND),
         ]
         self.assertEqual(group_found_by_rep(recs), {"spheres": [100]})
+
+
+class TestReconcileFromBcm(unittest.TestCase):
+    """Test HiderRegistry.reconcile_with_bcm — .bcm metadata merge onto
+    sentinel-rebuilt records (Phase 8 Plan 01).
+
+    After reconstruct_from_sentinels, records have rep=None + status='hidden'.
+    reconcile_with_bcm(bcm_hiders) overrides rep + status by matching
+    (object, int(id)), and returns a ReconcileMismatches namedtuple of
+    (missing_from_bcm, missing_from_pse, bad_rep). Pure (no pymol) —
+    WSL-testable like the rest of registry.py.
+
+    Each test builds a sentinel-rebuilt registry via
+    reconstruct_from_sentinels with a fake iterate fn returning
+    [('o', 1), ('o', 2), ('o', 3)] (or a subset), then calls
+    reconcile_with_bcm with a .bcm hiders list and asserts the merged
+    records + returned ReconcileMismatches.
+    """
+
+    def _rebuilt(self, keys=None):
+        """Build a sentinel-rebuilt registry with the given (object, id) keys.
+
+        Defaults to [('o', 1), ('o', 2), ('o', 3)] — the canonical 3-sentinel
+        fixture mirroring the plan's behavior spec.
+        """
+        if keys is None:
+            keys = [('o', 1), ('o', 2), ('o', 3)]
+        reg = HiderRegistry()
+        reg.reconstruct_from_sentinels(lambda: keys)
+        return reg
+
+    def test_perfect_match_sets_rep_and_status(self):
+        """3 sentinels + 3 .bcm entries (1 found, reps spheres/sticks/cartoon)
+        -> 3 records with real rep; 1 found, 2 hidden; mismatches all empty.
+        """
+        reg = self._rebuilt()
+        bcm = [
+            {'id': 1, 'object': 'o', 'rep': 'spheres', 'status': 'found'},
+            {'id': 2, 'object': 'o', 'rep': 'sticks', 'status': 'hidden'},
+            {'id': 3, 'object': 'o', 'rep': 'cartoon', 'status': 'hidden'},
+        ]
+        mismatches = reg.reconcile_with_bcm(bcm)
+        self.assertEqual(reg.get('o', 1).rep, 'spheres')
+        self.assertEqual(reg.get('o', 1).status, HIDER_STATUS_FOUND)
+        self.assertEqual(reg.get('o', 2).rep, 'sticks')
+        self.assertEqual(reg.get('o', 2).status, HIDER_STATUS_HIDDEN)
+        self.assertEqual(reg.get('o', 3).rep, 'cartoon')
+        self.assertEqual(reg.get('o', 3).status, HIDER_STATUS_HIDDEN)
+        self.assertEqual(mismatches.missing_from_bcm, [])
+        self.assertEqual(mismatches.missing_from_pse, [])
+        self.assertEqual(mismatches.bad_rep, [])
+
+    def test_missing_from_bcm_stays_rep_none_hidden(self):
+        """Sentinel id=4 not in .bcm -> stays rep=None, status='hidden';
+        missing_from_bcm == [('o', 4)].
+        """
+        reg = self._rebuilt([('o', 1), ('o', 4)])
+        bcm = [{'id': 1, 'object': 'o', 'rep': 'spheres', 'status': 'found'}]
+        mismatches = reg.reconcile_with_bcm(bcm)
+        rec4 = reg.get('o', 4)
+        self.assertIsNone(rec4.rep)
+        self.assertEqual(rec4.status, HIDER_STATUS_HIDDEN)
+        self.assertEqual(mismatches.missing_from_bcm, [('o', 4)])
+
+    def test_missing_from_pse_not_registered(self):
+        """.bcm lists id=99 (not in sentinels) -> NOT registered (no 4th
+        record); missing_from_pse == [('o', 99)]; registry has 3 records.
+        """
+        reg = self._rebuilt()
+        bcm = [
+            {'id': 1, 'object': 'o', 'rep': 'spheres', 'status': 'hidden'},
+            {'id': 99, 'object': 'o', 'rep': 'sticks', 'status': 'hidden'},
+        ]
+        mismatches = reg.reconcile_with_bcm(bcm)
+        self.assertIsNone(reg.get('o', 99))
+        self.assertEqual(len(reg.all()), 3)
+        self.assertEqual(mismatches.missing_from_pse, [('o', 99)])
+
+    def test_bad_rep_skipped_with_warning(self):
+        """.bcm hider with rep='surface' (not in GAME_REPS) -> rec.rep stays
+        None; bad_rep == [('o', 1, 'surface')]; no raise.
+        """
+        reg = self._rebuilt([('o', 1)])
+        bcm = [{'id': 1, 'object': 'o', 'rep': 'surface', 'status': 'found'}]
+        mismatches = reg.reconcile_with_bcm(bcm)
+        rec = reg.get('o', 1)
+        self.assertIsNone(rec.rep)
+        self.assertEqual(mismatches.bad_rep, [('o', 1, 'surface')])
+
+    def test_bad_status_defaults_to_hidden(self):
+        """.bcm hider with status='revealed' (unknown) -> rec.status='hidden';
+        no raise.
+        """
+        reg = self._rebuilt([('o', 1)])
+        bcm = [{'id': 1, 'object': 'o', 'rep': 'spheres', 'status': 'revealed'}]
+        mismatches = reg.reconcile_with_bcm(bcm)
+        rec = reg.get('o', 1)
+        self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        self.assertEqual(rec.rep, 'spheres')
+
+    def test_pos_restored_from_bcm(self):
+        """.bcm hider with pos=[1.0,2.0,3.0] -> rec.pos == [1.0,2.0,3.0] (list).
+        """
+        reg = self._rebuilt([('o', 1)])
+        bcm = [{'id': 1, 'object': 'o', 'rep': 'spheres', 'status': 'hidden',
+                'pos': [1.0, 2.0, 3.0]}]
+        reg.reconcile_with_bcm(bcm)
+        rec = reg.get('o', 1)
+        self.assertEqual(rec.pos, [1.0, 2.0, 3.0])
+        self.assertIsInstance(rec.pos, list)
+
+    def test_empty_bcm_hiders_list(self):
+        """reconcile_with_bcm([]) on 3-sentinel registry -> all 3 stay
+        rep=None, hidden; missing_from_bcm has 3 entries.
+        """
+        reg = self._rebuilt()
+        mismatches = reg.reconcile_with_bcm([])
+        for rec in reg.all():
+            self.assertIsNone(rec.rep)
+            self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        self.assertEqual(len(mismatches.missing_from_bcm), 3)
+        self.assertEqual(set(mismatches.missing_from_bcm),
+                         {('o', 1), ('o', 2), ('o', 3)})
+
+    def test_none_bcm_hiders(self):
+        """reconcile_with_bcm(None) -> graceful (treated as empty list); 3
+        missing_from_bcm entries.
+        """
+        reg = self._rebuilt()
+        mismatches = reg.reconcile_with_bcm(None)
+        for rec in reg.all():
+            self.assertIsNone(rec.rep)
+            self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        self.assertEqual(len(mismatches.missing_from_bcm), 3)
+
+    def test_mismatched_object_not_merged(self):
+        """.bcm hider (object='other', id=1) doesn't match sentinel ('o', 1)
+        -> sentinel stays rep=None, hidden; .bcm entry flagged missing_from_pse.
+        """
+        reg = self._rebuilt([('o', 1)])
+        bcm = [{'id': 1, 'object': 'other', 'rep': 'spheres', 'status': 'found'}]
+        mismatches = reg.reconcile_with_bcm(bcm)
+        rec = reg.get('o', 1)
+        self.assertIsNone(rec.rep)
+        self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        self.assertEqual(mismatches.missing_from_pse, [('other', 1)])
+
+    def test_id_int_coercion_in_bcm_index(self):
+        """.bcm hider with id='5' (str from JSON) matches sentinel id=5 (int)
+        via int(h['id']) coercion.
+        """
+        reg = self._rebuilt([('o', 5)])
+        bcm = [{'id': '5', 'object': 'o', 'rep': 'spheres', 'status': 'found'}]
+        mismatches = reg.reconcile_with_bcm(bcm)
+        rec = reg.get('o', 5)
+        self.assertEqual(rec.rep, 'spheres')
+        self.assertEqual(rec.status, HIDER_STATUS_FOUND)
+        self.assertEqual(mismatches.missing_from_bcm, [])
+        self.assertEqual(mismatches.missing_from_pse, [])
+
+    def test_round_trip_to_dict_reconstruct_reconcile(self):
+        """Full round-trip: register 3 -> to_dict -> reconstruct_from_sentinels
+        (fake) -> reconcile_with_bcm(to_dict['hiders']) -> records match
+        original (id/object/rep/status).
+        """
+        reg = HiderRegistry()
+        reg.register('o', 1, 'spheres', status=HIDER_STATUS_FOUND)
+        reg.register('o', 2, 'sticks', status=HIDER_STATUS_HIDDEN)
+        reg.register('o', 3, 'cartoon', status=HIDER_STATUS_FOUND)
+        d = reg.to_dict()
+        # Simulate .pse reload: rebuild from sentinel ids, then reconcile
+        reg2 = HiderRegistry()
+        reg2.reconstruct_from_sentinels(
+            lambda: [('o', r['id']) for r in d['hiders']])
+        mismatches = reg2.reconcile_with_bcm(d['hiders'])
+        self.assertEqual(mismatches.missing_from_bcm, [])
+        self.assertEqual(mismatches.missing_from_pse, [])
+        self.assertEqual(mismatches.bad_rep, [])
+        for orig, rebuilt in zip(reg.all(), reg2.all()):
+            self.assertEqual(rebuilt.id, orig.id)
+            self.assertEqual(rebuilt.object, orig.object)
+            self.assertEqual(rebuilt.rep, orig.rep)
+            self.assertEqual(rebuilt.status, orig.status)
+
+    def test_counts_by_rep_after_reconcile_reflects_bcm_reps(self):
+        """After reconcile with 3 sphere hiders, counts_by_rep()['spheres']
+        == 3 (NOT 0 — the load-bearing regression for the rep=None
+        limitation that made reloaded games' per-rep counts all-zero).
+        """
+        reg = self._rebuilt()
+        bcm = [
+            {'id': 1, 'object': 'o', 'rep': 'spheres', 'status': 'hidden'},
+            {'id': 2, 'object': 'o', 'rep': 'spheres', 'status': 'hidden'},
+            {'id': 3, 'object': 'o', 'rep': 'spheres', 'status': 'hidden'},
+        ]
+        # Before reconcile: all rep=None -> counts all zero (the bug)
+        self.assertEqual(reg.counts_by_rep()['spheres'], 0)
+        reg.reconcile_with_bcm(bcm)
+        # After reconcile: rep set from .bcm -> counts reflect it
+        self.assertEqual(reg.counts_by_rep()['spheres'], 3)
 
 
 if __name__ == '__main__':
