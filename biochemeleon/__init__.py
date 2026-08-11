@@ -71,18 +71,41 @@ class PluginDialog(QtWidgets.QDialog):
         # Phase 7: Cleanup (Setup tab) + Restart (Game tab) button wiring.
         self.setup_tab.cleanup_btn.clicked.connect(self._on_cleanup)
         self.game_tab._restart_btn.clicked.connect(self._on_restart)
+        # Phase 8: Generate & export (Setup) + Import + Save (Game) wiring.
+        self.setup_tab.export_btn.clicked.connect(self._on_export)
+        self.game_tab._import_btn.clicked.connect(self._on_import)
+        self.game_tab._save_btn.clicked.connect(self._on_save)
 
         # Layout
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.tabs)
 
     def _on_start(self):
-        """BTN-07: resolve target -> build mixed-rep hider_specs from per_rep
-        (spheres + lines/sticks + cartoon) -> start game -> switch to Game
-        tab -> 3-2-1 countdown."""
+        """BTN-07: resolve target -> build hider_specs -> start game ->
+        switch to Game tab -> 3-2-1 countdown.
+
+        Thin wrapper over _prepare_and_start (Phase 8 refactor: _on_export
+        reuses the same prepare path without the tab switch + countdown)."""
+        state = self.setup_tab.collect_state()
+        controller, target_obj, _ = self._prepare_and_start(state)
+        if controller is None:
+            return  # _prepare_and_start already showed a QMessageBox
+        self.tabs.setCurrentWidget(self.game_tab)
+        self.game_tab.start_countdown(self._controller)
+
+    def _prepare_and_start(self, state):
+        """Resolve target -> collapse -> build hider_specs -> free valences ->
+        clean prior game -> GameController + start. Returns
+        ``(controller, target_obj, _gen_warnings)`` on success, or
+        ``(None, None, [])`` after a QMessageBox on failure.
+
+        Behavior-preserving extraction of _on_start steps 1-4 (Phase 8
+        refactor). _on_start + _on_export both call this; _on_start then
+        switches to the Game tab + starts the countdown, _on_export saves
+        the .bcmz + stays on Setup.
+        """
         from . import generators, game, demos, mutation
         import random as _random
-        state = self.setup_tab.collect_state()
         per_rep = state.get("per_rep", {})  # {rep: count} (Phase 2 collect_state)
         # 1. Resolve target object
         mode = state.get("target_mode", "loaded")
@@ -92,13 +115,13 @@ class PluginDialog(QtWidgets.QDialog):
             if not target_obj or target_obj not in demos.list_loaded_molecule_objects():
                 QtWidgets.QMessageBox.warning(self, "No object",
                     "Please select a loaded molecule object first.")
-                return
+                return None, None, []
         elif mode == "fetch":
             pdb_code = state.get("pdb_code", "")
             if not pdb_code:
                 QtWidgets.QMessageBox.warning(self, "No PDB code",
                     "Please enter a PDB code first.")
-                return
+                return None, None, []
             # Use the already-loaded object if the user clicked Fetch in
             # the Setup tab. cmd.fetch fails when loading mmCIF into an
             # existing object ("loading mmCIF into existing object not
@@ -109,7 +132,7 @@ class PluginDialog(QtWidgets.QDialog):
                 if target_obj is None:
                     QtWidgets.QMessageBox.warning(self, "Fetch failed",
                         "Could not fetch PDB code %r." % pdb_code)
-                    return
+                    return None, None, []
         elif mode == "demo":
             demo_id = state.get("demo_id", "")
             # Use the already-loaded object if the user loaded this demo
@@ -120,10 +143,10 @@ class PluginDialog(QtWidgets.QDialog):
                 if target_obj is None:
                     QtWidgets.QMessageBox.warning(self, "Demo failed",
                         "Could not load demo %r." % demo_id)
-                    return
+                    return None, None, []
         else:
             QtWidgets.QMessageBox.warning(self, "No target", "Unknown target mode.")
-            return
+            return None, None, []
         # 2. Prepare target: collapse multi-state objects BEFORE data
         #    collection. Multi-state objects (e.g. NMR ensembles like 1znf
         #    with 37 models) break backup/verify_intact (mutations only
@@ -140,7 +163,7 @@ class PluginDialog(QtWidgets.QDialog):
         hider_specs = []
         _gen_warnings = []  # collected under-generation warnings (05-05 Issue 1)
         # Pre-fetch the data the pure generators need (cmd-coupled, here in
-        # _on_start so generators.py stays pure):
+        # _prepare_and_start so generators.py stays pure):
         # For line/stick: pool of real neighbor CA atom ids (to bond hiders to).
         # MUST use 'name CA' (NOT all atoms) — CA atoms survive free_nterminal_valence
         # removal (which only removes H + cap residue atoms); non-CA atoms sampled as
@@ -221,10 +244,11 @@ class PluginDialog(QtWidgets.QDialog):
         # would make every old-hider click a "Miss!" and the atom count would
         #     grow each round. cleanup() is idempotent (no-op if _started=False).
         # Wizard lifecycle fix (Phase 7): deactivate the old PickWizard before
-        # cleanup. Without this, _on_start creates a new wizard in _begin_play
-        # without deactivating the old one, corrupting mouse_selection_mode
-        # (stays at 0) + losing the prior-wizard reference. Fixes the bug for
-        # BOTH Start-mid-game AND Restart (Restart calls _on_start).
+        # cleanup. Without this, _prepare_and_start creates a new wizard in
+        # _begin_play without deactivating the old one, corrupting
+        # mouse_selection_mode (stays at 0) + losing the prior-wizard
+        # reference. Fixes the bug for BOTH Start-mid-game AND Restart
+        # (Restart calls _on_start -> _prepare_and_start).
         if self.game_tab._wizard is not None:
             self.game_tab._wizard.deactivate()
             self.game_tab._wizard = None
@@ -238,10 +262,96 @@ class PluginDialog(QtWidgets.QDialog):
         except RuntimeError as exc:
             QtWidgets.QMessageBox.warning(self, "Game already running",
                 str(exc))
+            return None, None, []
+        return self._controller, target_obj, _gen_warnings
+
+    def _on_export(self):
+        """BTN-05: generate hiders + save initial game state WITHOUT playing.
+        Reuses _prepare_and_start (same as Start), then saves a .bcmz with
+        kind='puzzle', then stays on Setup. The educator's model keeps the
+        generated hiders (press Cleanup to restore the scene)."""
+        from . import persistence
+        from pymol import cmd
+        import tempfile, os
+        state = self.setup_tab.collect_state()
+        controller, target_obj, _ = self._prepare_and_start(state)
+        if controller is None:
             return
-        # 4. Switch to Game tab + start the 3-2-1 countdown
-        self.tabs.setCurrentWidget(self.game_tab)
-        self.game_tab.start_countdown(self._controller)
+        # File dialog (.bcmz) — static getSaveFileName owns its own modal
+        # loop (NOT the exec_ modal call from our code; the main plugin
+        # dialog stays modeless).
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Generate & export puzzle", "",
+            "bioCHEMeleon Puzzle (*.bcmz);;All Files (*)")
+        if not path:
+            # cancelled — cleanup the generated hiders so they don't linger
+            controller.cleanup()
+            return
+        if not path.lower().endswith('.bcmz'):
+            path += '.bcmz'
+        try:
+            bcm_dict = persistence.build_bcm_dict(
+                controller, state, kind='puzzle')
+            with tempfile.NamedTemporaryFile(
+                    suffix='.pse', delete=False) as tf:
+                pse_path = tf.name
+            cmd.save(pse_path, target_obj)  # bare name -> excludes _bchm_backup
+            persistence.write_bcmz(path, bcm_dict, pse_path)
+            os.unlink(pse_path)  # clean temp
+        except (OSError, ValueError) as exc:
+            QtWidgets.QMessageBox.warning(
+                self, "Export failed", "Could not save puzzle:\n%s" % exc)
+            return
+        QtWidgets.QMessageBox.information(
+            self, "Puzzle exported",
+            "Saved puzzle to:\n%s\n\nYour model still has the generated "
+            "hiders. Press Cleanup to restore your scene." % path)
+        # Stay on Setup tab; controller stays _started=True so Cleanup works.
+
+    def _on_save(self):
+        """GAME-09: save the current game state as a .bcmz checkpoint.
+        Pause-capture-dialog-save-resume (PITFALLS.md: timer must not
+        advance during the modal file dialog)."""
+        import time as _time
+        from . import persistence
+        from pymol import cmd
+        import tempfile, os
+        if (self._controller is None or not self._controller._started
+                or self._controller._start_time is None):
+            return  # no game or not yet begun (countdown)
+        self.game_tab._timer.stop()
+        elapsed = _time.time() - self._controller._start_time
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self, "Save bioCHEMeleon checkpoint", "",
+            "bioCHEMeleon Game (*.bcmz);;All Files (*)")
+        if not path:
+            # cancelled — rebase to exclude dialog-wait, then resume
+            self._controller._start_time = _time.time() - elapsed
+            self.game_tab._timer.start(1000)
+            return
+        if not path.lower().endswith('.bcmz'):
+            path += '.bcmz'
+        try:
+            setup_state = self.setup_tab.collect_state()
+            bcm_dict = persistence.build_bcm_dict(
+                self._controller, setup_state, kind='checkpoint',
+                elapsed=elapsed)
+            with tempfile.NamedTemporaryFile(
+                    suffix='.pse', delete=False) as tf:
+                pse_path = tf.name
+            cmd.save(pse_path, self._controller.target_obj)
+            persistence.write_bcmz(path, bcm_dict, pse_path)
+            os.unlink(pse_path)
+        except (OSError, ValueError) as exc:
+            QtWidgets.QMessageBox.warning(
+                self, "Save failed", "Could not save checkpoint:\n%s" % exc)
+            self._controller._start_time = _time.time() - elapsed
+            self.game_tab._timer.start(1000)
+            return
+        # Resume timer — rebase so the dialog+save time is NOT counted
+        self._controller._start_time = _time.time() - elapsed
+        self.game_tab._timer.start(1000)
+        self.game_tab._log("Saved checkpoint to %s" % path)
 
     def _on_restart(self):
         """Restart (GAME-10): fresh round with new hiders.
