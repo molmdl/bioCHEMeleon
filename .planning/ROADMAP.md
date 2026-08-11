@@ -174,10 +174,14 @@ Plans:
   1. Pressing Save writes a PyMOL session (`.pse`) plus a companion `.bcm` JSON sidecar (registry, timer, reveal counts, setup); reloading both restores the full game state with the registry rebuilt from sentinels
   2. Pressing Generate & export (from Setup) generates hiders and saves the initial game state to a file without starting play
   3. Pressing Import (from Game tab) loads a previously exported game and lets the player play it
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 08-01: TBD during planning
+- [ ] 08-01-PLAN.md — TDD HiderRegistry.reconcile_with_bcm pure method + ReconcileMismatches namedtuple (registry.py) + unit tests (Wave 1, parallel with 08-02)
+- [ ] 08-02-PLAN.md — TDD build_bcm_dict + parse_bcm_dict pure functions in NEW persistence.py + unit tests in NEW test_persistence.py (Wave 1, parallel with 08-01)
+- [ ] 08-03-PLAN.md — apply_bcm_dict + write_bcmz/read_bcmz/resolve_target file I/O in persistence.py + GameController.import_state + _is_imported/_imported_bcm in game.py (Wave 2, depends on 01+02)
+- [ ] 08-04-PLAN.md — GUI wiring: export_btn (gui_setup) + begin_row + start_countdown(elapsed) + _begin_play resume fix (gui_game) + _prepare_and_start refactor + _on_export/_on_import/_on_save/_on_restart_imported + modified _on_restart/_on_cleanup (__init__) (Wave 3, depends on 03)
+- [ ] 08-05-PLAN.md — Headless smoke (export/import round-trip, scoped save, reconcile, Restart/Cleanup-on-imported) + human-verify checkpoint (3 success criteria + imported-game lifecycle) (Wave 4, depends on 04)
 
 ### Phase 9: Large Demo Fetch & Source Attribution
 **Goal**: The demo set is rounded out with large fetched molecules (membrane proteins, glycoprotein) and every source is fully attributed with verified licenses.
@@ -251,7 +255,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 + 05-09 | ✓ Complete (v1 scope; alt-conf deferred to Phase 11) | 2026-08-10 |
 | 6. Hint & Reveal | 3/3 | ✓ Complete | 2026-08-10 |
 | 7. Found-Hider Management, Restart & Cleanup | 3/3 | ✓ Complete | 2026-08-12 |
-| 8. Persistence & Shareable Puzzles | 0/TBD | Not started | - |
+| 8. Persistence & Shareable Puzzles | 0/5 | Not started (5 plans in 4 waves) | - |
 | 9. Large Demo Fetch & Source Attribution | 0/TBD | Not started | - |
 | 10. Polish, Endgame & Help | 0/TBD | Not started | - |
 | 11. Alt-conf Cartoon/Ribbon Hider (v1 Follow-up) | 0/0 | Not planned (research required) | - |
@@ -264,7 +268,7 @@ Phases likely needing deeper `/gsd-research-phase` during planning (from researc
 - **Phase 3**: `cmd.create` merge-append vs replace semantics (MEDIUM); `.pse` round-trip `id`/`index` stability (MEDIUM). A small smoke test resolves both.
 - **Phase 5 (HIGHEST research flag — v1 RESOLVED, alt-conf DEFERRED to Phase 11)**: Cartoon/ribbon hider geometry — "replicate a segment (loop) as alternate position" via C-alpha. The terminal-extension approach shipped (works; ribbon rep support added via 05-09 gap closure — `cmd.show(rep, ...)` parameterized, 41/41 headless smoke). The cosmetic disconnection on 1ubq remains (terminal-extension limitation). The alt-conf approach was spike-verified in isolation but multi-rep integration failed (4 GUI-only bug cycles, reverted). Deferred to Phase 11 — see Phase 11 details for re-research requirements + lessons.
 - **Phase 11 (HIGHEST research flag)**: Alt-conf cartoon/ribbon integration — re-research `cmd.create` append side effects (state/rep/coord corruption) + GUI-runnable verification (headless auto_zoom gap was the methodology failure) + unique-id strategy for alt-conf atoms. Prior attempt's spike proved the mechanism; re-research must focus on INTEGRATION, not re-proving the mechanism.
-- **Phase 8**: `.pse` + companion `.bcm` co-location UX — two-file share is awkward; decide zip-together vs document "keep both files".
+- **Phase 8**: ~~`.pse` + companion `.bcm` co-location UX — two-file share is awkward; decide zip-together vs document "keep both files"~~ RESOLVED (2026-08-12): zip-together (`.bcmz` archive containing `game.pse` + `game.bcm`); Import uses `cmd.load(partial=1)` MERGE with refuse-first collision detection. Three parallel research files on disk at `.planning/phases/08-persistence-and-shareable-puzzles/`.
 - **Phase 9**: MemProtMD per-entry license verification (site was unreachable at research time) — must verify before bundling membrane coordinates.
 
 Phases with standard patterns (skip deep research): Phase 2, Phase 4, Phase 6, Phase 7, Phase 10.
