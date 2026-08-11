@@ -36,14 +36,14 @@ python3.6 -m unittest tests.test_setup_state -v
 # Pitfall-1 gate — MUST return ZERO matches across the package.
 # Warning: literal tokens in comments/docstrings trip this grep too
 # (we hit a false positive on a docstring that said "from PyQt5 import").
-rg -n "import Tkinter|import tkinter|from tkinter|import Pmw|from Pmw|app\.root|grab_set|mainloop|Toplevel|menuBar\.addmenuitem|from PyQt5 import|import PyQt5" biochemeleon/
+grep -rnE "import Tkinter|import tkinter|from tkinter|import Pmw|from Pmw|app\.root|grab_set|mainloop|Toplevel|menuBar\.addmenuitem|from PyQt5 import|import PyQt5" biochemeleon/
 
 # exec_ gate — any hits must be on QFileDialog/QMessageBox, NEVER on the
 # main PluginDialog/SetupTab (the main dialog must stay modeless):
-rg -n "\.exec_\(\)" biochemeleon/
+grep -rnE "\.exec_\(\)" biochemeleon/
 ```
 
-Running the interactive PyMOL GUI requires the Windows side (`setenv.bat` → `pymol`); not doable from a WSL agent. But headless cmd-only scripts CAN be run from WSL via `cmd.exe /c C:\\src\\run-conda-pymol.bat -cq <script>` (see the Environment section above). Prefer the Grep tool over `rg` in bash (`rg *` is denied in `opencode.json`).
+Running the interactive PyMOL GUI requires the Windows side (`setenv.bat` → `pymol`); not doable from a WSL agent. But headless cmd-only scripts CAN be run from WSL via `cmd.exe /c C:\\src\\run-conda-pymol.bat -cq <script>` (see the Environment section above). Prefer the Grep tool over bash `grep` for content searches; `rg` is denied in `opencode.json` (the `grep -rnE` commands above are the runnable equivalent).
 
 ## Architecture — module dependency direction is strict
 
