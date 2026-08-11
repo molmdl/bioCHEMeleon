@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: MVP Core Loop (Sphere)** - THE core value: load → generate spheres → click-to-find → win
 - [x] **Phase 5: Line/Stick & Cartoon Generators** - The harder blend-in generators (cartoon = L-complexity swing)
 - [x] **Phase 6: Hint & Reveal** - Get-help / give-up mechanics with usage tracking
-- [ ] **Phase 7: Found-Hider Management, Restart & Cleanup** - Manage found hiders, reset, and clean the model
+- [x] **Phase 7: Found-Hider Management, Restart & Cleanup** - Manage found hiders, reset, and clean the model
 - [ ] **Phase 8: Persistence & Shareable Puzzles** - Save/load game state + generate&export / import
 - [ ] **Phase 9: Large Demo Fetch & Source Attribution** - Membrane/glycoprotein fetch + DATA_SOURCES.md
 - [ ] **Phase 10: Polish, Endgame & Help** - Tooltips, controls help, win-screen stats, post-game debrief
@@ -162,9 +162,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — TDD pure helpers (build_found_selection + group_found_by_rep in registry.py) + _found_color threading in game.py _mark_found (RED/GREEN/REFACTOR, WSL-tested)
-- [ ] 07-02-PLAN.md — GUI wiring: found-hider dropdown QComboBox + color picker QColorDialog + Restart button in gui_game.py; Cleanup button in gui_setup.py; _on_restart + _on_cleanup + wizard-lifecycle fix in __init__.py + button wiring
-- [ ] 07-03-PLAN.md — Headless smoke (Restart/Cleanup/found-mgmt/color via pure cmd) + human-verify checkpoint (all 4 success criteria + Qt paths + wizard lifecycle)
+- [x] 07-01-PLAN.md — TDD pure helpers (build_found_selection + group_found_by_rep in registry.py) + _found_color threading in game.py _mark_found (RED/GREEN/REFACTOR, WSL-tested)
+- [x] 07-02-PLAN.md — GUI wiring: found-hider dropdown QComboBox + color picker QColorDialog + Restart button in gui_game.py; Cleanup button in gui_setup.py; _on_restart + _on_cleanup + wizard-lifecycle fix in __init__.py + button wiring
+- [x] 07-03-PLAN.md — Headless smoke (Restart/Cleanup/found-mgmt/color via pure cmd) + human-verify checkpoint (all 4 success criteria + Qt paths + wizard lifecycle) — APPROVED
 
 ### Phase 8: Persistence & Shareable Puzzles
 **Goal**: The player can checkpoint a game in progress and reload it later, and an educator can prepare a puzzle (Generate & export) and share it for a player to Import.
@@ -250,7 +250,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 4. MVP Core Loop (Sphere) | 6/6 | ✓ Complete | 2026-08-08 |
 | 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 + 05-09 | ✓ Complete (v1 scope; alt-conf deferred to Phase 11) | 2026-08-10 |
 | 6. Hint & Reveal | 3/3 | ✓ Complete | 2026-08-10 |
-| 7. Found-Hider Management, Restart & Cleanup | 0/3 | Planned (ready for execution) | - |
+| 7. Found-Hider Management, Restart & Cleanup | 3/3 | ✓ Complete | 2026-08-12 |
 | 8. Persistence & Shareable Puzzles | 0/TBD | Not started | - |
 | 9. Large Demo Fetch & Source Attribution | 0/TBD | Not started | - |
 | 10. Polish, Endgame & Help | 0/TBD | Not started | - |

@@ -29,7 +29,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **BTN-03**: Save Setup — save game setup parameters to a file
 - [x] **BTN-04**: Load Setup — load setup parameters from a file
 - [ ] **BTN-05**: Generate & export — only generate the representation of the game and save the initial state to a file for sharing or later loading
-- [ ] **BTN-06**: Cleanup model — remove all game-generated representations/atoms not in the original object (via `segi='GAME'` sentinel, never generic filters)
+- [x] **BTN-06**: Cleanup model — remove all game-generated representations/atoms not in the original object (via `segi='GAME'` sentinel, never generic filters)
 - [ ] **BTN-07**: Start — store the initial state, generate hiders per setup, switch to the Game status tab, and count down 3-2-1
 
 ### Hider Generation
@@ -50,9 +50,9 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **GAME-05**: Hint button — change color of the N atoms/residues around a hider (colors neighbors, not the hider itself)
 - [x] **GAME-06**: Reveal-one hider button — asks the user to confirm giving up, then marks one random hider "found" and counts the reveal use
 - [x] **GAME-07**: Reveal-all hiders button — asks the user to confirm giving up, then marks all hiders "found"
-- [ ] **GAME-08**: Found-hider management dropdown — hide/show/change color of hiders with a "found" status
+- [x] **GAME-08**: Found-hider management dropdown — hide/show/change color of hiders with a "found" status
 - [ ] **GAME-09**: Save button — save the game state as a PyMOL session (`.pse`) + a companion `.bcm` JSON sidecar (registry, timer, reveal counts, setup) for checkpointing
-- [ ] **GAME-10**: Restart button — restart the game from the stored initial state
+- [x] **GAME-10**: Restart button — restart the game from the stored initial state
 
 ### Core Loop
 
@@ -80,7 +80,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **DIFF-01**: Reveal counter — track how many reveals were used across the game
 - [ ] **DIFF-02**: Win-screen stats — show time taken, hints used, and reveals used on the winning message
 - [ ] **DIFF-03**: Post-game debrief — after win, highlight all hiders and explain why each was hard to spot (the teachable moment)
-- [ ] **DIFF-04**: Color picker for found-hider highlight — player chooses how found hiders are marked (accessibility / color-blind support)
+- [x] **DIFF-04**: Color picker for found-hider highlight — player chooses how found hiders are marked (accessibility / color-blind support)
 - [ ] **DIFF-05**: Difficulty-tiered demo metadata surfaced in the demo sub-menu (Easy/Hard/Challenge/Very challenging)
 
 ## v2 Requirements
@@ -160,10 +160,10 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 | GAME-06 | Phase 6 | Complete |
 | GAME-07 | Phase 6 | Complete |
 | DIFF-01 | Phase 6 | Complete |
-| GAME-08 | Phase 7 | Pending |
-| GAME-10 | Phase 7 | Pending |
-| BTN-06 | Phase 7 | Pending |
-| DIFF-04 | Phase 7 | Pending |
+| GAME-08 | Phase 7 | Complete |
+| GAME-10 | Phase 7 | Complete |
+| BTN-06 | Phase 7 | Complete |
+| DIFF-04 | Phase 7 | Complete |
 | GAME-09 | Phase 8 | Pending |
 | GAME-04 | Phase 8 | Pending |
 | BTN-05 | Phase 8 | Pending |
@@ -183,4 +183,4 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 
 ---
 *Requirements defined: 2026-08-02*
-*Last updated: 2026-08-11 after Phase 6 completion (GAME-05, GAME-06, GAME-07, DIFF-01 marked Complete)*
+*Last updated: 2026-08-12 after Phase 7 completion (GAME-08, GAME-10, BTN-06, DIFF-04 marked Complete)*
