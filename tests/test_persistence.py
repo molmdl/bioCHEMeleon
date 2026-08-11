@@ -240,7 +240,8 @@ class TestBcmRoundTrip(unittest.TestCase):
                     'timer_elapsed', 'reveal_count', 'hint_count',
                     'found_color', 'found_color_rgb'):
             self.assertEqual(rebuilt[key], parsed[key],
-                             "rebuilt %r != parsed %r" % (key,))
+                             "rebuilt %r != parsed %r" %
+                             (rebuilt[key], parsed[key]))
 
 
 if __name__ == '__main__':
