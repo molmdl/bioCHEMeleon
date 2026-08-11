@@ -38,6 +38,12 @@ class GameController:
         # The GUI color picker (Plan 02) overrides via cmd.set_color +
         # assignment: self._found_color = 'found_highlight'.
         self._found_color = 'green'
+        # Phase 8 import state: _is_imported routes Restart + Cleanup
+        # (Plan 04 GUI handlers check this flag). _imported_bcm stores
+        # the .bcm dict so Restart-on-imported can re-reconcile rep
+        # without re-reading the file.
+        self._is_imported = False
+        self._imported_bcm = None
 
     def start(self, hider_specs):
         """Begin a round. hider_specs: list of (payload, rep) tuples where
@@ -227,6 +233,43 @@ class GameController:
         self.registry = registry.HiderRegistry().reconstruct_from_sentinels(
             lambda: mutation.fetch_all_hider_ids(self.target_obj))
         return self.registry
+
+    def import_state(self, bcm_dict):
+        """Reconstruct this controller's state from an imported .bcm dict
+        WITHOUT re-inserting hiders (they came from the .pse). Mirrors
+        start()'s end-state (_started=True, _backup_name set, registry
+        populated) but skips the snapshot-before-insert + insert loop.
+
+        Steps:
+          1. reconstruct_registry() - sentinel rebuild (rep=None).
+          2. apply_bcm_dict(self, bcm_dict) - reconcile rep + found-status
+             + set _reveal_count/_hint_count/_found_color. (persistence.py)
+          3. Defensive found-color re-apply (idempotent - .pse preserves
+             color, but re-apply defends against a future format change).
+          4. Snapshot a FRESH backup of the post-import object (hiders +
+             found-status applied) so Cleanup/Restart work later. This
+             is the "original" for an imported game (research §6.2):
+             puzzle -> all-hidden initial state; checkpoint -> found-status
+             as saved.
+          5. _started = True; _is_imported = True; _imported_bcm = bcm_dict.
+
+        Raises RuntimeError if already started (mirror start()'s guard).
+        """
+        if self._started:
+            raise RuntimeError("game already started; call cleanup() first")
+        from . import persistence  # lazy import (avoid circular at module load)
+        self.reconstruct_registry()           # game.py:224 (rep=None, all hidden)
+        persistence.apply_bcm_dict(self, bcm_dict)  # reconcile + set fields
+        # Defensive found-color re-apply (research §4.2 - .pse preserves
+        # color but re-apply is idempotent + future-proof).
+        for rec in self.registry.all():
+            if rec.status == registry.HIDER_STATUS_FOUND:
+                cmd.color(self._found_color,
+                          "%s and id %d" % (self.target_obj, rec.id))
+        self._backup_name = backup.snapshot(self.target_obj)  # FRESH post-import
+        self._started = True
+        self._is_imported = True
+        self._imported_bcm = bcm_dict
 
     def cleanup(self):
         """Happy-path cleanup: restore from backup (removes hiders + restores

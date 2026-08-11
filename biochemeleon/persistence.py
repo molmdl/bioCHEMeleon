@@ -1,14 +1,18 @@
 """bioCHEMeleon persistence - .bcm sidecar assembly + .bcmz archive I/O.
 
 Phase 8 module. Pure-layer assembly (build_bcm_dict + parse_bcm_dict +
-apply_bcm_dict) lives here alongside the cmd-coupled file I/O
-(write_bcmz + read_bcmz + resolve_target - added in Plan 03).
+apply_bcm_dict) lives here alongside the pure file-I/O archive helpers
+(write_bcmz + read_bcmz + resolve_target - added in Plan 03). All
+functions in this module are PURE (stdlib only - no `pymol` import); the
+cmd-coupled steps (cmd.save of the .pse before write_bcmz, cmd.load of
+the .pse after read_bcmz, cmd.color re-apply, backup.snapshot) live in
+the GUI handler (Plan 04) + game.py.import_state, NOT here. This keeps
+persistence.py WSL-testable for the pure unit tests (same sys.modules
+stub pattern as test_registry.py).
 
-Purity: module-level imports are stdlib + biochemeleon.registry +
-biochemeleon.setup_state ONLY. NO `pymol` import at module level - the
-cmd-coupled functions (Plan 03) import cmd lazily inside the function
-body so this module stays WSL-importable for the pure unit tests (same
-sys.modules stub pattern as test_registry.py).
+Purity: module-level imports are stdlib (json, os, tempfile, time,
+zipfile) + biochemeleon.registry + biochemeleon.setup_state ONLY. NO
+`pymol` import at module level OR inside any function body.
 
 Dependency direction (strict, no cycle):
   setup_state.py (PURE) <- registry.py (PURE) <- persistence.py (THIS)
@@ -16,9 +20,12 @@ Dependency direction (strict, no cycle):
 """
 
 import json
+import os
+import tempfile
 import time
+import zipfile
 
-from .registry import HiderRegistry  # noqa: F401 (type ref; not strictly needed)
+from .registry import HiderRegistry, ReconcileMismatches  # noqa: F401 (type refs; re-exported for callers)
 from .setup_state import SETUP_FORMAT
 
 # ---- Constants ----
@@ -136,3 +143,137 @@ def parse_bcm_dict(raw):
             "unsupported .bcm version %d (expected %d). "
             "Please update bioCHEMeleon." % (version, BCM_VERSION))
     return d
+
+
+# ---- apply + .bcmz archive I/O (Plan 03) ----
+
+def apply_bcm_dict(controller, bcm_dict):
+    """Set controller state fields + reconcile the registry from a .bcm dict.
+
+    Pure (no pymol). The cmd-coupled steps (cmd.load of the .pse,
+    reconstruct_from_sentinels, cmd.color re-apply, backup.snapshot)
+    are the caller's responsibility - this function only sets the
+    controller's serializable fields and reconciles the (already
+    sentinel-rebuilt) registry with the .bcm's per-hider metadata.
+
+    Precondition: ``controller.registry`` was already rebuilt via
+    ``reconstruct_from_sentinels`` (the caller did that between
+    ``cmd.load(.pse)`` and this call).
+
+    Args:
+        controller (GameController): the controller whose registry
+            was sentinel-rebuilt. Sets _reveal_count, _hint_count,
+            _found_color; reconciles registry in place.
+        bcm_dict (dict): the parsed .bcm sidecar (from parse_bcm_dict
+            or read_bcmz).
+
+    Returns:
+        ReconcileMismatches: the namedtuple from
+        registry.reconcile_with_bcm - caller logs warnings.
+
+    Raises:
+        ValueError: if the .bcm magic or version is wrong (refuse load).
+    """
+    if bcm_dict.get('magic') != BCM_MAGIC:
+        raise ValueError(
+            "not a bioCHEMeleon sidecar (magic=%r, expected %r)" %
+            (bcm_dict.get('magic'), BCM_MAGIC))
+    version = int(bcm_dict.get('version', 1))
+    if version > BCM_VERSION:
+        raise ValueError(
+            "unsupported .bcm version %d (expected %d)" %
+            (version, BCM_VERSION))
+    controller._reveal_count = int(bcm_dict.get('reveal_count', 0))
+    controller._hint_count = int(bcm_dict.get('hint_count', 0))
+    controller._found_color = str(bcm_dict.get('found_color', 'green'))
+    bcm_registry = bcm_dict.get('registry', {})
+    bcm_hiders = (bcm_registry.get('hiders', [])
+                  if isinstance(bcm_registry, dict) else [])
+    return controller.registry.reconcile_with_bcm(bcm_hiders)
+
+
+def write_bcmz(bcmz_path, bcm_dict, pse_path):
+    """Bundle a .pse + .bcm into a single .bcmz archive (stdlib zipfile).
+
+    Pure file I/O (no pymol). The caller does cmd.save(pse_path,
+    target_obj) FIRST (the scoped save that excludes _bchm_backup),
+    then calls this to bundle the .pse + the .bcm JSON sidecar into
+    a single .bcmz archive for sharing.
+
+    Args:
+        bcmz_path (str): path to write the .bcmz archive.
+        bcm_dict (dict): the .bcm sidecar dict (from build_bcm_dict).
+        pse_path (str): path to the already-written .pse file.
+
+    Raises:
+        OSError: if the .pse can't be read or the .bcmz can't be written.
+    """
+    with zipfile.ZipFile(bcmz_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+        zf.write(pse_path, 'game.pse')
+        zf.writestr('game.bcm', json.dumps(bcm_dict, indent=2))
+
+
+def read_bcmz(bcmz_path):
+    """Extract a .bcmz archive -> (pse_path, bcm_dict).
+
+    Pure file I/O (no pymol). Extracts game.pse to a temp file +
+    reads + validates game.bcm. The caller does cmd.load(pse_path,
+    partial=1) AFTER this (to merge the puzzle into the session).
+
+    Args:
+        bcmz_path (str): path to the .bcmz archive.
+
+    Returns:
+        tuple: (pse_path, bcm_dict). pse_path is a temp file the caller
+            must clean up (or use within the temp dir's lifetime).
+
+    Raises:
+        ValueError: if the archive is missing game.pse or game.bcm,
+            or the .bcm magic/version is wrong.
+        OSError: if the archive can't be read.
+    """
+    with zipfile.ZipFile(bcmz_path, 'r') as zf:
+        names = zf.namelist()
+        if 'game.bcm' not in names:
+            raise ValueError(
+                "not a bioCHEMeleon archive (missing game.bcm)")
+        if 'game.pse' not in names:
+            raise ValueError(
+                "archive missing game.pse (cannot reconstruct)")
+        bcm_dict = parse_bcm_dict(zf.read('game.bcm'))
+        tmpdir = tempfile.mkdtemp(prefix='bchm_import_')
+        pse_path = os.path.join(tmpdir, 'game.pse')
+        with open(pse_path, 'wb') as f:
+            f.write(zf.read('game.pse'))
+    return pse_path, bcm_dict
+
+
+def resolve_target(bcm_dict, names_before, loaded_molecules):
+    """Resolve the imported target object name.
+
+    Pure (no pymol). Prefer bcm_dict['target_object'] (the embedded
+    name - set_session restores objects with their saved names). If
+    absent or renamed on collision, fall back to the before/after
+    diff (loaded_molecules - names_before). Returns None if ambiguous.
+
+    Args:
+        bcm_dict (dict): the parsed .bcm sidecar.
+        names_before (set): loaded molecule object names BEFORE the
+            cmd.load (for collision diff).
+        loaded_molecules (list): loaded molecule object names AFTER
+            the cmd.load (from demos.list_loaded_molecule_objects).
+
+    Returns:
+        str or None: the target object name, or None if it can't be
+            resolved.
+    """
+    t = bcm_dict.get('target_object')
+    if t and t in loaded_molecules:
+        return t
+    new = [n for n in loaded_molecules if n not in names_before
+           and not n.startswith('_')]
+    if len(new) == 1:
+        return new[0]
+    if t and t in new:
+        return t
+    return None

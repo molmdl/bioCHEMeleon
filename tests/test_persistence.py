@@ -12,8 +12,11 @@ Or:  python3.6 tests/test_persistence.py
 import os
 import sys
 import json
+import shutil
+import tempfile
 import time
 import unittest
+import zipfile
 from unittest.mock import MagicMock
 
 # Stub pymol so importing biochemeleon.* (whose __init__.py does
@@ -26,9 +29,13 @@ if 'pymol' not in sys.modules:
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from biochemeleon.persistence import (
-    build_bcm_dict, parse_bcm_dict, BCM_MAGIC, BCM_VERSION,
+    build_bcm_dict, parse_bcm_dict, apply_bcm_dict,
+    write_bcmz, read_bcmz, resolve_target,
+    BCM_MAGIC, BCM_VERSION,
 )
-from biochemeleon.registry import HiderRegistry, HIDER_STATUS_FOUND
+from biochemeleon.registry import (
+    HiderRegistry, HIDER_STATUS_FOUND, HIDER_STATUS_HIDDEN, ReconcileMismatches,
+)
 
 
 # ---- Test helpers ----
@@ -242,6 +249,234 @@ class TestBcmRoundTrip(unittest.TestCase):
             self.assertEqual(rebuilt[key], parsed[key],
                              "rebuilt %r != parsed %r" %
                              (rebuilt[key], parsed[key]))
+
+
+# ---- apply_bcm_dict (Plan 03) ----
+
+class TestApplyBcmDict(unittest.TestCase):
+    """6 tests for apply_bcm_dict (the LOAD path: .bcm dict -> controller).
+
+    Uses MockController with a sentinel-rebuilt registry (call
+    reconstruct_from_sentinels first), then apply_bcm_dict sets the
+    controller's state fields + reconciles the registry. Pure (no pymol).
+    """
+
+    def _rebuilt_ctrl(self, keys=None):
+        """Build a MockController with a sentinel-rebuilt registry.
+
+        Defaults to [('o', 1), ('o', 2), ('o', 3)] — the canonical
+        3-sentinel fixture mirroring test_registry.py's
+        TestReconcileFromBcm._rebuilt.
+        """
+        if keys is None:
+            keys = [('o', 1), ('o', 2), ('o', 3)]
+        ctrl = MockController(target_obj='o')
+        ctrl.registry.reconstruct_from_sentinels(lambda: keys)
+        return ctrl
+
+    def test_sets_controller_state_fields(self):
+        """apply_bcm_dict sets _reveal_count, _hint_count, _found_color
+        from the .bcm dict.
+        """
+        ctrl = self._rebuilt_ctrl()
+        bcm = {
+            'magic': BCM_MAGIC, 'version': BCM_VERSION,
+            'reveal_count': 1, 'hint_count': 2, 'found_color': 'cyan',
+            'registry': {'version': 1, 'hiders': []},
+        }
+        apply_bcm_dict(ctrl, bcm)
+        self.assertEqual(ctrl._reveal_count, 1)
+        self.assertEqual(ctrl._hint_count, 2)
+        self.assertEqual(ctrl._found_color, 'cyan')
+
+    def test_reconciles_registry(self):
+        """3 sentinels + 3 .bcm hiders (1 found, reps spheres/sticks/cartoon)
+        -> registry records have real rep + 1 found; mismatches empty.
+        """
+        ctrl = self._rebuilt_ctrl()
+        bcm = {
+            'magic': BCM_MAGIC, 'version': BCM_VERSION,
+            'reveal_count': 0, 'hint_count': 0, 'found_color': 'green',
+            'registry': {'version': 1, 'hiders': [
+                {'id': 1, 'object': 'o', 'rep': 'spheres', 'status': 'found'},
+                {'id': 2, 'object': 'o', 'rep': 'sticks', 'status': 'hidden'},
+                {'id': 3, 'object': 'o', 'rep': 'cartoon', 'status': 'hidden'},
+            ]},
+        }
+        mismatches = apply_bcm_dict(ctrl, bcm)
+        self.assertEqual(ctrl.registry.get('o', 1).rep, 'spheres')
+        self.assertEqual(ctrl.registry.get('o', 1).status, HIDER_STATUS_FOUND)
+        self.assertEqual(ctrl.registry.get('o', 2).rep, 'sticks')
+        self.assertEqual(ctrl.registry.get('o', 3).rep, 'cartoon')
+        self.assertEqual(mismatches.missing_from_bcm, [])
+        self.assertEqual(mismatches.missing_from_pse, [])
+        self.assertEqual(mismatches.bad_rep, [])
+
+    def test_refuses_wrong_magic(self):
+        """apply_bcm_dict with magic='OTHER' -> ValueError."""
+        ctrl = self._rebuilt_ctrl()
+        bcm = {'magic': 'OTHER', 'version': BCM_VERSION,
+               'registry': {'hiders': []}}
+        with self.assertRaises(ValueError):
+            apply_bcm_dict(ctrl, bcm)
+
+    def test_refuses_unsupported_version(self):
+        """apply_bcm_dict with version=2 (> BCM_VERSION) -> ValueError."""
+        ctrl = self._rebuilt_ctrl()
+        bcm = {'magic': BCM_MAGIC, 'version': 2, 'registry': {'hiders': []}}
+        with self.assertRaises(ValueError):
+            apply_bcm_dict(ctrl, bcm)
+
+    def test_tolerates_missing_registry_key(self):
+        """apply_bcm_dict with no 'registry' key -> reconcile_with_bcm([])
+        -> all sentinel records stay rep=None, hidden (graceful).
+        """
+        ctrl = self._rebuilt_ctrl()
+        bcm = {'magic': BCM_MAGIC, 'version': BCM_VERSION}  # no 'registry'
+        mismatches = apply_bcm_dict(ctrl, bcm)
+        for rec in ctrl.registry.all():
+            self.assertIsNone(rec.rep)
+            self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        self.assertEqual(len(mismatches.missing_from_bcm), 3)
+
+    def test_tolerates_missing_state_fields(self):
+        """apply_bcm_dict with no 'reveal_count' -> defaults to 0; no
+        'found_color' -> 'green'.
+        """
+        ctrl = self._rebuilt_ctrl()
+        bcm = {'magic': BCM_MAGIC, 'version': BCM_VERSION,
+               'registry': {'hiders': []}}
+        apply_bcm_dict(ctrl, bcm)
+        self.assertEqual(ctrl._reveal_count, 0)
+        self.assertEqual(ctrl._found_color, 'green')
+
+
+# ---- write_bcmz / read_bcmz (Plan 03) ----
+
+class TestWriteReadBcmz(unittest.TestCase):
+    """3 tests for the .bcmz archive write/read round-trip.
+
+    Uses tempfile.mkdtemp for the .bcmz + .pse paths. Writes a dummy
+    .pse file (empty bytes — testing the zip mechanics, not PyMOL).
+    """
+
+    def test_write_then_read_round_trip(self):
+        """write_bcmz -> read_bcmz: bcm scalar fields preserved + extracted
+        pse_path exists with the right content.
+        """
+        tmpdir = tempfile.mkdtemp(prefix='bchm_test_')
+        self.addCleanup(shutil.rmtree, tmpdir, True)
+        bcmz_path = os.path.join(tmpdir, 'test.bcmz')
+        pse_path = os.path.join(tmpdir, 'game.pse')
+        pse_content = b'FAKE_PSE_CONTENT'
+        with open(pse_path, 'wb') as f:
+            f.write(pse_content)
+        ctrl = MockController()
+        bcm = build_bcm_dict(ctrl, _sample_setup(), 'checkpoint', elapsed=42.5)
+        write_bcmz(bcmz_path, bcm, pse_path)
+        read_pse_path, read_bcm = read_bcmz(bcmz_path)
+        self.addCleanup(shutil.rmtree, os.path.dirname(read_pse_path), True)
+        for key in ('magic', 'version', 'kind', 'target_object', 'started',
+                    'timer_elapsed', 'reveal_count', 'hint_count',
+                    'found_color'):
+            self.assertEqual(read_bcm[key], bcm[key],
+                             "scalar %r not preserved through bcmz round trip"
+                             % (key,))
+        self.assertTrue(os.path.exists(read_pse_path))
+        with open(read_pse_path, 'rb') as f:
+            self.assertEqual(f.read(), pse_content)
+
+    def test_read_bcmz_missing_bcm_raises(self):
+        """Archive with only game.pse (no game.bcm) -> ValueError."""
+        tmpdir = tempfile.mkdtemp(prefix='bchm_test_')
+        self.addCleanup(shutil.rmtree, tmpdir, True)
+        bcmz_path = os.path.join(tmpdir, 'bad.bcmz')
+        with zipfile.ZipFile(bcmz_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('game.pse', b'FAKE')
+        with self.assertRaises(ValueError):
+            read_bcmz(bcmz_path)
+
+    def test_read_bcmz_missing_pse_raises(self):
+        """Archive with only game.bcm (no game.pse) -> ValueError."""
+        tmpdir = tempfile.mkdtemp(prefix='bchm_test_')
+        self.addCleanup(shutil.rmtree, tmpdir, True)
+        bcmz_path = os.path.join(tmpdir, 'bad.bcmz')
+        bcm_json = json.dumps({'magic': BCM_MAGIC, 'version': BCM_VERSION})
+        with zipfile.ZipFile(bcmz_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('game.bcm', bcm_json)
+        with self.assertRaises(ValueError):
+            read_bcmz(bcmz_path)
+
+
+# ---- resolve_target (Plan 03) ----
+
+class TestResolveTarget(unittest.TestCase):
+    """3 tests for resolve_target (the imported target object name resolver)."""
+
+    def test_prefer_bcm_target_object(self):
+        """bcm has target_object='1ubq' and it's in loaded_molecules -> '1ubq'."""
+        bcm = {'target_object': '1ubq'}
+        result = resolve_target(bcm, set(), ['1ubq'])
+        self.assertEqual(result, '1ubq')
+
+    def test_fallback_diff(self):
+        """bcm target_object='missing' not in loaded; names_before=[] so the
+        diff picks up the single new object '1ubq'.
+        """
+        bcm = {'target_object': 'missing'}
+        result = resolve_target(bcm, set(), ['1ubq'])
+        self.assertEqual(result, '1ubq')
+
+    def test_returns_none_if_ambiguous(self):
+        """bcm target_object='missing'; 2 new objects -> ambiguous -> None."""
+        bcm = {'target_object': 'missing'}
+        result = resolve_target(bcm, set(), ['obj_a', 'obj_b'])
+        self.assertIsNone(result)
+
+
+# ---- build -> apply round-trip (Plan 03) ----
+
+class TestBuildApplyRoundTrip(unittest.TestCase):
+    """1 full round-trip test: build_bcm_dict -> apply_bcm_dict.
+
+    Builds a .bcm from ctrl1 (populated registry + state fields), then
+    sentinel-rebuilds ctrl2's registry + applies the .bcm. Asserts
+    ctrl2's state fields + registry records match ctrl1's.
+
+    NOTE: The plan called this class ``TestBcmRoundTrip``, but a class
+    with that name already exists above (2 build<->parse round-trip
+    tests). Reusing the name would shadow the existing class + silently
+    drop those 2 tests (count would be 26, not the plan's 28). Renamed
+    to ``TestBuildApplyRoundTrip`` to avoid the collision (Rule 1 fix).
+    """
+
+    def test_build_then_apply_preserves_state(self):
+        ctrl1 = MockController(target_obj='1ubq', started=True,
+                               reveal_count=3, hint_count=1,
+                               found_color='cyan')
+        ctrl1.registry.register('1ubq', 101, 'spheres',
+                                status=HIDER_STATUS_FOUND)
+        ctrl1.registry.register('1ubq', 102, 'sticks',
+                                status=HIDER_STATUS_HIDDEN)
+        ctrl1.registry.register('1ubq', 103, 'cartoon',
+                                status=HIDER_STATUS_FOUND)
+        setup = _sample_setup()
+        bcm = build_bcm_dict(ctrl1, setup, 'checkpoint', elapsed=42.5)
+        # ctrl2: sentinel-rebuilt registry (fake keys matching ctrl1's ids)
+        ctrl2 = MockController(target_obj='1ubq')
+        ctrl2.registry.reconstruct_from_sentinels(
+            lambda: [('1ubq', 101), ('1ubq', 102), ('1ubq', 103)])
+        apply_bcm_dict(ctrl2, bcm)
+        # State fields preserved
+        self.assertEqual(ctrl2._reveal_count, ctrl1._reveal_count)
+        self.assertEqual(ctrl2._hint_count, ctrl1._hint_count)
+        self.assertEqual(ctrl2._found_color, ctrl1._found_color)
+        # Registry records match (id/object/rep/status)
+        for orig, rebuilt in zip(ctrl1.registry.all(), ctrl2.registry.all()):
+            self.assertEqual(rebuilt.id, orig.id)
+            self.assertEqual(rebuilt.object, orig.object)
+            self.assertEqual(rebuilt.rep, orig.rep)
+            self.assertEqual(rebuilt.status, orig.status)
 
 
 if __name__ == '__main__':
