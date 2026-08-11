@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-08-02)
 Phase: 7 of 11 — Found-Hider Management, Restart & Cleanup — COMPLETE + VERIFIED (gsd-verifier PASSED, 8/8 must-haves). Phase 6 COMPLETE + VERIFIED (gsd-verifier PASSED, 35/35 must-haves). Phase 5 COMPLETE (v1 scope). Phase 4 COMPLETE (6/6). Phase 3 COMPLETE (20/20). Phase 11 (Alt-conf Cartoon/Ribbon Hider v1 Follow-up) ADDED — after Phase 10, research-required.
 Plan: 07-03 of 3 in Phase 7 — COMPLETE. Task 1 (headless smoke): smoke/phase7_smoke.py (181 lines, pure pymol.cmd.* — NO Qt, modeled on phase6_smoke.py) — 38 checks across 7 sections, 38/38 ALL PASSED headlessly via cmd.exe /c run-conda-pymol.bat -cq (exit 0, first run clean; commit e51bd0d). Task 2 (checkpoint:human-verify): APPROVED — user ("approved, all passed. good job!") confirmed all 4 Phase-7 success criteria (C1 found-hider dropdown GAME-08, C2 color picker DIFF-04, C3 Restart GAME-10, C4 Cleanup BTN-06) + the wizard-lifecycle fix (mouse_selection_mode restored after Restart AND Cleanup; hider clicks succeed after Restart) in a real Windows PyMOL GUI session (1znf). 0 runtime bugs at EITHER tier — headless smoke found no bugs in Plan 02 GUI wiring's underlying cmd paths (no fix(07-03) commits), AND the human-verify checkpoint was clean (no GUI bug-fix iterations). Plan 01 TDD + Plan 02 GUI wiring were correct on first runtime exercise (cleanest Phase verification since Phase 3). All WSL gates green (py_compile all [biochemeleon + smoke] + 200 tests [no regression] + Pitfall-1=0 + exec_=1 unchanged). Plan 01 + 02 shipped the pure helpers + GUI wiring; Plan 03 shipped the two-tier runtime verification. Phase 7 ready for gsd-verifier.
 Status: Phase 7 COMPLETE + VERIFIED (gsd-verifier PASSED, 8/8 must-haves, commit 37ba923). All 3 plans done (07-01 + 07-02 + 07-03). Checkpoint APPROVED. Next: Phase 8 (Persistence & Shareable Puzzles) planning.
-Last activity: 2026-08-12 — Phase 7 verification PASSED (gsd-verifier 8/8 must-haves; re-ran headless smoke independently 38/38 ALL PASSED). ROADMAP + REQUIREMENTS + STATE updated for phase completion.
+Last activity: 2026-08-12 — Quick task 002: replaced rg with grep -rnE in AGENTS.md Commands section (rg denied in opencode.json / not installed in WSL; documented Pitfall-1 + exec_ gates now runnable as `grep -rnE`, verified green: Pitfall-1=0 matches, exec_=1 hit on QMessageBox at gui_game.py:271).
 
 Progress: ██████████ 100% (46 of 46 plans done; Phase 7 complete + verified)
 
@@ -56,6 +56,7 @@ Progress: ██████████ 100% (46 of 46 plans done; Phase 7 comp
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 001 | Add parallel-subagent worktree/branch protocol to AGENTS.md | 2026-08-08 | 531d92e | [001-parallel-execution-worktree-protocol](./quick/001-parallel-execution-worktree-protocol/) |
+| 002 | Replace rg with grep -rnE in AGENTS.md Commands | 2026-08-12 | f78a9b7 | [002-fix-rg-to-grep-in-agents-md](./quick/002-fix-rg-to-grep-in-agents-md/) |
 
 ## Accumulated Context
 
