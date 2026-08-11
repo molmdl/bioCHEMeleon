@@ -25,7 +25,7 @@ and this module never imports ``pymol``; ``to_dict`` / ``from_dict`` let
 Phase 8 just write the dict to a ``.bcm`` JSON sidecar and read it back).
 """
 
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 
 from .setup_state import GAME_REPS
 
@@ -37,6 +37,18 @@ HIDER_STATUS_HIDDEN = 'hidden'
 
 #: Status set when the player finds the hider (Phase 4/6 click handler).
 HIDER_STATUS_FOUND = 'found'
+
+
+#: Returned by :meth:`HiderRegistry.reconcile_with_bcm` — three classes
+#: of disagreement between the sentinel-rebuilt registry and the .bcm
+#: sidecar. Empty lists = perfect match. The caller (game.py /
+#: __init__.py) decides whether to log warnings or refuse the load;
+#: the registry stays usable regardless (degraded = playable).
+ReconcileMismatches = namedtuple(
+    'ReconcileMismatches',
+    ['missing_from_bcm',   # [(object, id)] sentinel atoms NOT in .bcm
+     'missing_from_pse',   # [(object, id)] .bcm hiders NOT in sentinels
+     'bad_rep'])           # [(object, id, bad_rep)] .bcm reps not in GAME_REPS
 
 
 # ---- HiderRecord ----
@@ -270,6 +282,68 @@ class HiderRegistry(object):
             self._records[(obj, int(aid))] = HiderRecord(aid, obj, rep=None,
                                                          status=HIDER_STATUS_HIDDEN)
         return self
+
+    # ---- .bcm sidecar reconciliation (Phase 8) ----
+
+    def reconcile_with_bcm(self, bcm_hiders):
+        """Reconcile sentinel-rebuilt records with .bcm sidecar metadata.
+
+        Precondition: ``self`` was rebuilt via
+        :meth:`reconstruct_from_sentinels` (records keyed by
+        ``(object, id)``, ``rep=None``, ``status='hidden'``). For each
+        ``.bcm`` hider dict, find the matching rebuilt record by
+        ``(object, id)`` and set ``rep`` + ``status`` (and ``pos`` if
+        present). Returns a :data:`ReconcileMismatches` namedtuple of
+        three mismatch lists; the caller decides whether to log warnings
+        or refuse the load.
+
+        Pure (no ``pymol`` import). Takes a list of dicts (the
+        ``.bcm['registry']['hiders']`` list). Mutates ``self._records``
+        in place.
+
+        Mismatch handling (never raises — degraded is playable):
+          - sentinel NOT in .bcm (``missing_from_bcm``): left as
+            ``rep=None`` + ``status='hidden'`` (real atom, still clickable).
+          - .bcm hider NOT in sentinels (``missing_from_pse``): NOT
+            registered (ghost entry would corrupt counts_by_rep + on_pick).
+          - .bcm rep not in :data:`GAME_REPS` (``bad_rep``): rec.rep stays
+            ``None`` (do NOT raise — corrupt sidecar should not kill load).
+          - .bcm status not in (hidden, found): defaults to ``'hidden'``.
+        """
+        missing_from_bcm = []
+        missing_from_pse = []
+        bad_rep = []
+        bcm_index = {}
+        for h in bcm_hiders or []:
+            try:
+                key = (h['object'], int(h['id']))
+            except (KeyError, TypeError, ValueError):
+                continue  # malformed .bcm entry — skip
+            bcm_index[key] = h
+        for key, rec in self._records.items():
+            h = bcm_index.get(key)
+            if h is None:
+                missing_from_bcm.append(key)
+                continue
+            bcm_rep = h.get('rep')
+            if bcm_rep is not None and bcm_rep not in GAME_REPS:
+                bad_rep.append((key[0], key[1], bcm_rep))
+                # leave rec.rep = None
+            else:
+                rec.rep = bcm_rep
+            bcm_status = h.get('status', HIDER_STATUS_HIDDEN)
+            if bcm_status not in (HIDER_STATUS_HIDDEN, HIDER_STATUS_FOUND):
+                bcm_status = HIDER_STATUS_HIDDEN
+            rec.status = bcm_status
+            if 'pos' in h and h['pos'] is not None:
+                rec.pos = list(h['pos'])
+        for key, h in bcm_index.items():
+            if key not in self._records:
+                missing_from_pse.append(key)
+        return ReconcileMismatches(
+            missing_from_bcm=missing_from_bcm,
+            missing_from_pse=missing_from_pse,
+            bad_rep=bad_rep)
 
 
 # ---- Phase 7 found-hider selection helpers ----
