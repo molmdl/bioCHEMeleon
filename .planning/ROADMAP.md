@@ -180,7 +180,7 @@ Plans:
 - [x] 08-01-PLAN.md — TDD HiderRegistry.reconcile_with_bcm pure method + ReconcileMismatches namedtuple (registry.py) + unit tests (Wave 1) ✓ 2026-08-12
 - [x] 08-02-PLAN.md — TDD build_bcm_dict + parse_bcm_dict pure functions in NEW persistence.py + unit tests in NEW test_persistence.py (Wave 2) ✓ 2026-08-12
 - [x] 08-03-PLAN.md — apply_bcm_dict + write_bcmz/read_bcmz/resolve_target file I/O in persistence.py + GameController.import_state + _is_imported/_imported_bcm in game.py (Wave 3, depends on 01+02) ✓ 2026-08-12
-- [ ] 08-04-PLAN.md — GUI wiring: export_btn (gui_setup) + begin_row + start_countdown(elapsed) + _begin_play resume fix (gui_game) + _prepare_and_start refactor + _on_export/_on_import/_on_save/_on_restart_imported + modified _on_restart/_on_cleanup (__init__) (Wave 4, depends on 03)
+- [x] 08-04-PLAN.md — GUI wiring: export_btn (gui_setup) + begin_row + start_countdown(elapsed) + _begin_play resume fix (gui_game) + _prepare_and_start refactor + _on_export/_on_import/_on_save/_on_restart_imported + modified _on_restart/_on_cleanup (__init__) (Wave 4, depends on 03) ✓ 2026-08-12
 - [ ] 08-05-PLAN.md — Headless smoke (export/import round-trip, scoped save, reconcile, Restart/Cleanup-on-imported) + human-verify checkpoint (3 success criteria + imported-game lifecycle) (Wave 5, depends on 04)
 
 ### Phase 9: Large Demo Fetch & Source Attribution
