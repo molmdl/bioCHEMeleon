@@ -192,10 +192,13 @@ Plans:
   2. The glycoprotein-with-glycan demo can be fetched from SASBDB on demand, with source and IDs cited
   3. A `DATA_SOURCES.md` documents all PDB IDs, DOIs, SASBDB IDs, and MemProtMD attribution, with MemProtMD per-entry licenses verified before bundling
   4. The demo sub-menu surfaces difficulty-tiered metadata (Easy / Hard / Challenge / Very challenging)
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 09-01: TBD during planning
+- [ ] 09-01-PLAN.md — TDD pure-layer foundation: extend DEMO_MANIFEST to 9 entries (uniform source schema), TIER_LABELS, 4wb3 'mixed'→'hard', randomize fetched-exclusion, pure strip_resn_from_pdb helper (Wave 1)
+- [ ] 09-02-PLAN.md — demos.py split API (download_large_demo/finalize_large_demo/load_cached_demo/cache helpers) + load_demo source-branching + headless smoke (Wave 2, depends on 01)
+- [ ] 09-03-PLAN.md — Qt layer: modeless cancelable QProgressDialog + demo sub-menu tier display (DIFF-05) + human-verify (Wave 3, depends on 02)
+- [ ] 09-04-PLAN.md — DATA_SOURCES.md (DEMO-04) + oxy.ac.uk/DOI corrections + human-verify license/citation accuracy (Wave 1, parallel with 01)
 
 ### Phase 10: Polish, Endgame & Help
 **Goal**: The game is polished with in-game explanations, PyMOL controls help, and a rich endgame experience (win-screen stats + post-game debrief) that delivers the teachable moment. The README is finalized to reflect the shipped product.
@@ -256,7 +259,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 6. Hint & Reveal | 3/3 | ✓ Complete | 2026-08-10 |
 | 7. Found-Hider Management, Restart & Cleanup | 3/3 | ✓ Complete | 2026-08-12 |
 | 8. Persistence & Shareable Puzzles | 0/5 | Not started (5 plans in 4 waves) | - |
-| 9. Large Demo Fetch & Source Attribution | 0/TBD | Not started | - |
+| 9. Large Demo Fetch & Source Attribution | 0/4 | Not started (4 plans in 3 waves) | - |
 | 10. Polish, Endgame & Help | 0/TBD | Not started | - |
 | 11. Alt-conf Cartoon/Ribbon Hider (v1 Follow-up) | 0/0 | Not planned (research required) | - |
 
