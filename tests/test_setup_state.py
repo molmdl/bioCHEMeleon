@@ -23,6 +23,18 @@ from biochemeleon.setup_state import (
     hider_count_cap, randomize_state, validate_state,
 )
 
+# Phase 9 additions (RED): these names are NOT yet implemented in
+# setup_state.py, so the import below is expected to fail until the
+# GREEN step extends the module. The try/except keeps the existing
+# 90 tests importable/runnable; the new Phase 9 test classes reference
+# these names inside their methods and fail (NameError) until GREEN.
+try:
+    from biochemeleon.setup_state import (
+        TIER_LABELS, STRIP_RESN_MEMPROTMD, strip_resn_from_pdb,
+    )
+except ImportError:
+    pass
+
 
 class TestHiderCountCap(unittest.TestCase):
     """Test the hider_count_cap formula: max(1, min(50, atom_count // 50))."""
@@ -463,6 +475,208 @@ class TestRandomizePdbPool(unittest.TestCase):
                     msg="seed %d: fetch pdb_code not in pool" % seed)
         self.assertTrue(found_fetch,
             msg="fetch mode never reached with non-empty pool across 200 seeds")
+
+
+# ---- Phase 9: manifest schema, tier labels, fetch URLs, strip helper ----
+
+
+class TestManifestSchemaPhase9(unittest.TestCase):
+    """Phase 9: 9-entry manifest with the uniform fetch-source schema.
+
+    Every entry carries 9 keys: category, type, difficulty, source,
+    source_id, fetch_url, cache_name, citation, strip. The 6 bundled
+    demos keep working offline; 3 fetched demos (1gzm/3gp6/sasdpg4)
+    carry the network metadata the 09-02 loader uses.
+    """
+
+    def test_count(self):
+        self.assertEqual(len(DEMO_MANIFEST), 9)
+
+    def test_entry_keys(self):
+        expected = {'category', 'type', 'difficulty', 'source', 'source_id',
+                    'fetch_url', 'cache_name', 'citation', 'strip'}
+        for did, entry in DEMO_MANIFEST.items():
+            self.assertEqual(set(entry.keys()), expected,
+                msg="Entry %r has wrong keys: %r" % (did, set(entry.keys())))
+
+    def test_bundled_entries(self):
+        bundled = {'1znf', '1xdn', '5e54', '1k8p', '2qbz', '4wb3'}
+        for did in bundled:
+            e = DEMO_MANIFEST[did]
+            self.assertEqual(e['source'], 'bundled', msg="%r source" % did)
+            self.assertIsNone(e['fetch_url'], msg="%r fetch_url" % did)
+            self.assertFalse(e['strip'], msg="%r strip" % did)
+            self.assertEqual(e['cache_name'], "%s.pdb" % did,
+                msg="%r cache_name" % did)
+
+    def test_new_ids_present(self):
+        self.assertIn('1gzm', DEMO_MANIFEST)
+        self.assertIn('3gp6', DEMO_MANIFEST)
+        self.assertIn('sasdpg4', DEMO_MANIFEST)
+
+
+class TestFetchUrls(unittest.TestCase):
+    """Phase 9: research-verified fetch URLs for the 3 fetched demos."""
+
+    def test_1gzm_url(self):
+        self.assertEqual(
+            DEMO_MANIFEST['1gzm']['fetch_url'],
+            'https://memprotmd.bioch.ox.ac.uk/data/memprotmd/simulations/'
+            '1gzm_default_dppc/files/structures/at.pdb')
+
+    def test_3gp6_url(self):
+        self.assertEqual(
+            DEMO_MANIFEST['3gp6']['fetch_url'],
+            'https://memprotmd.bioch.ox.ac.uk/data/memprotmd/simulations/'
+            '3gp6_default_dppc/files/structures/at.pdb')
+
+    def test_sasdpg4_url(self):
+        self.assertEqual(
+            DEMO_MANIFEST['sasdpg4']['fetch_url'],
+            'https://www.sasbdb.org/media/pdb_file/SASDPG4_fit2_model1.pdb')
+
+
+class TestTierLabels(unittest.TestCase):
+    """Phase 9 DIFF-05: TIER_LABELS maps 4 identifier-safe tiers to display labels."""
+
+    def test_map(self):
+        self.assertEqual(TIER_LABELS, {
+            'easy': 'Easy', 'hard': 'Hard',
+            'challenge': 'Challenge', 'very_challenging': 'Very challenging'})
+
+    def test_every_manifest_difficulty_is_a_tier_key(self):
+        for did, meta in DEMO_MANIFEST.items():
+            self.assertIn(meta['difficulty'], TIER_LABELS,
+                msg="%r difficulty %r not in TIER_LABELS"
+                    % (did, meta['difficulty']))
+
+
+class TestTierAssignment(unittest.TestCase):
+    """Phase 9: fetched demos mapped to the correct tiers."""
+
+    def test_1gzm_very_challenging(self):
+        self.assertEqual(DEMO_MANIFEST['1gzm']['difficulty'], 'very_challenging')
+
+    def test_3gp6_very_challenging(self):
+        self.assertEqual(DEMO_MANIFEST['3gp6']['difficulty'], 'very_challenging')
+
+    def test_sasdpg4_challenge(self):
+        self.assertEqual(DEMO_MANIFEST['sasdpg4']['difficulty'], 'challenge')
+
+
+class Test4wb3MappedToHard(unittest.TestCase):
+    """Phase 9: 4wb3 difficulty 'mixed' -> 'hard' (09-RESEARCH-pipeline.md:422)."""
+
+    def test_4wb3_hard(self):
+        self.assertEqual(DEMO_MANIFEST['4wb3']['difficulty'], 'hard')
+
+    def test_4wb3_not_mixed(self):
+        self.assertNotEqual(DEMO_MANIFEST['4wb3']['difficulty'], 'mixed')
+
+
+class TestStripFalseForSasbdb(unittest.TestCase):
+    """Phase 9: SASDPG4 strip=False (glycan HETATM must survive).
+
+    A naive solvent/inorganic strip is a no-op here (0 waters/ions), but
+    strip=False documents the entry's actual content and avoids a
+    misleading 'stripped N waters' log line. Stripping would also risk
+    the glycans if a future edit used a broad hetatm selector.
+    """
+
+    def test_sasdpg4_strip_false(self):
+        self.assertFalse(DEMO_MANIFEST['sasdpg4']['strip'])
+
+
+class TestRandomizeExcludesFetched(unittest.TestCase):
+    """Phase 9: randomize_state never picks a fetched demo (offline-safe).
+
+    The non-lock random pick draws ONLY from bundled demos so a random
+    'demo' target always works offline. The lock_source path still
+    preserves a user-locked fetched demo_id (explicit user choice).
+    """
+
+    def test_random_pick_never_fetched(self):
+        for seed in range(50):
+            s = randomize_state(seed=seed)
+            if s['target_mode'] == 'demo':
+                self.assertEqual(
+                    DEMO_MANIFEST[s['demo_id']].get('source', 'bundled'),
+                    'bundled',
+                    msg="seed %d: randomize picked fetched demo %r"
+                        % (seed, s['demo_id']))
+
+    def test_lock_source_preserves_fetched_demo(self):
+        locked = {'target_mode': 'demo', 'demo_id': '1gzm'}
+        s = randomize_state(seed=7, lock_source=True, locked_state=locked)
+        self.assertEqual(s['demo_id'], '1gzm')
+
+
+class TestStripResnFromPdb(unittest.TestCase):
+    """Phase 9: pure PDB-line strip helper (SOL/NA/CL removal).
+
+    Filters ATOM lines whose residue name (PDB cols 18-20, 0-indexed
+    line[17:20], .strip() for padding agnosticism) is in the strip set.
+    All non-ATOM lines (TITLE/CRYST1/MODEL/TER/ENDMDL/HETATM/...) are
+    preserved unconditionally. Deterministic pure-Python strip (NOT
+    PyMOL solvent/inorganic selectors) so the wet file never enters PyMOL.
+    """
+
+    # A column-aligned ATOM line whose residue name occupies cols 18-20
+    # (0-indexed 17:20). PREFIX is cols 1-17, SUFFIX is cols 21+.
+    _PREFIX = "ATOM      1  N   "  # 17 chars: "ATOM" + serial + name + altLoc
+    _SUFFIX = "     1"             # resi tail
+
+    @classmethod
+    def _atom_line(cls, resn_field):
+        # resn_field is EXACTLY 3 chars -> lands in cols 18-20 (line[17:20])
+        return cls._PREFIX + resn_field + cls._SUFFIX + "\n"
+
+    def test_strips_sol_na_cl_keeps_protein_lipid(self):
+        synthetic = (
+            "TITLE test\n"
+            "CRYST1\n"
+            + self._atom_line("MET")
+            + self._atom_line("SOL")
+            + self._atom_line("NA ")
+            + self._atom_line("CL ")
+            + self._atom_line("DPP")
+            + "TER\n"
+            + "ENDMDL\n"
+        )
+        result = strip_resn_from_pdb(synthetic, STRIP_RESN_MEMPROTMD)
+        # non-ATOM lines preserved
+        self.assertIn("TITLE test", result)
+        self.assertIn("CRYST1", result)
+        self.assertIn("TER", result)
+        self.assertIn("ENDMDL", result)
+        # protein/lipid ATOM lines kept
+        atom_lines = [l for l in result.splitlines() if l.startswith("ATOM")]
+        self.assertEqual(len(atom_lines), 2,
+            msg="expected MET+DPP only, got %r" % atom_lines)
+        resns = sorted(l[17:20].strip() for l in atom_lines)
+        self.assertEqual(resns, ['DPP', 'MET'])
+
+    def test_padding_trailing_space(self):
+        # resn field cols 18-20 = 'NA ' (2-char ion + trailing space)
+        line = self._atom_line("NA ")
+        self.assertEqual(line[17:20], "NA ")  # sanity: column-aligned
+        self.assertEqual(strip_resn_from_pdb(line, STRIP_RESN_MEMPROTMD), "\n")
+
+    def test_padding_leading_space(self):
+        # resn field cols 18-20 = ' NA' (leading space + 2-char ion)
+        line = self._atom_line(" NA")
+        self.assertEqual(line[17:20], " NA")  # sanity: column-aligned
+        self.assertEqual(strip_resn_from_pdb(line, STRIP_RESN_MEMPROTMD), "\n")
+
+    def test_empty_input(self):
+        self.assertEqual(strip_resn_from_pdb('', STRIP_RESN_MEMPROTMD), '')
+
+    def test_non_atom_preserved(self):
+        # HETATM is NOT filtered (only ATOM lines are) -> HOH survives even
+        # though HOH is a water residue name (09-RESEARCH-memprotmd.md:267-274).
+        text = "HETATM    1  O   HOH     1\n"
+        result = strip_resn_from_pdb(text, STRIP_RESN_MEMPROTMD)
+        self.assertIn("HOH", result)
 
 
 if __name__ == '__main__':
