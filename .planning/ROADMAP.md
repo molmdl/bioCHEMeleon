@@ -226,10 +226,17 @@ Plans:
   4. A game with mixed representations (sphere + line/stick + cartoon + ribbon) produces hiders in each selected rep, all tracked in the registry, all visible + clickable in the GUI
   5. Cleanup restores the original structure for alt-conf hiders (verify_intact True + count back to orig)
   6. New Game flow (cleanup → re-start) works without residual alt-conf state corruption
-**Plans**: 0 plans
+**Plans**: 8 plans
 
 Plans:
-- [ ] TBD (run /gsd-research-phase 11 first — HIGHEST research flag; prior attempt's integration failed, re-research required)
+- [ ] 11-01-PLAN.md — TDD pure generators: pick_segments (disjoint mid-chain segments) + generate_middle_displacement (rigid unit vectors) — Wave 1 (parallel with 02)
+- [ ] 11-02-PLAN.md — TDD pure registry: 3 alt-conf fields (is_altconf/endpoint_resvs/alt_tag) + get_altconf_by_resv + serialization/.bcm round-trip — Wave 1 (parallel with 01)
+- [ ] 11-03-PLAN.md — TDD persistence .bcm round-trip tests for the 3 alt-conf fields (NO version bump; backward-compat with Phase 8 sidecars) — Wave 2 (parallel with 04)
+- [ ] 11-04-PLAN.md — mutation.py insert_altconf_cartoon_hider (4-call construction + 4 Bug fixes + displacement) + insert_hider_for_rep dispatcher (arity-based backward-compat routing) — Wave 2 (parallel with 03)
+- [ ] 11-05-PLAN.md — game.py + wizard.py: on_pick alt/resv gate + get_altconf_by_resv dual lookup + _mark_found is_altconf coloring + start backup_name/is_first_altconf/all_states + do_pick iterate pk1 + import_state alt fallback — Wave 3
+- [ ] 11-06-PLAN.md — __init__.py _prepare_and_start: build 4-tuple alt-conf payloads (pick_segments + generate_middle_displacement) + drop free_nterminal_valence — Wave 4
+- [ ] 11-07-PLAN.md — smoke/phase11_smoke.py headless smoke (construction + scoring + cleanup + multi-hider + mixed-rep + .bcm + .pse alt survival) — Wave 5
+- [ ] 11-08-PLAN.md — smoke/phase11_gui_diag.py + checkpoint:human-verify (all 6 success criteria + 4 GUI-only failure modes in real Windows PyMOL) — Wave 6, autonomous: false
 
 **RESEARCH REQUIRED (do NOT skip):** This phase has the HIGHEST research flag. A prior attempt (05-06 spike + 05-08 implementation, 2026-08-09) proved the alt-conf mechanism viable in isolation (10/10 headless) but multi-rep integration revealed 4 cascading GUI-only bug classes. Re-research MUST address:
 
