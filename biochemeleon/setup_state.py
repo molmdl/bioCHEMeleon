@@ -22,17 +22,51 @@ import copy as _copy
 #: Source: research section 3.6 - verified from outline.py REP_LIST + PyMOL wiki.
 GAME_REPS = ['lines', 'sticks', 'spheres', 'cartoon', 'ribbon']
 
-#: Manifest of the 6 bundled demo PDBs (DEMO-01).
-#: Each entry: {category, type, difficulty, file}.
-#: Citations live in biochemeleon/data/demos/SOURCES.md (Plan 02-02).
-#: Phase 9 (DIFF-05) will extend this with large fetched demos + tiers.
+#: Manifest of the 9 demo PDBs: 6 bundled (offline) + 3 fetched (network).
+#: Each entry carries the Phase 9 fetch-source schema:
+#:   {category, type, difficulty, source, source_id, fetch_url,
+#:    cache_name, citation, strip}
+#: 'source' drives the loader branch ('bundled' -> data/demos/, fetched
+#: -> tmp/phase9-demos/cache/); 'cache_name' is the on-disk filename.
+#: Citations live in repo-root DATA_SOURCES.md (DEMO-04, Phase 9).
+#: Tier-ordered (easy -> hard -> challenge -> very_challenging) so the
+#: demo combo shows a natural difficulty progression (DIFF-05).
 DEMO_MANIFEST = {
-    '1znf': {'category': 'Protein',      'type': 'protein',     'difficulty': 'easy',  'file': '1znf.pdb'},
-    '1xdn': {'category': 'Protein',      'type': 'protein',     'difficulty': 'hard',  'file': '1xdn.pdb'},
-    '5e54': {'category': 'Nucleic acid', 'type': 'rna',         'difficulty': 'easy',  'file': '5e54.pdb'},
-    '1k8p': {'category': 'Nucleic acid', 'type': 'dna',         'difficulty': 'easy',  'file': '1k8p.pdb'},
-    '2qbz': {'category': 'Nucleic acid', 'type': 'rna',         'difficulty': 'hard',  'file': '2qbz.pdb'},
-    '4wb3': {'category': 'Mixed',        'type': 'protein/na',  'difficulty': 'mixed', 'file': '4wb3.pdb'},
+    # ---- easy ----
+    '1znf':  {'category': 'Protein',       'type': 'protein',    'difficulty': 'easy',  'source': 'bundled',  'source_id': '1ZNF', 'fetch_url': None, 'cache_name': '1znf.pdb', 'citation': '1ZNF', 'strip': False},
+    '5e54':  {'category': 'Nucleic acid',  'type': 'rna',        'difficulty': 'easy',  'source': 'bundled',  'source_id': '5E54', 'fetch_url': None, 'cache_name': '5e54.pdb', 'citation': '5E54', 'strip': False},
+    '1k8p':  {'category': 'Nucleic acid',  'type': 'dna',        'difficulty': 'easy',  'source': 'bundled',  'source_id': '1K8P', 'fetch_url': None, 'cache_name': '1k8p.pdb', 'citation': '1K8P', 'strip': False},
+    # ---- hard ----
+    '1xdn':  {'category': 'Protein',       'type': 'protein',    'difficulty': 'hard',  'source': 'bundled',  'source_id': '1XDN', 'fetch_url': None, 'cache_name': '1xdn.pdb', 'citation': '1XDN', 'strip': False},
+    '2qbz':  {'category': 'Nucleic acid',  'type': 'rna',        'difficulty': 'hard',  'source': 'bundled',  'source_id': '2QBZ', 'fetch_url': None, 'cache_name': '2qbz.pdb', 'citation': '2QBZ', 'strip': False},
+    '4wb3':  {'category': 'Mixed',         'type': 'protein/na', 'difficulty': 'hard',  'source': 'bundled',  'source_id': '4WB3', 'fetch_url': None, 'cache_name': '4wb3.pdb', 'citation': '4WB3', 'strip': False},
+    # ---- challenge (fetched: SASBDB glycoprotein; strip=False so glycan HETATM survives) ----
+    'sasdpg4': {'category': 'Glycoprotein',    'type': 'protein',  'difficulty': 'challenge',
+                'source': 'sasbdb',   'source_id': 'SASDPG4',
+                'fetch_url': 'https://www.sasbdb.org/media/pdb_file/SASDPG4_fit2_model1.pdb',
+                'cache_name': 'SASDPG4_fit2_model1.pdb.gz', 'citation': 'SASDPG4', 'strip': False},
+    # ---- very_challenging (fetched: MemProtMD membrane proteins; strip=True for SOL/NA/CL) ----
+    '1gzm':  {'category': 'Membrane protein', 'type': 'protein',  'difficulty': 'very_challenging',
+              'source': 'memprotmd', 'source_id': '1GZM',
+              'fetch_url': 'https://memprotmd.bioch.ox.ac.uk/data/memprotmd/simulations/1gzm_default_dppc/files/structures/at.pdb',
+              'cache_name': '1gzm.pdb.gz', 'citation': '1GZM', 'strip': True},
+    '3gp6':  {'category': 'Membrane protein', 'type': 'protein',  'difficulty': 'very_challenging',
+              'source': 'memprotmd', 'source_id': '3GP6',
+              'fetch_url': 'https://memprotmd.bioch.ox.ac.uk/data/memprotmd/simulations/3gp6_default_dppc/files/structures/at.pdb',
+              'cache_name': '3gp6.pdb.gz', 'citation': '3GP6', 'strip': True},
+}
+
+#: Phase 9 DIFF-05 display map: identifier-safe tier value -> the
+#: human-readable label the success criterion literally specifies
+#: ("Easy / Hard / Challenge / Very challenging"). The manifest stores
+#: the identifier-safe keys (no spaces: easy/hard/challenge/
+#: very_challenging); the GUI demo_combo maps each entry's difficulty
+#: through this table to render the tier in the dropdown.
+TIER_LABELS = {
+    'easy': 'Easy',
+    'hard': 'Hard',
+    'challenge': 'Challenge',
+    'very_challenging': 'Very challenging',
 }
 
 #: Curated pool of 34 mixed PDB codes for Randomize fetch mode (Gap 4).
@@ -147,6 +181,53 @@ def _validate_pdb_pool(pool):
     return seen
 
 
+# ---- Phase 9: PDB residue-name strip helper (pure) ----
+
+#: Verified MemProtMD strip set: GROMACS solvent (SOL = water) plus the
+#: NA sodium and CL chloride counter-ions that neutralize the
+#: simulation box. Empirically verified by wet-vs-dry diff + atom-count
+#: math (3gp6: 76,018 stripped = 75,789 SOL + 116 NA + 113 CL; 1gzm
+#: carries the same three residue names). MemProtMD records these as
+#: ATOM (0 HETATM), so the strip is a pure residue-name line-filter
+#: rather than a solvent/inorganic selector (09-RESEARCH-memprotmd).
+STRIP_RESN_MEMPROTMD = {'SOL', 'NA', 'CL'}
+
+
+def strip_resn_from_pdb(text, strip_set):
+    """Remove ATOM lines whose residue name is in *strip_set* (pure).
+
+    Iterates the PDB *text* line by line. For lines beginning with the
+    ATOM record, the residue name is read from PDB columns 18-20
+    (0-indexed ``line[17:20]``) and ``.strip()``-ed so 2-char ion names
+    are matched padding-agnostically ('NA ', ' NA', 'NA' all strip).
+    Lines whose residue name is in *strip_set* are dropped; every other
+    line (all non-ATOM records: TITLE, CRYST1, MODEL, TER, ENDMDL, END,
+    REMARK, HETATM, ...) is preserved unconditionally.
+
+    Empty/None *text* returns ''. The wet file is stripped in a single
+    Python pass before it ever reaches the molecular viewer, so the
+    ~95k-atom wet PDB never needs to be loaded into it. This is the
+    deterministic pure-Python strip used by the Phase 9 MemProtMD fetch
+    worker; it avoids relying on selector classification of solvent or
+    inorganic ions and preserves DPPC lipids / protein residues by
+    construction (filtering by residue name can never drop a DPP lipid
+    or a protein residue).
+
+    Returns the kept lines joined by newlines with a trailing newline
+    (or '' for empty input).
+    """
+    if not text:
+        return ""
+    kept = []
+    for line in text.splitlines():
+        if line.startswith("ATOM"):
+            resn = line[17:20].strip()
+            if resn in strip_set:
+                continue
+        kept.append(line)
+    return "\n".join(kept) + "\n"
+
+
 # ---- Pure functions ----
 
 def hider_count_cap(atom_count):
@@ -182,6 +263,12 @@ def randomize_state(seed=None, atom_count=None, lock_source=False,
     drawn from the pool. If *pdb_pool* is None, DEFAULTS["pdb_pool"] is
     used. If *pdb_pool* is an empty list, "fetch" mode is re-rolled to
     "demo" (never produce an empty pdb_code box).
+
+    Phase 9: a non-lock "demo" target is drawn ONLY from bundled demos
+    (source == 'bundled') so a random target always works offline --
+    fetched demos need the network (Open Risk 3 rec (a)). The lock_source
+    path still preserves a user-locked fetched demo_id (explicit user
+    choice overrides the exclusion).
 
     The returned dict is a complete state (all DEFAULTS keys) suitable
     for passing to SetupTab.apply_state().
@@ -227,7 +314,14 @@ def randomize_state(seed=None, atom_count=None, lock_source=False,
             pdb_code = rng.choice(pool_for_fetch)
         else:
             pdb_code = ""
-        demo_id = rng.choice(list(DEMO_MANIFEST.keys()))
+        # Phase 9: a non-lock "demo" target is drawn ONLY from bundled
+        # demos (source == 'bundled') so a random target always works
+        # offline -- fetched demos need the network (Open Risk 3 rec
+        # (a)). lock_source above still preserves a user-locked fetched
+        # demo_id (explicit user choice overrides the exclusion).
+        bundled_ids = [did for did, m in DEMO_MANIFEST.items()
+                       if m.get('source', 'bundled') == 'bundled']
+        demo_id = rng.choice(bundled_ids)
 
     return {
         "format": SETUP_FORMAT,

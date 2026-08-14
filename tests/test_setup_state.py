@@ -21,19 +21,8 @@ from biochemeleon.setup_state import (
     GAME_REPS, DEMO_MANIFEST, DEFAULTS, SETUP_FORMAT, PDB_POOL,
     _validate_pdb_code,
     hider_count_cap, randomize_state, validate_state,
+    TIER_LABELS, STRIP_RESN_MEMPROTMD, strip_resn_from_pdb,
 )
-
-# Phase 9 additions (RED): these names are NOT yet implemented in
-# setup_state.py, so the import below is expected to fail until the
-# GREEN step extends the module. The try/except keeps the existing
-# 90 tests importable/runnable; the new Phase 9 test classes reference
-# these names inside their methods and fail (NameError) until GREEN.
-try:
-    from biochemeleon.setup_state import (
-        TIER_LABELS, STRIP_RESN_MEMPROTMD, strip_resn_from_pdb,
-    )
-except ImportError:
-    pass
 
 
 class TestHiderCountCap(unittest.TestCase):
@@ -114,39 +103,49 @@ class TestGameReps(unittest.TestCase):
 
 
 class TestDemoManifest(unittest.TestCase):
-    """Test the DEMO_MANIFEST dict (6 bundled demos)."""
+    """Test the DEMO_MANIFEST dict (9 demos: 6 bundled + 3 fetched)."""
 
     def test_count(self):
-        self.assertEqual(len(DEMO_MANIFEST), 6)
+        self.assertEqual(len(DEMO_MANIFEST), 9)
 
     def test_ids(self):
         self.assertEqual(
             set(DEMO_MANIFEST.keys()),
-            {'1znf', '1xdn', '5e54', '1k8p', '2qbz', '4wb3'})
+            {'1znf', '1xdn', '5e54', '1k8p', '2qbz', '4wb3',
+             '1gzm', '3gp6', 'sasdpg4'})
 
     def test_entry_shape(self):
+        expected = {'category', 'type', 'difficulty', 'source',
+                    'source_id', 'fetch_url', 'cache_name', 'citation',
+                    'strip'}
         for did, entry in DEMO_MANIFEST.items():
-            self.assertEqual(
-                set(entry.keys()),
-                {'category', 'type', 'difficulty', 'file'},
-                msg="Entry %r has wrong keys: %r" % (did, entry.keys()))
+            self.assertEqual(set(entry.keys()), expected,
+                msg="Entry %r has wrong keys: %r" % (did, set(entry.keys())))
 
     def test_1znf(self):
         e = DEMO_MANIFEST['1znf']
         self.assertEqual(e['category'], 'Protein')
         self.assertEqual(e['difficulty'], 'easy')
-        self.assertEqual(e['file'], '1znf.pdb')
+        self.assertEqual(e['cache_name'], '1znf.pdb')
+        self.assertEqual(e['source'], 'bundled')
 
     def test_4wb3(self):
         e = DEMO_MANIFEST['4wb3']
         self.assertEqual(e['category'], 'Mixed')
-        self.assertEqual(e['difficulty'], 'mixed')
+        self.assertEqual(e['difficulty'], 'hard')
 
-    def test_files_lowercase(self):
-        for did, entry in DEMO_MANIFEST.items():
-            self.assertEqual(entry['file'], "%s.pdb" % did,
-                msg="file for %r should be %r.pdb, got %r"
-                    % (did, did, entry['file']))
+    def test_bundled_cache_name_pattern(self):
+        # Bundled demos cache as plain <did>.pdb in data/demos/; fetched
+        # demos cache as compressed <name>.pdb.gz in tmp/phase9-demos/cache/.
+        bundled = {'1znf', '1xdn', '5e54', '1k8p', '2qbz', '4wb3'}
+        for did in bundled:
+            self.assertEqual(DEMO_MANIFEST[did]['cache_name'], "%s.pdb" % did,
+                msg="bundled cache_name for %r should be %r.pdb, got %r"
+                    % (did, did, DEMO_MANIFEST[did]['cache_name']))
+        for did in ('1gzm', '3gp6', 'sasdpg4'):
+            self.assertTrue(DEMO_MANIFEST[did]['cache_name'].endswith('.pdb.gz'),
+                msg="fetched cache_name for %r should end with .pdb.gz, got %r"
+                    % (did, DEMO_MANIFEST[did]['cache_name']))
 
 
 class TestRandomizeState(unittest.TestCase):
