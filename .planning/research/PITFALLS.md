@@ -350,7 +350,7 @@ PyMOL **Open Source has no undo/redo**. The `undocontext` is a no-op stub. (The 
 | Auto-fetching membrane PDBs from a hardcoded URL on plugin load | Network dependency for offline demos; MITM risk; URL rot | Bundle small PDBs; fetch large ones on-demand *only* when user requests that demo. Validate checksums if available. |
 | `cmd.load(user_input_path)` without sanitization | Path traversal / loading arbitrary files (low risk, local user) | This is a local desktop plugin, so risk is low — but still validate extension and catch `CmdException` to give a clean error. |
 | Vendoring an unapproved 3rd-party lib into `3rd_party_lib/` without noting its license | License violation; repo contamination | Per `PROJECT.md` Constraints: list every non-PyMOL dep to a file, get user approval, note license in the vendored dir. |
-| Shipping membrane coordinates from MemProtMD without verifying their license | License violation; attribution failure | Verify MemProtMD terms at **demos** phase (site was unreachable at research time — MEDIUM confidence). Cite the MemProtMD paper (Stansfeld et al., *Nat. Methods* 2018) and link to the entry page. |
+| Shipping membrane coordinates from MemProtMD without verifying their license | License violation; attribution failure | MemProtMD license verified (CC-BY 4.0, 2026-08-14). Cite Newport et al. Nucleic Acids Res. 2019 (DOI: 10.1093/nar/gky1047) + Stansfeld et al. Structure 2015 (DOI: 10.1016/j.str.2015.05.006) and link to the entry page. |
 | Including a PDB in the bundle without citing its DOI | Violates RCSB attribution request | Per RCSB policy: cite PDB ID + DOI (`https://doi.org/10.2210/pdbXXXX/pdb`) + corresponding publication. Generate a `DATA_SOURCES.md` with all citations. |
 
 ## UX Pitfalls
@@ -514,11 +514,11 @@ These were NOT in the original research — discovered when the headless smoke c
 - `surface` is out of scope (`PROJECT.md`) — good, because surface is a computed mesh over an object and doesn't "blend" a foreign atom in any useful way.
 - `nonbonded` (dots) can render a lone atom — useful as a fallback rep for sphere hiders.
 
-### Licensing/attribution specifics (HIGH confidence for RCSB/SASBDB, MEDIUM for MemProtMD)
+### Licensing/attribution specifics (HIGH confidence for RCSB/SASBDB/MemProtMD)
 
 - **RCSB PDB** (1znf, 1xdn, 5E54, 1K8P, 2QBZ, 4WB3, 1GZM, 3GP6): **CC0 1.0 Public Domain Dedication** (per official wwPDB policy, confirmed at `rcsb.org/pages/policies`). Free to bundle and redistribute. **Attribution is requested**: cite PDB ID + DOI (`https://doi.org/10.2210/pdbXXXX/pdb`) + the corresponding structure publication + the molecular graphics program (PyMOL). Generate a `DATA_SOURCES.md` listing all of these.
 - **SASBDB** (Alpha-1-glycoprotein model, per `PROJECT.md` Note 1): per official `/about/` page: *"free of all copyright restrictions and made fully and freely available for both non-commercial and commercial use. Users of the data should attribute the original authors."* Cite the SASBDB entry ID and the original authors.
-- **MemProtMD** (1GZM helix, 3GP6 sheets with full DPPC membrane): the **site was unreachable** at research time (transport errors on `memprotmd.bioch.oxy.ac.uk`). MEDIUM confidence — the data is academic and the canonical citation is Stansfeld et al., *MemProtMD: Automated Coarse-Grained Membrane Protein Embedding Simulations*, Nat. Methods 2018 (`https://doi.org/10.1038/s41592-018-0220-9`, fetch timed out — verify at **demos** phase). **Verify the license of each MemProtMD entry directly on the site before bundling**; if the membrane coordinates are CC-BY or similar, the attribution requirements may be stricter than PDB's CC0. The PDB entries (1GZM, 3GP6) themselves are CC0; the **membrane coordinates** (the DPPC bilayer) come from MemProtMD and may carry their own terms.
+- **MemProtMD** (1GZM helix, 3GP6 sheets with full DPPC membrane): the site is reachable at `memprotmd.bioch.ox.ac.uk` (the prior "unreachable" was a domain typo — "oxy" instead of "ox" in the hostname). HIGH confidence — the license is CC-BY 4.0 International (verified 2026-08-14 from the site JS bundle). The corrected citations are: Newport TD, Sansom MSP, Stansfeld PJ. *The MemProtMD database: a resource for membrane-embedded protein structures and their lipid interactions.* Nucleic Acids Res. 2019;47(D1):D390-D397. DOI: 10.1093/nar/gky1047 (database paper, primary); Stansfeld PJ et al. *MemProtMD: Automated Insertion of Membrane Protein Structures into Explicit Lipid Membranes.* Structure. 2015;23(7):1350-1361. DOI: 10.1016/j.str.2015.05.006 (methodology). License: CC-BY 4.0 (verified 2026-08-14 from the site JS bundle). **The membrane coordinates (the DPPC bilayer) come from MemProtMD and carry CC-BY 4.0** — attribution is mandatory (stricter than PDB's CC0). The PDB entries (1GZM, 3GP6) themselves are CC0.
 - **PyMOL itself**: cite Schrödinger LLC / `pymol.org` per standard practice.
 
 ## Sources
@@ -538,7 +538,7 @@ These were NOT in the original research — discovered when the headless smoke c
 - **`Pymol-script-repo/plugins/bnitools.py`** — MEDIUM. `cmd.set_key('CTRL-A', cmd.select, ("sele", "visible", 1))` — keyboard binding that persists for the session.
 - **RCSB PDB `/pages/policies`** — HIGH. *"data files contained in the PDB archive are available under the CC0 1.0 Universal (CC0 1.0) Public Domain Dedication."* Citation policy: cite PDB ID + DOI + publication + graphics program.
 - **SASBDB `/about/`** — HIGH. *"free of all copyright restrictions and made fully and freely available for both non-commercial and commercial use. Users of the data should attribute the original authors."*
-- **MemProtMD** (`memprotmd.bioch.oxy.ac.uk`) — **UNREACHABLE** at research time (transport errors). MEDIUM confidence: cite Stansfeld et al. Nat. Methods 2018; verify license per entry at **demos** phase.
+- **MemProtMD** (`memprotmd.bioch.ox.ac.uk`) — **reachable** (verified 2026-08-14, HTTP 200). HIGH confidence: license is CC-BY 4.0 (verified from site JS bundle); cite Newport et al. Nucleic Acids Res. 2019 (DOI: 10.1093/nar/gky1047, primary) + Stansfeld et al. Structure 2015 (DOI: 10.1016/j.str.2015.05.006, methodology).
 
 ---
 *Pitfalls research for: PyMOL 2.x plugin — interactive molecular hide-and-seek game (bioCHEMeleon v1)*
