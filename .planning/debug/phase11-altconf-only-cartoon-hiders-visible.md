@@ -1,8 +1,8 @@
 ---
-status: fixing
+status: verifying
 trigger: "Phase 11 alt-conf hiders: when MULTIPLE reps configured (cartoon+ribbon+spheres+sticks), ONLY cartoon hiders render. Non-cartoon reps' hiders invisible. main branch is GOOD (all reps render). KeyError fix (ebd5086) was masking this — now exposed."
 created: 2026-08-15T00:00:00Z
-updated: 2026-08-15T01:30:00Z
+updated: 2026-08-15T01:45:00Z
 ---
 
 ## Current Focus
