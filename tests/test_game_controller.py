@@ -396,6 +396,93 @@ class TestOnPickAltconf(unittest.TestCase):
         win_cb.assert_called_once()
 
 
+class TestMarkFoundAltconf(unittest.TestCase):
+    """Test GameController._mark_found is_altconf branch (Phase 11, Pitfall 14).
+
+    For alt-conf hiders, _mark_found colors ONLY the GAME middle-range atoms
+    (``segi GAME and resi <rv1+1>-<rv2-1>``) -- NOT the shared id (coloring by
+    id colors the real trace too, since alt-conf atoms share ids with their
+    originals). For non-alt-conf (rec=None or rec.is_altconf=False), color by
+    id (existing behavior; backward compat).
+
+    These are UNIT tests for _mark_found directly (complement the TestOnPickAltconf
+    integration tests which exercise _mark_found via on_pick).
+    """
+
+    def setUp(self):
+        """Build a fresh GameController with a clean mock cmd history."""
+        self.gc = GameController('1ubq')
+        game.cmd.reset_mock()
+
+    # ---- 1. alt-conf colors middle range (3-residue segment -> 1 middle resi) ----
+
+    def test_mark_found_altconf_colors_middle_range(self):
+        """_mark_found(100, rec) where rec.is_altconf=True, endpoint_resvs=(2,4)
+        -> cmd.color('green', '1ubq and segi GAME and resi 3-3').
+
+        The middle range is rv1+1=3 to rv2-1=3 (the single middle residue of a
+        3-residue segment 2-4). Assert the selection contains 'segi GAME and
+        resi 3-3' and does NOT contain 'id 100' (Pitfall 14: coloring by shared
+        id would color the real trace too)."""
+        rec = self.gc.registry.register(
+            '1ubq', 100, 'cartoon', is_altconf=True,
+            endpoint_resvs=(2, 4), alt_tag='B')
+
+        self.gc._mark_found(100, rec)
+
+        self.assertEqual(self.gc.registry.get('1ubq', 100).status,
+                         HIDER_STATUS_FOUND)
+        game.cmd.color.assert_called_once()
+        sele = game.cmd.color.call_args[0][1]
+        self.assertIn('segi GAME and resi 3-3', sele)
+        self.assertNotIn('id 100', sele)
+
+    # ---- 2. alt-conf 5-residue segment -> 3 middle residues ----
+
+    def test_mark_found_altconf_5residue_range(self):
+        """_mark_found(100, rec) where endpoint_resvs=(2,6) -> middle range
+        rv1+1=3 to rv2-1=5 -> 'resi 3-5' (3 middle residues for a 5-residue
+        segment). Assert the selection contains 'resi 3-5'."""
+        rec = self.gc.registry.register(
+            '1ubq', 100, 'cartoon', is_altconf=True,
+            endpoint_resvs=(2, 6), alt_tag='B')
+
+        self.gc._mark_found(100, rec)
+
+        game.cmd.color.assert_called_once()
+        sele = game.cmd.color.call_args[0][1]
+        self.assertIn('resi 3-5', sele)
+
+    # ---- 3. non-altconf rec=None colors by id (backward compat) ----
+
+    def test_mark_found_non_altconf_colors_by_id(self):
+        """_mark_found(100) with rec=None (the legacy call signature used by
+        reveal_one/reveal_all) -> else branch -> cmd.color('green',
+        '1ubq and id 100'). Backward compatible with Phase 3-7 callers."""
+        self.gc.registry.register('1ubq', 100, 'spheres')
+
+        self.gc._mark_found(100)
+
+        self.assertEqual(self.gc.registry.get('1ubq', 100).status,
+                         HIDER_STATUS_FOUND)
+        game.cmd.color.assert_called_once_with('green', "1ubq and id 100")
+
+    # ---- 4. non-altconf with explicit rec still colors by id ----
+
+    def test_mark_found_non_altconf_with_rec(self):
+        """_mark_found(100, rec) where rec.is_altconf=False (a sphere record
+        passed explicitly) -> else branch -> cmd.color('green',
+        '1ubq and id 100'). The is_altconf gate is False so the middle-range
+        branch is skipped even though rec is passed."""
+        rec = self.gc.registry.register('1ubq', 100, 'spheres')
+
+        self.gc._mark_found(100, rec)
+
+        self.assertEqual(self.gc.registry.get('1ubq', 100).status,
+                         HIDER_STATUS_FOUND)
+        game.cmd.color.assert_called_once_with('green', "1ubq and id 100")
+
+
 class TestGameControllerHintReveal(unittest.TestCase):
     """Test GameController.hint / reveal_one / reveal_all / _mark_found /
     counters / on_counts_changed (Phase 6).

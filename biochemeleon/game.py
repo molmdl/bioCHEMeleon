@@ -61,10 +61,44 @@ class GameController:
         self.registry = registry.HiderRegistry()  # fresh per round
         self._reveal_count = 0  # reset per round (DIFF-01)
         self._hint_count = 0  # reset per round (DIFF-01)
+        # Phase 11: 1st alt-conf -> state 1; 2nd+ -> new state (Bug 4 Part B).
+        # Flipped to False after the first 4-tuple cartoon/ribbon insert so
+        # subsequent alt-conf hiders append as a NEW state (target_state=-1),
+        # avoiding retroactive coord corruption on the 1st alt-conf.
+        self._first_altconf = True
+        altconf_count = 0
         for i, (payload, rep) in enumerate(hider_specs):
             handle = "H%03d" % i
-            aid = mutation.insert_hider_for_rep(self.target_obj, rep, payload, handle)
-            self.registry.register(object=self.target_obj, id=aid, rep=rep)
+            # Phase 11: 4-tuple cartoon/ribbon payloads are alt-conf hiders.
+            # Register the 3 alt-conf fields (is_altconf/endpoint_resvs/
+            # alt_tag) so on_pick's dual lookup + alt/resv gate works. The
+            # **extra dict is empty for spheres/lines/sticks + legacy 3-tuple
+            # cartoon (backward compatible).
+            extra = {}
+            if rep in ('cartoon', 'ribbon') and len(payload) == 4:
+                _chain, start_resi, end_resi, _disp = payload
+                extra = {'is_altconf': True,
+                         'endpoint_resvs': (start_resi, end_resi),
+                         'alt_tag': 'B'}
+            aid = mutation.insert_hider_for_rep(
+                self.target_obj, rep, payload, handle,
+                backup_name=self._backup_name,
+                is_first_altconf=self._first_altconf)
+            self.registry.register(object=self.target_obj, id=aid, rep=rep,
+                                   **extra)
+            if rep in ('cartoon', 'ribbon') and len(payload) == 4:
+                self._first_altconf = False
+                altconf_count += 1
+        # Phase 11 Open Risk 5 / Bug 4 Part B: object-scoped all_states=on
+        # when >=2 alt-conf hiders exist (each 2nd+ lives in its own state;
+        # all_states makes every state visible). Object-scoped (research
+        # Example 9) -- NOT global (a global all_states set with NO object
+        # arg leaks to ALL subsequent objects). Reset in cleanup()/
+        # abort_on_error() via the _all_states_was_set flag.
+        self._all_states_was_set = False
+        if altconf_count >= 2:
+            cmd.set("all_states", "on", self.target_obj)
+            self._all_states_was_set = True
         self._started = True
         return self._backup_name
 
@@ -309,12 +343,36 @@ class GameController:
         from . import persistence  # lazy import (avoid circular at module load)
         self.reconstruct_registry()           # game.py:224 (rep=None, all hidden)
         persistence.apply_bcm_dict(self, bcm_dict)  # reconcile + set fields
-        # Defensive found-color re-apply (research §4.2 - .pse preserves
+        # Defensive found-color re-apply (research sec 4.2 - .pse preserves
         # color but re-apply is idempotent + future-proof).
         for rec in self.registry.all():
             if rec.status == registry.HIDER_STATUS_FOUND:
                 cmd.color(self._found_color,
                           "%s and id %d" % (self.target_obj, rec.id))
+        # Phase 11 Open Risk 3 fallback: defensively re-apply alt on GAME
+        # atoms. .pse alt survival is MEDIUM (reasoned, not smoke-verified);
+        # re-applying is idempotent (alt='B' on atoms that already have
+        # alt='B' is a no-op) and scoped to segi GAME so originals (segi A)
+        # are untouched (Pitfall 12: NEVER alter alt on a too-broad sele that
+        # could hit the real trace). Runs AFTER apply_bcm_dict so
+        # rec.alt_tag/endpoint_resvs are reconciled from the .bcm sidecar.
+        # Hygienic space={} (AGENTS.md: never the bare None default).
+        for rec in self.registry.all():
+            if (getattr(rec, 'is_altconf', False) and rec.alt_tag
+                    and rec.endpoint_resvs):
+                rv1, rv2 = rec.endpoint_resvs
+                cmd.alter("%s and segi GAME and resi %d-%d" % (
+                    self.target_obj, rv1, rv2),
+                    "alt='%s'" % rec.alt_tag, space={})
+        # Phase 11 Open Risk 5: re-apply object-scoped all_states when >=2
+        # alt-conf records reconciled (each 2nd+ lives in its own state;
+        # all_states makes every state visible). Idempotent if already on
+        # (.pse may preserve the setting; re-applying is a safe no-op).
+        altconf_reloaded = sum(1 for r in self.registry.all()
+                               if getattr(r, 'is_altconf', False))
+        if altconf_reloaded >= 2:
+            cmd.set("all_states", "on", self.target_obj)
+            self._all_states_was_set = True
         self._backup_name = backup.snapshot(self.target_obj)  # FRESH post-import
         self._started = True
         self._is_imported = True
@@ -338,6 +396,13 @@ class GameController:
         """
         if not self._started:
             return True
+        # Phase 11: Reset object-scoped all_states BEFORE the restore so the
+        # setting is cleared even if restore raises (research Example 9). Use
+        # getattr in case start() never set it (e.g. <2 alt-conf hiders or a
+        # pre-Phase-11 game imported via import_state without alt-conf records).
+        if getattr(self, '_all_states_was_set', False):
+            cmd.set("all_states", "off", self.target_obj)
+            self._all_states_was_set = False
         # Restore from backup: removes hiders + restores hint-colored real
         # atoms to their original colors. The backup was created in start()
         # before any mutation or hint coloring, so it has the original atoms
@@ -359,6 +424,13 @@ class GameController:
         Use when cleanup() returned False OR an unexpected error occurred mid-game."""
         if not self._started:
             return True
+        # Phase 11: Reset object-scoped all_states BEFORE the restore so the
+        # setting is cleared even if restore raises (research Example 9). Use
+        # getattr in case start() never set it (e.g. <2 alt-conf hiders or a
+        # pre-Phase-11 game). Mirrors cleanup()'s reset block.
+        if getattr(self, '_all_states_was_set', False):
+            cmd.set("all_states", "off", self.target_obj)
+            self._all_states_was_set = False
         ok = backup.restore(self.target_obj, self._backup_name)
         backup.discard(self._backup_name)
         self._backup_name = None
