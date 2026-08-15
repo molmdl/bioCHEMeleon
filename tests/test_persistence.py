@@ -479,5 +479,142 @@ class TestBuildApplyRoundTrip(unittest.TestCase):
             self.assertEqual(rebuilt.status, orig.status)
 
 
+# ---- alt-conf .bcm round-trip (Plan 11-03, Task 1) ----
+
+class TestBcmAltconfRoundtrip(unittest.TestCase):
+    """6 tests proving the 3 Phase 11 alt-conf fields (is_altconf,
+    endpoint_resvs, alt_tag) survive the full .bcm persistence chain
+    (build_bcm_dict -> parse_bcm_dict -> apply_bcm_dict) with NO version
+    bump, AND that list->tuple coercion happens on the apply path.
+
+    Reuses the MockController + _sample_setup() helpers (do NOT
+    duplicate them). persistence.py is a PASS-THROUGH layer for the new
+    fields (build_bcm_dict calls controller.registry.to_dict();
+    apply_bcm_dict calls registry.reconcile_with_bcm) — both were
+    extended in Plan 02 to carry the 3 fields. These tests prove the
+    END-TO-END chain preserves them, closing research Open Risk 3 (.bcm
+    round-trip of alt-conf metadata) at the pure WSL tier.
+    """
+
+    def test_build_carries_altconf_fields(self):
+        """build_bcm_dict carries is_altconf/endpoint_resvs/alt_tag through
+        the registry.to_dict() passthrough; version stays 1 (NO bump).
+        endpoint_resvs is a LIST in the dict (JSON form; to_dict emits
+        list(self.endpoint_resvs)).
+        """
+        mc = MockController()
+        reg = mc.registry
+        reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                     endpoint_resvs=(2, 4), alt_tag='B')
+        d = build_bcm_dict(mc, _sample_setup(), 'checkpoint')
+        h = d['registry']['hiders'][0]
+        self.assertIs(h['is_altconf'], True)
+        self.assertEqual(h['endpoint_resvs'], [2, 4])   # list (JSON form)
+        self.assertEqual(h['alt_tag'], 'B')
+        self.assertEqual(d['version'], 1)               # NO version bump
+
+    def test_build_omits_defaults(self):
+        """A NON-alt-conf record (sphere) emits NONE of the 3 alt-conf keys
+        (compact sidecar; backward-compatible with Phase 8 readers).
+        """
+        mc = MockController()
+        reg = mc.registry
+        reg.register('1ubq', 101, 'spheres')
+        d = build_bcm_dict(mc, _sample_setup(), 'checkpoint')
+        h = d['registry']['hiders'][0]
+        self.assertNotIn('is_altconf', h)
+        self.assertNotIn('endpoint_resvs', h)
+        self.assertNotIn('alt_tag', h)
+
+    def test_parse_accepts_altconf_fields(self):
+        """parse_bcm_dict does NOT reject the 3 new optional fields (no
+        version bump, no schema validation of per-hider fields). The
+        parsed dict carries is_altconf=True through; version stays 1.
+        """
+        mc = MockController()
+        reg = mc.registry
+        reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                     endpoint_resvs=(2, 4), alt_tag='B')
+        d = build_bcm_dict(mc, _sample_setup(), 'checkpoint')
+        raw = json.dumps(d)
+        d2 = parse_bcm_dict(raw)
+        self.assertIs(d2['registry']['hiders'][0]['is_altconf'], True)
+        self.assertEqual(d2['version'], 1)   # parse does NOT reject new fields
+
+    def test_apply_restores_altconf_on_sentinel_rebuild(self):
+        """apply_bcm_dict -> reconcile_with_bcm restores the 3 alt-conf
+        fields on a sentinel-rebuilt registry (rep=None -> 'cartoon').
+        endpoint_resvs is coerced list->tuple. Mismatches empty (perfect
+        match between sentinel and .bcm entry).
+        """
+        mc = MockController()
+        reg = mc.registry
+        reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                     endpoint_resvs=(2, 4), alt_tag='B')
+        d = build_bcm_dict(mc, _sample_setup(), 'checkpoint')
+        # mc2: sentinel-rebuilt registry (rep=None, default alt-conf fields)
+        mc2 = MockController()
+        mc2.registry.register('1ubq', 100, rep=None)
+        mm = apply_bcm_dict(mc2, d)
+        rec = mc2.registry.get('1ubq', 100)
+        self.assertIs(rec.is_altconf, True)
+        self.assertEqual(rec.endpoint_resvs, (2, 4))   # TUPLE (list->tuple)
+        self.assertEqual(rec.alt_tag, 'B')
+        self.assertEqual(rec.rep, 'cartoon')            # reconcile restores rep
+        self.assertIsInstance(mm, ReconcileMismatches)
+        self.assertEqual(mm.missing_from_bcm, [])
+        self.assertEqual(mm.missing_from_pse, [])
+        self.assertEqual(mm.bad_rep, [])
+
+    def test_apply_restores_altconf_mixed_registry(self):
+        """A mixed registry (alt-conf id 100 + sphere id 101) round-trips:
+        the alt-conf record gets is_altconf=True/endpoint_resvs=(2,4)/
+        alt_tag='B' AND the sphere gets the DEFAULTS (is_altconf=False/
+        endpoint_resvs=None/alt_tag='') — the sphere was never alt-conf.
+        """
+        mc = MockController()
+        reg = mc.registry
+        reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                     endpoint_resvs=(2, 4), alt_tag='B')
+        reg.register('1ubq', 101, 'spheres')
+        d = build_bcm_dict(mc, _sample_setup(), 'checkpoint')
+        mc2 = MockController()
+        mc2.registry.register('1ubq', 100, rep=None)
+        mc2.registry.register('1ubq', 101, rep=None)
+        apply_bcm_dict(mc2, d)
+        r100 = mc2.registry.get('1ubq', 100)
+        r101 = mc2.registry.get('1ubq', 101)
+        self.assertIs(r100.is_altconf, True)
+        self.assertEqual(r100.endpoint_resvs, (2, 4))
+        self.assertEqual(r100.alt_tag, 'B')
+        self.assertIs(r101.is_altconf, False)
+        self.assertIsNone(r101.endpoint_resvs)
+        self.assertEqual(r101.alt_tag, '')
+
+    def test_altconf_endpoint_resvs_json_list_roundtrip(self):
+        """endpoint_resvs serializes as a JSON list (JSON has no tuples);
+        parse_bcm_dict returns it as a list; apply_bcm_dict coerces it
+        back to a TUPLE on the record (so rv1 < resv < rv2 works — lists
+        fail < in py3).
+        """
+        mc = MockController()
+        reg = mc.registry
+        reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                     endpoint_resvs=(2, 4), alt_tag='B')
+        d = build_bcm_dict(mc, _sample_setup(), 'checkpoint')
+        raw = json.dumps(d)
+        d2 = parse_bcm_dict(raw)
+        # Parsed endpoint_resvs is a list (JSON has no tuples)
+        self.assertEqual(d2['registry']['hiders'][0]['endpoint_resvs'], [2, 4])
+        self.assertIsInstance(d2['registry']['hiders'][0]['endpoint_resvs'], list)
+        # apply_bcm_dict coerces the list back to a tuple on the record
+        mc2 = MockController()
+        mc2.registry.register('1ubq', 100, rep=None)
+        apply_bcm_dict(mc2, d2)
+        rec = mc2.registry.get('1ubq', 100)
+        self.assertIsInstance(rec.endpoint_resvs, tuple)
+        self.assertEqual(rec.endpoint_resvs, (2, 4))
+
+
 if __name__ == '__main__':
     unittest.main()
