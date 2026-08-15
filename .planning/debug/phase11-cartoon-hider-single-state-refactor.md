@@ -1,8 +1,8 @@
 ---
-status: fixing
+status: verifying
 trigger: "the multiple state is also an issue and may tell sth, main does not have this. plus i think standard alt conf or adding atom like e.g. sphere/stick dont have this. can u just let it like a way to put atom as other rep just different criteria + show representation?"
 created: 2026-08-15T02:00:00Z
-updated: 2026-08-15T03:30:00Z
+updated: 2026-08-15T04:00:00Z
 ---
 
 ## Current Focus
@@ -151,6 +151,25 @@ verification: |
   preserved: M section cartoon+ribbon no KeyError, distinct anchor ids,
   disjoint segments.
   GUI visual confirmation: PENDING human-verify (WSL cannot drive Qt).
+commits:
+  - d65fb2c refactor(11): single-state cartoon/ribbon hider (new-chain copy, no alt-conf)
+  - 8f3e274 test(11): single-state + NEW-resi smoke, on_pick fragment tests, render diagnostics
+  - 548050c docs(11): debug session for single-state cartoon/ribbon hider refactor
+gui_checkpoint:
+  The headless proxy (count_atoms rep + render PNG diag) confirms all 4 reps'
+  GAME atoms are present + the cartoon/ribbon fragment renders + single-state.
+  The final "I can SEE all 4 reps' bumps in a single-state object" is a
+  human-verify checkpoint (WSL cannot drive the Qt GUI). Steps:
+    1. Activate the Windows chemtools-win10 conda env (setenv.bat) and launch PyMOL.
+    2. Load the phase5 1ubq setup (or fetch 1ubq) and configure multiple reps in
+       the bioCHEMeleon Setup tab (e.g. spheres=1, sticks=1, cartoon=1, ribbon=1).
+    3. Click Start. Expect: ALL 4 reps' bumps visible (sphere + stick + cartoon
+       + ribbon) and the object shows a SINGLE state (no "2 states"). Before the
+       refactor only cartoon was visible + the object showed 2 states.
+    4. Click each bump: the cartoon/ribbon bump (displaced middle on chain H)
+       scores Found (turns green in the middle); clicking the real trace Misses.
+    5. Cleanup restores the original scene (no hiders, single state, original
+       colors).
 files_changed:
   - biochemeleon/mutation.py (insert_altconf_cartoon_hider -> insert_cartoon_segment_hider; CARTOON_RESI_OFFSET + cartoon_hider_resi_range helper; insert_hider_for_rep dispatch)
   - biochemeleon/game.py (start: drop multi-state/all_states; on_pick: resv gate; _mark_found: endpoint_resvs coloring; cleanup/abort/import_state: drop all_states + alt re-apply)
