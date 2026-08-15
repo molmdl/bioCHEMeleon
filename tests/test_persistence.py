@@ -616,5 +616,102 @@ class TestBcmAltconfRoundtrip(unittest.TestCase):
         self.assertEqual(rec.endpoint_resvs, (2, 4))
 
 
+# ---- alt-conf backward-compat (Plan 11-03, Task 2) ----
+
+class TestBcmAltconfBackwardCompat(unittest.TestCase):
+    """3 tests proving a Phase 8 sidecar (NO alt-conf fields) still
+    round-trips on Phase 11 code and degrades to defaults (backward
+    compatible), AND that the no-version-bump contract holds.
+
+    Research §8: Phase 11 adds OPTIONAL fields, NOT a schema version
+    bump. A Phase 8 sidecar (made BEFORE Phase 11) has no
+    is_altconf/endpoint_resvs/alt_tag keys -> from_dict/reconcile read
+    them with defaults (is_altconf=False, endpoint_resvs=None,
+    alt_tag='') -> the game loads as non-altconf (degraded but playable:
+    only the anchor CA scores; the 'click any middle atom' UX is lost
+    until the .bcm is re-saved on Phase 11 code).
+    """
+
+    def test_phase8_sidecar_loads_with_defaults(self):
+        """A hand-constructed Phase 8 sidecar (hider dict with ONLY
+        object/id/rep/status — NO is_altconf/endpoint_resvs/alt_tag)
+        parses + applies on Phase 11 code, restoring the record with
+        DEFAULT alt-conf values (is_altconf=False, endpoint_resvs=None,
+        alt_tag=''). Proves a Phase 8 save made BEFORE Phase 11 still
+        loads on Phase 11 code (backward compatible).
+        """
+        # Hand-construct a Phase 8-style .bcm dict (no alt-conf fields)
+        d = {
+            'magic': BCM_MAGIC, 'version': 1, 'kind': 'checkpoint',
+            'target_object': '1ubq', 'started': True, 'timer_elapsed': 0.0,
+            'reveal_count': 0, 'hint_count': 0, 'found_color': 'green',
+            'found_color_rgb': None,
+            'registry': {'version': 1, 'hiders': [
+                {'id': 100, 'object': '1ubq', 'rep': 'cartoon',
+                 'status': 'hidden'},
+            ]},
+            'setup': _sample_setup(),
+        }
+        raw = json.dumps(d)
+        d2 = parse_bcm_dict(raw)   # accepts (version 1, no rejection)
+        mc2 = MockController()
+        mc2.registry.register('1ubq', 100, rep=None)   # sentinel-rebuilt
+        apply_bcm_dict(mc2, d2)
+        rec = mc2.registry.get('1ubq', 100)
+        self.assertIs(rec.is_altconf, False)   # default
+        self.assertIsNone(rec.endpoint_resvs)  # default
+        self.assertEqual(rec.alt_tag, '')      # default
+        # rep is still restored from the Phase 8 sidecar (non-altconf field)
+        self.assertEqual(rec.rep, 'cartoon')
+
+    def test_phase11_sidecar_loads_on_phase8_reconcile(self):
+        """reconcile_with_bcm does NOT raise when the 3 alt-conf fields
+        are PRESENT (Phase 11 sidecar) AND when ABSENT (Phase 8 sidecar)
+        — no KeyError on .get (the _altconf_fields_from_hider_dict
+        helper uses h.get(...) with defaults). Both return a
+        ReconcileMismatches (degraded is playable, never raises).
+        """
+        # Phase 11 sidecar WITH alt-conf fields -> reconcile must NOT raise
+        mc_a = MockController()
+        mc_a.registry.register('1ubq', 100, rep=None)
+        hiders_with = [
+            {'id': 100, 'object': '1ubq', 'rep': 'cartoon', 'status': 'hidden',
+             'is_altconf': True, 'endpoint_resvs': [2, 4], 'alt_tag': 'B'},
+        ]
+        mm_a = mc_a.registry.reconcile_with_bcm(hiders_with)
+        self.assertIsInstance(mm_a, ReconcileMismatches)
+        self.assertIs(mc_a.registry.get('1ubq', 100).is_altconf, True)
+
+        # Phase 8 sidecar WITHOUT alt-conf fields -> reconcile must NOT raise
+        mc_b = MockController()
+        mc_b.registry.register('1ubq', 100, rep=None)
+        hiders_without = [
+            {'id': 100, 'object': '1ubq', 'rep': 'cartoon', 'status': 'hidden'},
+        ]
+        mm_b = mc_b.registry.reconcile_with_bcm(hiders_without)
+        self.assertIsInstance(mm_b, ReconcileMismatches)
+        self.assertIs(mc_b.registry.get('1ubq', 100).is_altconf, False)
+
+    def test_no_version_bump(self):
+        """build_bcm_dict always emits version == 1 for BOTH alt-conf and
+        non-alt-conf controllers (Phase 11 adds OPTIONAL fields, NOT a
+        schema version bump; research §8). parse_bcm_dict rejecting
+        version > 1 is covered by the existing
+        test_parse_unsupported_version_raises (confirmed still green by
+        the full suite run — not duplicated here).
+        """
+        # Alt-conf controller
+        mc_alt = MockController()
+        mc_alt.registry.register('1ubq', 100, 'cartoon', is_altconf=True,
+                                 endpoint_resvs=(2, 4), alt_tag='B')
+        d_alt = build_bcm_dict(mc_alt, _sample_setup(), 'checkpoint')
+        self.assertEqual(d_alt['version'], 1)
+        # Non-alt-conf controller
+        mc_plain = MockController()
+        mc_plain.registry.register('1ubq', 101, 'spheres')
+        d_plain = build_bcm_dict(mc_plain, _sample_setup(), 'checkpoint')
+        self.assertEqual(d_plain['version'], 1)
+
+
 if __name__ == '__main__':
     unittest.main()
