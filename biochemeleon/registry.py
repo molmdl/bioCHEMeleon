@@ -137,11 +137,25 @@ class HiderRecord(object):
         ``pos`` is included (as a list) only when it is not ``None``;
         this keeps the Phase 8 ``.bcm`` sidecar compact when pos is
         unused (Phase 3/4).
+
+        The 3 Phase 11 alt-conf fields are emitted only when non-default
+        (``is_altconf`` truthy, ``endpoint_resvs`` not ``None``,
+        ``alt_tag`` truthy) so a v1 sidecar from non-altconf (sphere/line/
+        stick) hiders stays compact and backward-compatible with Phase 8
+        sidecars (research §8: NO version bump). ``endpoint_resvs`` is
+        serialized as a LIST (JSON has no tuples); ``reconcile_with_bcm``
+        coerces it back to a tuple on read.
         """
         d = {'id': self.id, 'object': self.object, 'rep': self.rep,
              'status': self.status}
         if self.pos is not None:
             d['pos'] = list(self.pos)
+        if self.is_altconf:
+            d['is_altconf'] = True
+        if self.endpoint_resvs is not None:
+            d['endpoint_resvs'] = list(self.endpoint_resvs)
+        if self.alt_tag:
+            d['alt_tag'] = self.alt_tag
         return d
 
 
@@ -314,14 +328,27 @@ class HiderRegistry(object):
         ``pos`` is stored as-is (a list from JSON); list/tuple
         normalization is a Phase 8 boundary concern.
 
+        The 3 Phase 11 alt-conf fields are read with backward-compatible
+        defaults (``is_altconf=False``, ``endpoint_resvs=None``,
+        ``alt_tag=''``) so a Phase 8 sidecar without them loads as
+        non-altconf. ``endpoint_resvs`` is coerced list->tuple (JSON has
+        no tuples; the record needs a tuple so ``rv1 < resv < rv2``
+        works).
+
         Raises ``KeyError`` if a hider dict is missing ``'object'`` /
         ``'id'`` / ``'rep'`` (required fields). ``id`` is coerced to
         ``int`` via :meth:`register` (matches the rest of the registry).
         """
         reg = cls()
         for h in d.get('hiders', []):
+            ep = h.get('endpoint_resvs')
+            if isinstance(ep, list):
+                ep = tuple(ep)
             reg.register(h['object'], h['id'], h['rep'],
-                          h.get('status', HIDER_STATUS_HIDDEN), h.get('pos'))
+                          h.get('status', HIDER_STATUS_HIDDEN), h.get('pos'),
+                          is_altconf=h.get('is_altconf', False),
+                          endpoint_resvs=ep,
+                          alt_tag=h.get('alt_tag', ''))
         return reg
 
     # ---- sentinel reconstruction (dependency injection) ----
@@ -405,6 +432,16 @@ class HiderRegistry(object):
             rec.status = bcm_status
             if 'pos' in h and h['pos'] is not None:
                 rec.pos = list(h['pos'])
+            # Phase 11 alt-conf fields (alongside rep/status/pos). Defaults
+            # when absent (backward-compatible with Phase 8 sidecars).
+            # endpoint_resvs coerced list->tuple so rv1 < resv < rv2 works
+            # (lists fail < in py3).
+            rec.is_altconf = bool(h.get('is_altconf', False))
+            if 'endpoint_resvs' in h and h['endpoint_resvs'] is not None:
+                rec.endpoint_resvs = tuple(h['endpoint_resvs'])
+            else:
+                rec.endpoint_resvs = None
+            rec.alt_tag = h.get('alt_tag', '')
         for key, h in bcm_index.items():
             if key not in self._records:
                 missing_from_pse.append(key)
