@@ -154,8 +154,16 @@ verification: |
   Regression: python3.6 -m unittest tests.test_setup_state -v -> 112/112 OK (no
     schema change; cache_name was already the canonical tested schema). py_compile
     all modules OK. Pitfall-1 gate 0 matches. exec_ gate: only gui_game.py:303
-  QMessageBox.exec_() (pre-existing, unrelated). GUI human-verify (demo Start
-  loads PDB + starts game in a real Windows PyMOL session) remains a checkpoint.
+  QMessageBox.exec_() (pre-existing, unrelated).
+  GUI human-verify PASS (2026-08-16, user-confirmed in Windows PyMOL 2.5.0 GUI):
+    - Demo mode Start loads bundled demos (5e54 loaded 2844 atoms, 1znf loaded
+      424 atoms) -- KeyError: 'file' GONE, game starts cleanly.
+    - Click-to-find loop interactive: clicked GAME hider atoms on both 5e54
+      (HIDER`9001 H000/H001/H002/H003) and 1znf (CYS`10006, ARG`10008,
+      SER`10009, HIDER`9001 H000) -- on_pick fires, fragment coloring works.
+    - `select segi GAME` returns the expected hider atom count (4 on 5e54,
+      63 on 1znf) -- hiders present and sentinel-tagged.
+    - Full game flow (load -> find hiders -> click -> score) operational.
 files_changed: [biochemeleon/demos.py, smoke/diag_demo_keyerror.py]
 
 ## Context for the next agent
