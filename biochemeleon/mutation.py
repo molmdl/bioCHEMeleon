@@ -491,11 +491,8 @@ def insert_altconf_cartoon_hider(object, chain, start_resi, end_resi, handle,
     Construction (research §3b -- the 4-call sequence, 10/10 headless verified):
       1. cmd.create(tmp, '<backup> and chain X and resi N-M and backbone', 1, 1, zoom=0)
          -- copy BACKBONE ONLY from the CLEAN backup (Bug 4 Part A; USER REQ 1).
-      2. cmd.alter(tmp, "alt='B'; segi='GAME'", space={})
-         -- tag alt-conf + sentinel on TEMP (hygienic space={}; Pitfall 12). The
-         segment INHERITS the parent's secondary structure (ss) from the backup
-         copy so it blends with the surrounding helix/sheet/loop (Phase 11 v1.1
-         visual polish -- forcing ss='L' made hiders obvious on non-loop regions).
+      2. cmd.alter(tmp, "alt='B'; segi='GAME'; ss='L'", space={})
+         -- tag alt-conf + sentinel + loop ss on TEMP (hygienic space={}; Pitfall 12).
       3. alter_state(1, '<tmp middle>', "x=x+dx; y=y+dy; z=z+dz", space={})
          -- rigid-translate ALL middle backbone atoms by the SAME offset (Pitfall 15).
          Endpoints NOT displaced (coincidence = blend; USER REQ 2).
@@ -547,11 +544,8 @@ def insert_altconf_cartoon_hider(object, chain, start_resi, end_resi, handle,
     segment_sele = "%s and chain %s and resi %d-%d and backbone" % (
         backup_name, chain, start_resi, end_resi)
     cmd.create(tmp, segment_sele, 1, 1, zoom=0)  # creating.py:960; zoom=0 (Bug 3)
-    # 2. Tag alt-conf + sentinel on TEMP (hygienic space={}; Pitfall 12). Do NOT
-    #    force ss -- the segment INHERITS the parent's secondary structure from the
-    #    backup copy so it blends with the surrounding helix/sheet/loop (forcing
-    #    ss='L' made hiders visually obvious on non-loop regions; Phase 11 v1.1).
-    cmd.alter(tmp, "alt='B'; segi='%s'" % segi, space={})  # editing.py:1424
+    # 2. Tag alt-conf + sentinel + loop ss on TEMP (hygienic space={}; Pitfall 12).
+    cmd.alter(tmp, "alt='B'; segi='%s'; ss='L'" % segi, space={})  # editing.py:1424
     # 3. Rigid-translate ALL middle backbone atoms by the SAME offset (Pitfall 15).
     #    Endpoints NOT displaced -- coincidence with real trace IS the blend (USER REQ 2).
     if displacement is not None:
