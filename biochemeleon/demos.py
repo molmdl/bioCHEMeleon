@@ -120,12 +120,41 @@ def load_demo(demo_id):
     Paths pass through to_windows_path() so Windows PyMOL (which cannot
     resolve /mnt/c/... WSL paths) can open them.
 
-    Source: research section 4.4, 6.
+    Branches on the manifest entry's 'source' field (Phase 9 schema):
+      - 'bundled'  -> load data/demos/{cache_name} (offline; always
+        available).
+      - fetched (memprotmd/sasbdb) -> return None (cache miss). The
+        Phase 9 fetch worker (download_large_demo + finalize_large_demo
+        + load_cached_demo, plan 09-02) is not yet implemented, so
+        fetched demos (1gzm/3gp6/sasdpg4) surface as a graceful "Could
+        not load demo" in the GUI rather than crashing. When 09-02
+        lands, the fetched branch should delegate to
+        load_cached_demo(demo_id) instead of returning None.
+
+    Honors the "Returns None on failure" contract for EVERY manifest
+    entry: an unknown id, a missing 'cache_name' key, a missing file, or
+    a cmd.load failure all return None (never raise). This restores the
+    contract _prepare_and_start relies on (it checks
+    ``if target_obj is None`` and shows a QMessageBox, rather than
+    catching a KeyError).
+
+    Source: research section 4.4, 6; Phase 9 manifest schema (09-01);
+    09-02-PLAN Task 1 step 9 (source branching).
     """
     meta = DEMO_MANIFEST.get(demo_id)
     if meta is None:
         return None
-    path = os.path.join(os.path.dirname(__file__), 'data', 'demos', meta['file'])
+    # Phase 9 source branching. Fetched demos need the 09-02 fetch worker
+    # (download_large_demo/finalize_large_demo/load_cached_demo -- not yet
+    # implemented); return None so the GUI shows a graceful "Could not load
+    # demo" instead of raising. When 09-02 lands, replace this with:
+    #   return load_cached_demo(demo_id)
+    if meta.get('source', 'bundled') != 'bundled':
+        return None
+    cache_name = meta.get('cache_name')
+    if not cache_name:
+        return None  # malformed entry (no on-disk filename) -- None-on-failure
+    path = os.path.join(os.path.dirname(__file__), 'data', 'demos', cache_name)
     if not os.path.exists(path):
         return None
     win_path = to_windows_path(path)

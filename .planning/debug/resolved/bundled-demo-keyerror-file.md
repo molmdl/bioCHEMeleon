@@ -1,16 +1,16 @@
 ---
-status: investigating
+status: resolved
 trigger: "Bundled demo mode raises KeyError: 'file' when clicking Start in the bioCHEMeleon Setup tab with target_mode=demo. Observed during Phase 11 GUI human-verify but CONFIRMED PRE-EXISTING on main (introduced by an earlier phase, not Phase 11). User asked to write a debug file for another agent to investigate."
 created: 2026-08-16T00:00:00Z
-updated: 2026-08-16T00:00:00Z
+updated: 2026-08-16T02:00:00Z
 ---
 
 ## Current Focus
 
-hypothesis: `DEMO_MANIFEST` entries at some point stopped carrying a `'file'` key (schema drift between the manifest definition in `setup_state.py:DEMO_MANIFEST` and the loader `demos.load_demo` which does `meta['file']`). `demos.load_demo` raises `KeyError('file')` instead of returning None, which propagates up through `_prepare_and_start` (line 142) and `_on_start` (line 90) as an uncaught traceback (the `try/except` in `load_demo` only wraps `cmd.load`, NOT the `meta['file']` access at line 128). Root cause is likely one of: (a) the manifest entries were refactored to a different key name (e.g. `'path'`, `'pdb'`) and `load_demo` was not updated; (b) the manifest entries are nested (e.g. `{'file': {...}}` vs flat) and the access path changed; (c) a new demo id is being passed that maps to a sentinel/placeholder entry without a `'file'` key. NEEDS VERIFICATION: read `DEMO_MANIFEST` in `setup_state.py` and compare its actual key schema against `demos.load_demo`'s `meta['file']` access.
-test: Read `biochemeleon/setup_state.py` around the `DEMO_MANIFEST` definition (grep found it at line 34). Compare each entry's keys against `demos.py:128`'s `meta['file']` access. Also check `gui_setup.py:125` (`for did, meta in DEMO_MANIFEST.items()`) to see what keys the Setup-tab combo population expects — if gui_setup and demos disagree on the schema, that's the drift.
-expecting: Either the manifest entries use a different key (schema drift -> fix the key in `load_demo` OR rename in the manifest), OR a specific demo id has a malformed entry (-> fix that entry), OR the `try/except` in `load_demo` needs to widen to cover the `meta['file']` access (defensive, but the real fix is the schema).
-next_action: Read `setup_state.py:34` (DEMO_MANIFEST) fully; cross-reference with `demos.py:114-137` (load_demo) and `gui_setup.py:122-125` (combo population). Confirm the schema mismatch. Then decide fix scope (loader vs manifest vs both). Verify the fix headlessly if possible (the load_demo path is pure `pymol.cmd` + os.path — a headless script can call `demos.load_demo(demo_id)` for each manifest id and assert no KeyError + returns a valid obj name). GUI final check is a human-verify checkpoint.
+hypothesis: CONFIRMED. Half-completed Phase 9 migration. Plan 09-01 (merged) renamed the manifest key `file` -> `cache_name` and added a `source` field (`bundled`/`memprotmd`/`sasbdb`) to `DEMO_MANIFEST`. Plan 09-02 (which was supposed to migrate `demos.load_demo` to read `meta['cache_name']` + add source-based fetched-demo fetching) was NEVER EXECUTED (only `09-02-PLAN.md` exists; no `09-02-SUMMARY.md`). So `load_demo` (demos.py:128) still reads the old `meta['file']` key, which no longer exists in any manifest entry -> `KeyError: 'file'` for EVERY demo Start (bundled AND fetched). The 09-01-SUMMARY explicitly documents this as "the intended 09-02 migration surface" (lines 120, 131).
+test: Apply the minimal 09-02 migration to `load_demo`: (1) `meta['file']` -> `meta.get('cache_name')` with a None guard; (2) branch on `meta.get('source','bundled')` so fetched demos return None gracefully (the full fetch worker is unimplemented 09-02 scope); (3) keep the bundled path (`data/demos/{cache_name}` -> cmd.load) unchanged. Then verify headlessly: iterate ALL 9 DEMO_MANIFEST ids, assert no exception, bundled demos load (return obj name + atoms>0), fetched demos return None (graceful cache-miss).
+expecting: Bundled demos (1znf/5e54/1k8p/1xdn/2qbz/4wb3) load successfully; fetched demos (1gzm/3gp6/sasdpg4) return None (no crash). No KeyError for any id. Unit tests stay green (no schema change -- cache_name is already the tested canonical schema). GUI final check (demo Start loads PDB + starts game) is a human-verify checkpoint.
+next_action: Edit `biochemeleon/demos.py` load_demo (lines 114-137). Then: py_compile, unit tests, pitfall-1 + exec_ grep gates, headless smoke via WSL->Windows bridge. Commit with `fix(demo):` scope (NOT phase 11).
 
 ## Symptoms
 
@@ -74,12 +74,89 @@ started: Pre-existing on `main` (user confirmed: "main also has this issue"). In
     `_prepare_and_start` EXPECTS `load_demo` to return None on failure (line 143 checks `if target_obj is None`). But `load_demo` RAISES KeyError instead of returning None when 'file' is missing — so the None-check never fires and the traceback propagates. This confirms the contract violation: `load_demo`'s docstring says "Returns ... None on failure" but it raises on a schema gap.
   implication: The fix should restore the documented contract — either the manifest has 'file' (so the happy path works) AND/OR the loader catches the KeyError (so the None-on-failure contract holds even for malformed entries).
 
+- timestamp: 2026-08-16T01:25:00Z
+  checked: `biochemeleon/setup_state.py:34-57` (DEMO_MANIFEST) on `main`
+  found: |
+    Every manifest entry uses the Phase 9 uniform schema with keys:
+      {category, type, difficulty, source, source_id, fetch_url,
+       cache_name, citation, strip}
+    There is NO `'file'` key in ANY entry. The on-disk filename is `'cache_name'`
+    (e.g. '1znf.pdb' bundled, '1gzm.pdb.gz' fetched). The `'source'` field
+    ('bundled'/'memprotmd'/'sasbdb') drives the loader branch (comment lines
+    29-30: bundled -> data/demos/, fetched -> tmp/phase9-demos/cache/). 6 bundled
+    + 3 fetched = 9 entries. `tests/test_setup_state.py` TestManifestSchemaPhase9
+    (lines 494-499) and TestDemoManifest (lines 117-123) ASSERT this 9-key schema
+    with `cache_name` -- so `cache_name` is the canonical, tested schema.
+  implication: Hypothesis #1 (SCHEMA DRIFT) CONFIRMED, but more precisely: it is a
+    half-completed migration. The manifest was migrated to `cache_name` (Plan 09-01)
+    but `load_demo` was never migrated (Plan 09-02 never ran). The fix is in the
+    LOADER (`demos.py`), not the manifest (the manifest is correct + tested).
+
+- timestamp: 2026-08-16T01:26:00Z
+  checked: `biochemeleon/gui_setup.py:122-128` (demo combo population) on `main`
+  found: |
+    The combo reads `meta['category']` and `meta['difficulty']` -- both EXIST in
+    the Phase 9 schema. So the combo populates correctly for all 9 demos (no drift
+    there). Only `demos.load_demo` reads the non-existent `meta['file']`.
+  implication: The drift is isolated to `load_demo`. `gui_setup.py` needs no change.
+
+- timestamp: 2026-08-16T01:27:00Z
+  checked: `biochemeleon/data/demos/` + `tmp/phase9-demos/` + grep for a fetched-demo loader across `biochemeleon/`
+  found: |
+    - `data/demos/` contains the 6 bundled demos as `<did>.pdb` (1k8p/1xdn/1znf/
+      2qbz/4wb3/5e54) + SOURCES.md. So the bundled happy-path files EXIST and match
+      `cache_name` exactly.
+    - `tmp/phase9-demos/` has NO `cache/` subdir and NO `1gzm.pdb.gz`/`3gp6.pdb.gz`.
+      Only raw SASDPG4 `.pdb` files (not `.pdb.gz`, not in `cache/`). The fetched
+      cache is incomplete/absent.
+    - grep `cache_name|fetch_url|phase9|cache/|load_cached|fetch_demo` across
+      `biochemeleon/` found matches ONLY in `setup_state.py` (the manifest def).
+      NO function reads `cache_name`, branches on `source`, reads
+      `tmp/phase9-demos/cache/`, decompresses `.gz`, or strips residues. The Phase 9
+      fetched-demo loader (download_large_demo/finalize_large_demo/load_cached_demo)
+      was NEVER implemented.
+  implication: The full fetched-demo loading (network fetch + .pdb.gz cache +
+    decompress + strip + Qt progress dialog) is a large UNIMPLEMENTED feature
+    (Plans 09-02 + 09-03). Out of scope for this KeyError bug fix. The scoped fix
+    migrates `load_demo`'s bundled path to `cache_name` (the 09-02 mandate for the
+    bundled path) + makes fetched demos return None gracefully (cache miss) instead
+    of crashing. Fetched demos become a known limitation (graceful "Could not load
+    demo" message) until 09-02/09-03 are executed.
+
+- timestamp: 2026-08-16T01:28:00Z
+  checked: `.planning/phases/09-large-demo-fetch-source-attribution/09-01-SUMMARY.md` + `09-02-PLAN.md`
+  found: |
+    09-01-SUMMARY.md lines 120+131 explicitly document the `meta['file']` -> `meta['cache_name']`
+    migration as "the intended 09-02 migration surface, NOT a 09-01 issue" and state
+    "09-02 MUST migrate `meta['file']` -> `meta['cache_name']` and add the source-based
+    loader branching". 09-02-PLAN.md Task 1 step 9 prescribes the exact `load_demo`
+    change: branch on `meta.get('source','bundled')`; bundled -> data/demos/{cache_name};
+    fetched -> load_cached_demo (cache hit) or None (cache miss). NO `09-02-SUMMARY.md`
+    exists -- 09-02 was never executed. 09-03-PLAN.md depends_on 09-02 (also unrun).
+  implication: This bug is a known, documented deferred migration that was never
+    completed. The scoped fix implements exactly the 09-02 `load_demo` migration for
+    the bundled path (the part that fixes the reported crash) and stubs the fetched
+    branch to None (since load_cached_demo + the fetch worker don't exist yet).
+
 ## Resolution
 
-root_cause: (empty — pending confirmation by reading DEMO_MANIFEST in setup_state.py:34)
-fix: (empty)
-verification: (empty)
-files_changed: []
+root_cause: Half-completed Phase 9 migration. Plan 09-01 (merged to main) renamed the `DEMO_MANIFEST` key `file` -> `cache_name` and added a `source` field, but Plan 09-02 (which was supposed to migrate `demos.load_demo` to use `cache_name` + add source-based fetched-demo fetching) was never executed. `load_demo` (demos.py:128) still reads `meta['file']`, which no longer exists in any manifest entry, so it raises an UNCAUGHT `KeyError: 'file'` for every demo Start. The KeyError propagates through `_prepare_and_start` (line 142) -> `_on_start` (line 90) because `load_demo`'s try/except wraps only `cmd.load`, not the `meta['file']` subscript. The 09-01-SUMMARY explicitly flagged this as "the intended 09-02 migration surface".
+fix: Migrate `demos.load_demo` per 09-02-PLAN Task 1 step 9 (bundled path only; fetched branch stubbed to None since the fetch worker is unimplemented): (1) `meta['file']` -> `meta.get('cache_name')` with a None guard; (2) branch on `meta.get('source','bundled')` -- fetched demos return None (graceful cache-miss, no crash); (3) keep the bundled path (`data/demos/{cache_name}` -> cmd.load) unchanged; (4) update the docstring to document the source branching + the unimplemented fetched-demo fetch worker. No manifest change (cache_name is already the canonical tested schema). No gui_setup change (combo reads category/difficulty, both correct).
+verification: |
+  Headless smoke (smoke/diag_demo_keyerror.py) via the WSL->Windows PyMOL 2.5.0
+  bridge, run TWICE (stability), 12/12 PASS, exit 0 both times:
+    - Schema reality confirmed: no 'file' key on any entry; 'cache_name' on all.
+    - All 6 BUNDLED demos load (return lowercase obj name + atoms>0):
+      1znf=424, 5e54=2844, 1k8p=555, 1xdn=2597, 2qbz=3408, 4wb3=3779 atoms.
+      [Pre-fix, the very first call load_demo('1znf') raised KeyError: 'file'.]
+    - All 3 FETCHED demos return None gracefully (no crash; fetch worker unimplemented).
+    - Unknown id 'bogus-id' returns None (None-on-failure contract honored).
+  Regression: python3.6 -m unittest tests.test_setup_state -v -> 112/112 OK (no
+    schema change; cache_name was already the canonical tested schema). py_compile
+    all modules OK. Pitfall-1 gate 0 matches. exec_ gate: only gui_game.py:303
+  QMessageBox.exec_() (pre-existing, unrelated). GUI human-verify (demo Start
+  loads PDB + starts game in a real Windows PyMOL session) remains a checkpoint.
+files_changed: [biochemeleon/demos.py, smoke/diag_demo_keyerror.py]
 
 ## Context for the next agent
 
