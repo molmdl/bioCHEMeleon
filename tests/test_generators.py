@@ -33,6 +33,7 @@ from biochemeleon.generators import (
     generate_sphere_positions,
     generate_line_stick_offsets,
     pick_terminal_residues,
+    pick_segments,
 )
 
 
@@ -222,6 +223,115 @@ class TestPickTerminalResidues(unittest.TestCase):
         for tup in out:
             self.assertEqual(len(tup), 3)
             self.assertFalse(tup[2], "is_c_terminus must be False (MVP N-term)")
+
+
+class TestPickSegments(unittest.TestCase):
+    """Test pick_segments(cas_by_chain, count, segment_size=3).
+
+    Pure selection (Phase 11): ``cas_by_chain`` is
+    ``{chain: [(resi, ca_id), ...]}`` (the SAME shape
+    ``_prepare_and_start`` builds). Returns a list of
+    ``(chain, start_resi, end_resi)`` 3-tuples -- DISJOINT mid-chain
+    segments (Bug 1 fix: ranges non-overlapping so two alt-conf hiders
+    never share a clickable middle CA id). Skips chains with fewer than
+    ``segment_size`` residues. Longer chains first (determinism). Mid-chain
+    (NOT terminal): the window is centered on the chain interior so the
+    endpoints are not the N/C terminus when the chain is longer than
+    ``segment_size`` -- this is the whole point of Phase 11 replacing the
+    Phase 5 terminal-extension cartoon hider.
+    """
+
+    def test_empty_returns_empty(self):
+        """pick_segments({}) -> [] (no error on empty dict)."""
+        self.assertEqual(pick_segments({}, 1), [])
+
+    def test_single_chain_three_residues(self):
+        """Chain exactly segment_size -> whole chain is one mid-chain segment."""
+        cas = {'A': [(1, 101), (2, 102), (3, 103)]}
+        result = pick_segments(cas, count=1, segment_size=3)
+        self.assertEqual(result, [('A', 1, 3)])
+
+    def test_single_chain_five_residues_picks_mid_segment(self):
+        """5 residues, count=1, size=3 -> centered window [2,4] (NOT terminal).
+
+        start_resi == 2 and end_resi == 4: the MIDDLE 3-residue window, not
+        the N-term [1,3] nor the C-term [3,5]. This is the Phase 11
+        replacement of terminal-extension -- the segment is mid-chain.
+        """
+        cas = {'A': [(1, 101), (2, 102), (3, 103), (4, 104), (5, 105)]}
+        result = pick_segments(cas, count=1, segment_size=3)
+        self.assertEqual(len(result), 1)
+        chain, start_resi, end_resi = result[0]
+        self.assertEqual(chain, 'A')
+        self.assertEqual(start_resi, 2, "mid-chain window starts at resi 2, not N-term 1")
+        self.assertEqual(end_resi, 4, "mid-chain window ends at resi 4, not C-term 5")
+
+    def test_disjoint_segments_multi_count(self):
+        """7 residues, count=2, size=3 -> 2 DISJOINT mid-chain segments (Bug 1).
+
+        Ranges must NOT overlap (no shared resi -- two alt-conf hiders must
+        not share a clickable middle CA id). The first segment must NOT
+        start at the N-term resi 1 (mid-chain, not terminal-extension).
+
+        Note: with 7 residues and count=2 size-3, two disjoint windows need
+        6 of 7 residues; avoiding BOTH terminals leaves only 5 (< 6), so the
+        second segment necessarily reaches the C-term. The PRIMARY mid-chain
+        intent (avoiding N-term extension, which is what Phase 11 replaces)
+        is captured by the first segment not starting at resi 1.
+        """
+        cas = {'A': [(1, 101), (2, 102), (3, 103), (4, 104),
+                     (5, 105), (6, 106), (7, 107)]}
+        result = pick_segments(cas, count=2, segment_size=3)
+        self.assertEqual(len(result), 2)
+        # Sort by start_resi to check disjointness deterministically
+        segs = sorted(result, key=lambda t: t[1])
+        # Disjoint: end of first < start of second (no shared resi)
+        self.assertLess(segs[0][2], segs[1][1],
+                        "Segments must be disjoint (end_first < start_second)")
+        # Mid-chain: first segment must NOT start at the N-term (resi 1)
+        self.assertNotEqual(segs[0][1], 1,
+                            "First segment must not start at N-term resi 1")
+        # No segment may be the pure N-term window (1,3)
+        for seg in segs:
+            self.assertNotEqual((seg[1], seg[2]), (1, 3),
+                                "No segment may be the pure N-term window [1-3]")
+
+    def test_skips_short_chains(self):
+        """Chains with < segment_size residues are skipped."""
+        cas = {'A': [(1, 101), (2, 102)],               # 2 residues < 3 -> skip
+               'B': [(1, 201), (2, 202), (3, 203), (4, 204)]}  # 4 residues -> ok
+        result = pick_segments(cas, count=2, segment_size=3)
+        # Chain A skipped; only chain B yields (at most 1 disjoint size-3 seg
+        # fits in 4 residues), so len <= 2 and all from chain B.
+        self.assertGreaterEqual(len(result), 1)
+        for seg in result:
+            self.assertEqual(seg[0], 'B', "short chain A must be skipped")
+        # No segment from chain A
+        self.assertFalse(any(seg[0] == 'A' for seg in result))
+
+    def test_longest_chain_first(self):
+        """Two chains of unequal length, count=2 -> longer chain's segment first."""
+        cas = {'A': [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)],  # 5 residues
+               'B': [(1, 1), (2, 2), (3, 3)]}                  # 3 residues
+        result = pick_segments(cas, count=2, segment_size=3)
+        self.assertEqual(len(result), 2)
+        # Longer chain (A) comes first
+        self.assertEqual(result[0][0], 'A',
+                         "longer chain must come first (determinism)")
+        self.assertEqual(result[1][0], 'B')
+
+    def test_count_cap(self):
+        """count > available disjoint segments -> returns only as many as fit."""
+        # 4 residues -> at most 1 disjoint size-3 segment; count=5 must cap.
+        cas = {'A': [(1, 1), (2, 2), (3, 3), (4, 4)]}
+        result = pick_segments(cas, count=5, segment_size=3)
+        self.assertLessEqual(len(result), 5)
+        self.assertGreaterEqual(len(result), 1)
+        # All disjoint (no overlap forced to meet count)
+        segs = sorted(result, key=lambda t: t[1])
+        for i in range(len(segs) - 1):
+            self.assertLess(segs[i][2], segs[i + 1][1],
+                            "segments must remain disjoint even when count caps")
 
 
 if __name__ == '__main__':
