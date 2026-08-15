@@ -172,11 +172,15 @@ class PluginDialog(QtWidgets.QDialog):
         neighbor_ids = []
         cmd.iterate("%s and not segi GAME and name CA" % target_obj,
                     "stored.append(ID)", space={'stored': neighbor_ids})
-        # For cartoon: terminal C-alpha per chain (extend-at-terminus).
+        # For cartoon/ribbon: per-chain C-alpha (resi, id) list. Phase 11
+        # pick_segments consumes this for mid-chain segments (replacing the
+        # Phase 5 terminal-extension path).
         cas_list = []
         # resv (numeric residue value, already int) NOT int(resi): the hygienic
         # space= dict does not expose Python builtins, so int(resi) raises
         # NameError (symbol table editing.py:1444-1449; mirrors smoke/phase5_smoke.py).
+        # Bug 2: captured BEFORE any insert (alt-conf construction reads from
+        # the backup temp, not the live object).
         cmd.iterate("%s and polymer and name CA" % target_obj,
                     "stored.append((chain, resv, ID))",
                     space={'stored': cas_list})
@@ -195,27 +199,28 @@ class PluginDialog(QtWidgets.QDialog):
                 for off, nbr_id in zip(offsets, chosen):
                     hider_specs.append(((off, nbr_id), rep))
             elif rep in ('cartoon', 'ribbon'):
-                # Cap: one terminal extension per chain (attaching many to
-                # one terminus chains them -- 05-RESEARCH.md Open Risk 5).
-                terminals = generators.pick_terminal_residues(cas_by_chain,
-                                                               max_chains=count)
-                for term in terminals:
-                    hider_specs.append((term, rep))
-                # 05-05 Issue 1: warn the user when fewer cartoon/ribbon hiders
-                # were generated than requested (1ubq has 1 chain -> max 1
-                # cartoon hider even if count=5). This is by-design (Open Risk 5:
-                # attaching many to one terminus chains them), NOT a bug, but
-                # the user needs feedback so the "remaining" counter makes
-                # sense (showing 1 when 5 were requested is confusing silently).
-                if len(terminals) < count:
-                    n_chains = len(cas_by_chain)
+                # Phase 11: alt-conf segment replication (replaces terminal
+                # extension). pick_segments returns DISJOINT mid-chain
+                # (chain, start_resi, end_resi) tuples (Bug 1 fix); multi-hider
+                # per chain is supported (success criterion 3). generate_middle_
+                # displacement produces one rigid [dx,dy,dz] per segment (USER
+                # REQ 2: endpoints fixed, middle displaced). The 4-tuple payload
+                # routes to insert_altconf_cartoon_hider via the dispatcher
+                # (Plan 04 arity check); start (Plan 05) registers
+                # is_altconf/endpoint_resvs/alt_tag.
+                segments = generators.pick_segments(cas_by_chain, count)
+                disps = generators.generate_middle_displacement(len(segments))
+                for (chain, start_resi, end_resi), disp in zip(segments, disps):
+                    hider_specs.append(
+                        ((chain, start_resi, end_resi, disp), rep))
+                if len(segments) < count:
                     _gen_warnings.append(
-                        "Requested %d %s hider%s but only %d chain%s available; "
-                        "%d hider%s generated (cartoon/ribbon hiders attach one "
-                        "per chain to avoid chaining them at a terminus)." %
+                        "Requested %d %s hider%s but only %d disjoint mid-chain "
+                        "segment%s available; %d hider%s generated (cartoon/ribbon "
+                        "hiders need a >=3-residue mid-chain segment per hider)." %
                         (count, rep, "" if count == 1 else "s",
-                         n_chains, "" if n_chains == 1 else "s",
-                         len(terminals), "" if len(terminals) == 1 else "s"))
+                         len(segments), "" if len(segments) == 1 else "s",
+                         len(segments), "" if len(segments) == 1 else "s"))
         # Fallback: if per_rep is empty (random mode unset), default to
         # spheres (Phase 4 behavior) using the total hider_count.
         if not hider_specs:
