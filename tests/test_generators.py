@@ -17,6 +17,7 @@ Or:  python3.6 tests/test_generators.py
 """
 import os
 import sys
+import math
 import unittest
 from unittest.mock import MagicMock
 
@@ -34,6 +35,7 @@ from biochemeleon.generators import (
     generate_line_stick_offsets,
     pick_terminal_residues,
     pick_segments,
+    generate_middle_displacement,
 )
 
 
@@ -332,6 +334,78 @@ class TestPickSegments(unittest.TestCase):
         for i in range(len(segs) - 1):
             self.assertLess(segs[i][2], segs[i + 1][1],
                             "segments must remain disjoint even when count caps")
+
+
+class TestGenerateMiddleDisplacement(unittest.TestCase):
+    """Test generate_middle_displacement(n, seed, magnitude).
+
+    Pure RNG (Phase 11): returns a list of ``n`` ``[dx, dy, dz]`` lists --
+    one random UNIT vector per hider times ``magnitude``. The SAME offset
+    is applied to ALL middle atoms of one hider (rigid translation --
+    Pitfall 15: displace ALL middle atoms, NOT just CA). Same seed ->
+    identical vectors (deterministic, testable). Default magnitude 1.5 A
+    (research: 1.5 A recommended, 2.0 A ceiling). Mirrors the
+    ``random.Random(seed)`` style of ``generate_sphere_positions`` /
+    ``generate_line_stick_offsets``.
+    """
+
+    def test_count(self):
+        """n=5, seed=42 -> len==5, each a 3-element [dx,dy,dz] list."""
+        vecs = generate_middle_displacement(5, seed=42)
+        self.assertEqual(len(vecs), 5)
+        for v in vecs:
+            self.assertIsInstance(v, list)
+            self.assertEqual(len(v), 3)
+
+    def test_magnitude(self):
+        """n=1, magnitude=1.5 -> Euclidean norm == 1.5 (unit vec x magnitude)."""
+        vecs = generate_middle_displacement(1, seed=42, magnitude=1.5)
+        self.assertEqual(len(vecs), 1)
+        dx, dy, dz = vecs[0]
+        norm = math.sqrt(dx * dx + dy * dy + dz * dz)
+        self.assertAlmostEqual(norm, 1.5, places=9)
+
+    def test_magnitude_default(self):
+        """Default magnitude=1.5 -> norm == 1.5."""
+        vecs = generate_middle_displacement(1, seed=42)
+        self.assertEqual(len(vecs), 1)
+        dx, dy, dz = vecs[0]
+        norm = math.sqrt(dx * dx + dy * dy + dz * dz)
+        self.assertAlmostEqual(norm, 1.5, places=9)
+
+    def test_deterministic_seed(self):
+        """Same seed -> identical vectors (reproducible displacements)."""
+        first = generate_middle_displacement(3, seed=7)
+        second = generate_middle_displacement(3, seed=7)
+        self.assertEqual(first, second)
+
+    def test_different_seed_differs(self):
+        """Different seeds -> different vectors (almost surely)."""
+        first = generate_middle_displacement(3, seed=1)
+        second = generate_middle_displacement(3, seed=2)
+        self.assertNotEqual(first, second)
+
+    def test_zero_count(self):
+        """n=0 -> [] (no error, empty list)."""
+        self.assertEqual(generate_middle_displacement(0, seed=42), [])
+
+    def test_rigid_per_hider(self):
+        """Each returned vector is ONE [dx,dy,dz] (one unit vector per hider).
+
+        The caller applies the SAME vector to ALL middle atoms of that one
+        hider (rigid translation -- Pitfall 15). The function returns one
+        vector PER HIDER (not per atom); assert each is a single 3-list.
+        """
+        vecs = generate_middle_displacement(4, seed=42, magnitude=1.5)
+        self.assertEqual(len(vecs), 4)
+        for v in vecs:
+            self.assertIsInstance(v, list)
+            self.assertEqual(len(v), 3)
+            for comp in v:
+                self.assertIsInstance(comp, float)
+            # Each vector is a unit vector x magnitude (rigid translation)
+            norm = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
+            self.assertAlmostEqual(norm, 1.5, places=9)
 
 
 if __name__ == '__main__':
