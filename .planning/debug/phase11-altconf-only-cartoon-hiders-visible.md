@@ -1,8 +1,9 @@
 ---
-status: verifying
+status: resolved
 trigger: "Phase 11 alt-conf hiders: when MULTIPLE reps configured (cartoon+ribbon+spheres+sticks), ONLY cartoon hiders render. Non-cartoon reps' hiders invisible. main branch is GOOD (all reps render). KeyError fix (ebd5086) was masking this — now exposed."
 created: 2026-08-15T00:00:00Z
-updated: 2026-08-15T01:45:00Z
+updated: 2026-08-16T00:00:00Z
+resolution: "SUPERSEDED by single-state refactor (commit d65fb2c, debug session phase11-cartoon-hider-single-state-refactor.md). The union-create fix (d445b88) was an intermediate patch that preserved state-1 coords; the single-state refactor eliminated the entire alt-conf approach (insert_altconf_cartoon_hider removed, replaced with new-chain single-state copy), which removed the root cause (cmd.create replacing state coords) entirely. User-verified working in Windows PyMOL GUI: all reps render, single-state, click-to-find works."
 ---
 
 ## Current Focus

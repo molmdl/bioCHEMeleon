@@ -1,8 +1,9 @@
 ---
-status: verifying
+status: resolved
 trigger: "Phase 11 alt-conf cartoon/ribbon hider registration fails with KeyError: \"hider ('1ubq', 289) already registered\" when GUI setup JSON contains BOTH cartoon + ribbon hiders."
 created: 2026-08-15T00:00:00Z
-updated: 2026-08-15T00:10:00Z
+updated: 2026-08-16T00:00:00Z
+resolution: "RESOLVED. Root cause fix committed (ebd5086: consolidate cartoon+ribbon pick_segments into a single global pick). Headless verified: 63/63 smoke green, keyerror repro PASS, 313 unit tests OK. ULTIMATELY SUPERSEDED by single-state refactor (d65fb2c, debug session phase11-cartoon-hider-single-state-refactor.md) which eliminated the alt-conf approach entirely — new-chain copies get NEW atom ids (no id sharing, no duplicate-registration KeyError possible). User-verified working in Windows PyMOL GUI: KeyError gone, all reps render. The pick_segments consolidation (ebd5086) remains in the codebase as good practice (globally disjoint segments across reps) even though the KeyError can no longer occur under the single-state design."
 ---
 
 ## Current Focus
