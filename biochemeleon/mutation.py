@@ -576,14 +576,17 @@ def insert_altconf_cartoon_hider(object, chain, start_resi, end_resi, handle,
     return clickable_id
 
 
-def insert_hider_for_rep(object, rep, payload, handle):
+def insert_hider_for_rep(object, rep, payload, handle, backup_name=None,
+                         is_first_altconf=True):
     """Dispatch hider insertion per representation.
 
     Lets ``GameController.start`` stay a thin ``(payload, rep)`` loop --
     the dispatcher hides the rep-specific insertion signature divergence
     (research sec Q19): spheres need ``pos``, line/stick need
-    ``(offset, neighbor_id)``, cartoon/ribbon need
-    ``(chain, terminus_resi, is_c_terminus)``.
+    ``(offset, neighbor_id)``, cartoon/ribbon need EITHER a 3-tuple
+    ``(chain, terminus_resi, is_c_terminus)`` (legacy terminal-extension path,
+    Phase 5) OR a 4-tuple ``(chain, start_resi, end_resi, displacement_vec)``
+    (Phase 11 alt-conf path).
 
     For spheres: calls the UNCHANGED Phase 3 ``insert_hider`` (which does
     NOT show the rep) then shows spheres BY ID (NOT all GAME atoms -- the
@@ -594,18 +597,33 @@ def insert_hider_for_rep(object, rep, payload, handle):
     For lines/sticks: unpacks ``(offset, neighbor_id)`` and delegates to
     ``insert_line_stick_hider`` (which shows its own rep by id).
 
-    For cartoon/ribbon: unpacks ``(chain, terminus_resi, is_c_terminus)``
-    and delegates to ``insert_cartoon_hider`` (which shows its own rep;
-    for ribbon, the same residue renders in both -- research sec Q10).
+    For cartoon/ribbon: routes by payload ARITY (backward compatible):
+        - 4-tuple ``(chain, start_resi, end_resi, displacement_vec)`` ->
+          ``insert_altconf_cartoon_hider`` (Phase 11 alt-conf backbone
+          copy; sources from *backup_name*; ``is_first_altconf`` controls
+          target_state for the multi-hider Bug 4 Part B fix).
+        - 3-tuple ``(chain, terminus_resi, is_c_terminus)`` ->
+          ``insert_cartoon_hider`` (legacy Phase 5 terminal-extension path;
+          backward compat with phase5_smoke). ``backup_name`` and
+          ``is_first_altconf`` are NOT used on this path.
 
     Args:
         object (str): existing PyMOL object to insert INTO.
         rep (str): one of GAME_REPS ('spheres', 'lines', 'sticks',
             'cartoon', 'ribbon').
         payload: rep-specific -- ``pos`` (spheres), ``(offset,
-            neighbor_id)`` (lines/sticks), or ``(chain, terminus_resi,
-            is_c_terminus)`` (cartoon/ribbon).
+            neighbor_id)`` (lines/sticks), ``(chain, terminus_resi,
+            is_c_terminus)`` (legacy cartoon/ribbon 3-tuple), or
+            ``(chain, start_resi, end_resi, displacement_vec)`` (Phase 11
+            alt-conf cartoon/ribbon 4-tuple).
         handle (str): throwaway atom *name* passed to the insert fn.
+        backup_name (str or None): name of the CLEAN backup object. Used
+            ONLY by the 4-tuple cartoon/ribbon alt-conf path (Bug 4 Part A
+            -- source from backup, NOT the live object). Ignored by
+            spheres/lines/sticks and the 3-tuple legacy cartoon path.
+        is_first_altconf (bool): True for the 1st alt-conf hider in this
+            round (appends to state 1); False for 2nd+ (appends as a NEW
+            state, Bug 4 Part B). Used ONLY by the 4-tuple alt-conf path.
 
     Returns:
         int: the new hider atom's stable id.
@@ -625,11 +643,20 @@ def insert_hider_for_rep(object, rep, payload, handle):
                                        neighbor_id=neighbor_id,
                                        handle=handle, rep=rep)
     elif rep in ('cartoon', 'ribbon'):
-        chain, terminus_resi, is_c_terminus = payload
-        return insert_cartoon_hider(object, chain=chain,
-                                    terminus_resi=terminus_resi,
-                                    is_c_terminus=is_c_terminus,
-                                    handle=handle, rep=rep)
+        if len(payload) == 4:
+            # Phase 11 alt-conf path: (chain, start_resi, end_resi, displacement_vec)
+            chain, start_resi, end_resi, displacement_vec = payload
+            return insert_altconf_cartoon_hider(
+                object, chain=chain, start_resi=start_resi, end_resi=end_resi,
+                handle=handle, backup_name=backup_name, rep=rep,
+                displacement=displacement_vec, is_first_altconf=is_first_altconf)
+        else:
+            # Legacy terminal-extension path (3-tuple): backward compat with phase5_smoke.
+            chain, terminus_resi, is_c_terminus = payload
+            return insert_cartoon_hider(object, chain=chain,
+                                        terminus_resi=terminus_resi,
+                                        is_c_terminus=is_c_terminus,
+                                        handle=handle, rep=rep)
     else:
         raise ValueError("unknown rep %r" % (rep,))
 
