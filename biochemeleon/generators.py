@@ -176,3 +176,43 @@ def pick_segments(cas_by_chain, count, segment_size=3):
                 else:
                     i += 1
     return out[:count]
+
+
+def generate_middle_displacement(n, seed=None, magnitude=1.5):
+    """Pure RNG. Returns [[dx, dy, dz], ...] -- one random unit vector per
+    hider times magnitude. Same offset for all middle atoms of one hider
+    (rigid translation -- Pitfall 15: displace ALL middle atoms, NOT just CA).
+
+    Each vector is a random direction on the unit sphere (3 standard-normal
+    components, normalized) scaled by ``magnitude``. Normalizing avoids the
+    directional bias of uniform-in-cube sampling. The caller applies the
+    SAME vector to every middle backbone atom of one hider (rigid shift),
+    leaving the two endpoint residues at their original coords so the
+    alt-conf segment blends with the real trace at the ends and bulges in
+    the middle (USER REQ 2: keep the two ends, slightly move the middle).
+
+    Args:
+        n: number of hiders (one vector per hider).
+        seed: int for deterministic output (tests). ``None`` = entropy.
+        magnitude: Angstroms to displace middle atoms (default 1.5;
+            research: 1.5 A recommended, 2.0 A ceiling).
+
+    Returns:
+        list of ``[dx, dy, dz]`` lists (empty when ``n <= 0``).
+    """
+    rng = random.Random(seed)
+    out = []
+    for _ in range(n):
+        dx = rng.gauss(0.0, 1.0)
+        dy = rng.gauss(0.0, 1.0)
+        dz = rng.gauss(0.0, 1.0)
+        norm = (dx * dx + dy * dy + dz * dz) ** 0.5
+        if norm < 1e-12:
+            # Vanishingly rare (3 continuous gaussians all ~0); pick a
+            # deterministic fallback so we never divide by zero.
+            dx, dy, dz = 1.0, 0.0, 0.0
+            norm = 1.0
+        out.append([dx / norm * magnitude,
+                    dy / norm * magnitude,
+                    dz / norm * magnitude])
+    return out
