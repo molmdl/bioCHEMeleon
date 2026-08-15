@@ -1,8 +1,9 @@
 ---
-status: verifying
+status: resolved
 trigger: "the multiple state is also an issue and may tell sth, main does not have this. plus i think standard alt conf or adding atom like e.g. sphere/stick dont have this. can u just let it like a way to put atom as other rep just different criteria + show representation?"
 created: 2026-08-15T02:00:00Z
-updated: 2026-08-15T04:00:00Z
+updated: 2026-08-16T00:00:00Z
+resolution: "User-verified in Windows PyMOL GUI: single-state refactor WORKING — cartoon/ribbon hiders render in a single-state object alongside sphere/stick; click-to-find loop works (chain H hider -> Found; real trace -> Miss). KeyError gone. Two caveats noted by user: (1) SS copy NOT done (no secondary-structure inheritance for the hider fragment) — accepted for now, future visual polish (consistent with reverted 2715df5). (2) Bundled demo KeyError ('file') observed during GUI test but CONFIRMED PRE-EXISTING on main (introduced by an earlier phase, not Phase 11) — out of scope for this debug session; Phase 11 checkpoint considered PASSED with that caveat."
 ---
 
 ## Current Focus
