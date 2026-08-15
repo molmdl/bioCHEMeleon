@@ -74,14 +74,38 @@ class HiderRecord(object):
             exists now (cheap); ``found`` is set in Phase 4/6.
         pos: optional ``(x, y, z)`` tuple for hint/reveal (Phase 6).
             Stored as-is; ``to_dict`` serializes it as a list.
+        is_altconf (bool): Phase 11 alt-conf flag. ``True`` for cartoon/
+            ribbon hiders built as alternate-conformation copies of a
+            backbone segment (the scoring solution to shared ids,
+            research Pitfall 10). ``False`` (default) for sphere/line/
+            stick hiders and for post-``.pse``-reload sentinel
+            reconstruction (the sentinel carries no alt-conf info; the
+            ``.bcm`` sidecar reconciles). When ``True``, :meth:`on_pick`
+            (game.py, Plan 05) gates scoring on
+            ``alt == rec.alt_tag AND rv1 < resv < rv2``.
+        endpoint_resvs: ``None`` (default) or a 2-tuple of ints
+            ``(rv1, rv2)`` — the residue-number range of the copied
+            backbone segment (endpoints excluded from scoring; the
+            middle residues are the clickable hiders). Stored as-is
+            (the caller passes ints from ``pick_segments``); ``to_dict``
+            serializes it as a list, ``reconcile_with_bcm`` coerces the
+            JSON list back to a tuple so ``rv1 < resv < rv2`` works
+            (lists fail ``<`` in py3).
+        alt_tag (str): the PyMOL ``alt`` field value for the alt-conf
+            copies (``'B'`` default for alt-conf; ``''`` for non-altconf).
+            Any string; not validated. Used by :meth:`on_pick` to
+            distinguish a clicked alt-conf copy (``alt == 'B'``) from the
+            real-trace original (``alt == ''``) that SHARES the id.
 
     Uses ``__slots__`` to keep instances compact and to surface typos
     as ``AttributeError`` (no accidental attribute creation).
     """
 
-    __slots__ = ('id', 'object', 'rep', 'status', 'pos')
+    __slots__ = ('id', 'object', 'rep', 'status', 'pos',
+                 'is_altconf', 'endpoint_resvs', 'alt_tag')
 
-    def __init__(self, id, object, rep, status=HIDER_STATUS_HIDDEN, pos=None):
+    def __init__(self, id, object, rep, status=HIDER_STATUS_HIDDEN, pos=None,
+                 is_altconf=False, endpoint_resvs=None, alt_tag=''):
         # rep=None is allowed (post-reload reconstruction; the sentinel
         # carries no rep). Normal register() always passes a valid rep.
         if rep is not None and rep not in GAME_REPS:
@@ -91,6 +115,13 @@ class HiderRecord(object):
         self.rep = rep
         self.status = status
         self.pos = pos
+        # Phase 11 alt-conf fields (backward-compatible defaults; existing
+        # Phase 3/4/5 callers passing only (object, id, rep, ...) are
+        # unaffected). endpoint_resvs stored as-is (2-tuple of ints or
+        # None); alt_tag any string ('' = non-altconf, 'B' = alt-conf).
+        self.is_altconf = is_altconf
+        self.endpoint_resvs = endpoint_resvs
+        self.alt_tag = alt_tag
 
     def key(self):
         """Return the registry primary key ``(object, id)``.
@@ -106,11 +137,25 @@ class HiderRecord(object):
         ``pos`` is included (as a list) only when it is not ``None``;
         this keeps the Phase 8 ``.bcm`` sidecar compact when pos is
         unused (Phase 3/4).
+
+        The 3 Phase 11 alt-conf fields are emitted only when non-default
+        (``is_altconf`` truthy, ``endpoint_resvs`` not ``None``,
+        ``alt_tag`` truthy) so a v1 sidecar from non-altconf (sphere/line/
+        stick) hiders stays compact and backward-compatible with Phase 8
+        sidecars (research §8: NO version bump). ``endpoint_resvs`` is
+        serialized as a LIST (JSON has no tuples); ``reconcile_with_bcm``
+        coerces it back to a tuple on read.
         """
         d = {'id': self.id, 'object': self.object, 'rep': self.rep,
              'status': self.status}
         if self.pos is not None:
             d['pos'] = list(self.pos)
+        if self.is_altconf:
+            d['is_altconf'] = True
+        if self.endpoint_resvs is not None:
+            d['endpoint_resvs'] = list(self.endpoint_resvs)
+        if self.alt_tag:
+            d['alt_tag'] = self.alt_tag
         return d
 
 
@@ -140,15 +185,24 @@ class HiderRegistry(object):
         # by the language spec; OrderedDict makes the contract explicit).
         self._records = OrderedDict()   # key (object, id) -> HiderRecord
 
-    def register(self, object, id, rep, status=HIDER_STATUS_HIDDEN, pos=None):
+    def register(self, object, id, rep, status=HIDER_STATUS_HIDDEN, pos=None,
+                 is_altconf=False, endpoint_resvs=None, alt_tag=''):
         """Create, store, and return a new :class:`HiderRecord`.
 
         Raises ``KeyError`` if ``(object, id)`` is already registered
         (duplicate insert - caller bug). ``id`` is coerced to ``int``
         via :class:`HiderRecord` so ``register('1ubq', '1', ...)`` and
         ``get('1ubq', 1)`` round-trip correctly.
+
+        The 3 Phase 11 alt-conf fields (``is_altconf``, ``endpoint_resvs``,
+        ``alt_tag``) default to non-altconf values so existing Phase 3/4/5
+        callers passing only ``(object, id, rep, ...)`` are unaffected
+        (backward compatible).
         """
-        rec = HiderRecord(id, object, rep, status, pos)
+        rec = HiderRecord(id, object, rep, status, pos,
+                          is_altconf=is_altconf,
+                          endpoint_resvs=endpoint_resvs,
+                          alt_tag=alt_tag)
         if rec.key() in self._records:
             raise KeyError("hider %r already registered" % (rec.key(),))
         self._records[rec.key()] = rec
@@ -222,6 +276,64 @@ class HiderRegistry(object):
         rec = self._records[(object, int(id))]
         rec.status = HIDER_STATUS_FOUND
 
+    # ---- alt-conf resv lookup (Phase 11) ----
+
+    def get_altconf_by_resv(self, object, resv):
+        """Return the first alt-conf record whose ``endpoint_resvs`` range
+        strictly contains ``resv`` for ``object``, or ``None``.
+
+        Alt-conf atoms SHARE ids with their originals (research Pitfall
+        10), so a click on a non-anchor middle atom has an ``id`` that is
+        NOT in the registry (only the anchor CA is registered). This
+        method lets :meth:`on_pick` (game.py, Plan 05) score those
+        middle-atom clicks (USER REQUIREMENT 3: click ANY middle atom)
+        by looking up the record via the clicked residue number.
+
+        Iterates ``self._records.values()`` in insertion order and
+        returns the FIRST record where ``r.object == object and
+        r.is_altconf and r.endpoint_resvs is not None and
+        r.endpoint_resvs[0] < resv < r.endpoint_resvs[1]`` (strict
+        between — endpoints are NOT clickable; they coincide with the
+        real trace and blend into it). Pure O(N) over the hider count
+        (small). NO ``pymol`` import (registry stays pure).
+        """
+        for r in self._records.values():
+            if (r.object == object and r.is_altconf
+                    and r.endpoint_resvs is not None
+                    and r.endpoint_resvs[0] < resv < r.endpoint_resvs[1]):
+                return r
+        return None
+
+    # ---- alt-conf field reader (Phase 11 helper) ----
+
+    @staticmethod
+    def _altconf_fields_from_hider_dict(h):
+        """Read the 3 Phase 11 alt-conf fields from a ``.bcm`` hider dict.
+
+        Returns ``(is_altconf, endpoint_resvs, alt_tag)`` with backward-
+        compatible defaults + list->tuple coercion for ``endpoint_resvs``:
+
+          - ``is_altconf``: ``bool`` (default ``False``). ``bool()``-coerced
+            so a truthy int (e.g. ``1`` from a hand-edited sidecar)
+            normalizes to ``True``.
+          - ``endpoint_resvs``: ``None`` or a 2-tuple of ints. Coerced
+            list->tuple because JSON has no tuples but the record needs a
+            tuple so ``rv1 < resv < rv2`` works (lists fail ``<`` in py3).
+            Already-tuple values pass through unchanged.
+          - ``alt_tag``: ``str`` (default ``''``).
+
+        Shared by :meth:`from_dict` (pass to :meth:`register`) and
+        :meth:`reconcile_with_bcm` (set on an existing record) to avoid
+        duplicating the list->tuple coercion + default-reading logic.
+        Pure (no ``pymol`` import).
+        """
+        is_altconf = bool(h.get('is_altconf', False))
+        ep = h.get('endpoint_resvs')
+        if isinstance(ep, list):
+            ep = tuple(ep)
+        alt_tag = h.get('alt_tag', '')
+        return is_altconf, ep, alt_tag
+
     # ---- serialization (Phase 8 .bcm sidecar shape) ----
 
     def to_dict(self):
@@ -246,14 +358,25 @@ class HiderRegistry(object):
         ``pos`` is stored as-is (a list from JSON); list/tuple
         normalization is a Phase 8 boundary concern.
 
+        The 3 Phase 11 alt-conf fields are read with backward-compatible
+        defaults (``is_altconf=False``, ``endpoint_resvs=None``,
+        ``alt_tag=''``) so a Phase 8 sidecar without them loads as
+        non-altconf. ``endpoint_resvs`` is coerced list->tuple (JSON has
+        no tuples; the record needs a tuple so ``rv1 < resv < rv2``
+        works).
+
         Raises ``KeyError`` if a hider dict is missing ``'object'`` /
         ``'id'`` / ``'rep'`` (required fields). ``id`` is coerced to
         ``int`` via :meth:`register` (matches the rest of the registry).
         """
         reg = cls()
         for h in d.get('hiders', []):
+            is_altconf, ep, alt_tag = cls._altconf_fields_from_hider_dict(h)
             reg.register(h['object'], h['id'], h['rep'],
-                          h.get('status', HIDER_STATUS_HIDDEN), h.get('pos'))
+                         h.get('status', HIDER_STATUS_HIDDEN), h.get('pos'),
+                         is_altconf=is_altconf,
+                         endpoint_resvs=ep,
+                         alt_tag=alt_tag)
         return reg
 
     # ---- sentinel reconstruction (dependency injection) ----
@@ -337,6 +460,11 @@ class HiderRegistry(object):
             rec.status = bcm_status
             if 'pos' in h and h['pos'] is not None:
                 rec.pos = list(h['pos'])
+            # Phase 11 alt-conf fields (alongside rep/status/pos). Defaults
+            # when absent (backward-compatible with Phase 8 sidecars);
+            # endpoint_resvs coerced list->tuple via the shared helper.
+            (rec.is_altconf, rec.endpoint_resvs, rec.alt_tag) = \
+                self._altconf_fields_from_hider_dict(h)
         for key, h in bcm_index.items():
             if key not in self._records:
                 missing_from_pse.append(key)
