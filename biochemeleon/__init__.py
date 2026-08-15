@@ -165,10 +165,11 @@ class PluginDialog(QtWidgets.QDialog):
         # Pre-fetch the data the pure generators need (cmd-coupled, here in
         # _prepare_and_start so generators.py stays pure):
         # For line/stick: pool of real neighbor CA atom ids (to bond hiders to).
-        # MUST use 'name CA' (NOT all atoms) — CA atoms survive free_nterminal_valence
-        # removal (which only removes H + cap residue atoms); non-CA atoms sampled as
-        # neighbors could be removed before insert_line_stick_hider runs, causing
-        # IndexError on nbr[0] (05-05 GUI bug, 05-07 fix).
+        # MUST use 'name CA' (NOT all atoms) — CA atoms are stable backbone atoms
+        # and valid bond targets for insert_line_stick_hider. (05-07 fix: non-CA
+        # atoms could be removed by a terminal-valence step before insert,
+        # causing IndexError on nbr[0]; Phase 11 alt-conf path no longer runs
+        # that step, but 'name CA' remains the correct pool.)
         neighbor_ids = []
         cmd.iterate("%s and not segi GAME and name CA" % target_obj,
                     "stored.append(ID)", space={'stored': neighbor_ids})
@@ -233,15 +234,13 @@ class PluginDialog(QtWidgets.QDialog):
         if _gen_warnings:
             QtWidgets.QMessageBox.warning(self, "Fewer hiders generated",
                 "\n\n".join(_gen_warnings))
-        # 3b. Free N-terminal valences for cartoon/ribbon hiders. Removes
-        #     ACE/formyl caps and H atoms bonded to the terminal N so
-        #     editor.attach_amino_acid finds a free valence. MUST happen
-        #     before backup.snapshot (inside gc.start) so verify_intact
-        #     matches (backup and target both have caps/H removed).
-        #     05-05 human-verify Issues 2+3.
-        for payload, rep in hider_specs:
-            if rep in ('cartoon', 'ribbon') and not payload[2]:
-                mutation.free_nterminal_valence(target_obj, payload[0], payload[1])
+        # Phase 11: alt-conf cartoon/ribbon hiders copy a backbone segment
+        # from the clean backup (insert_altconf_cartoon_hider) — they do NOT
+        # attach at a terminus, so the N-terminal valence does NOT need freeing
+        # (the legacy terminal-extension path that needed it is no longer used
+        # by _prepare_and_start). ACE caps + H atoms stay in the object; backup.
+        # snapshot (inside gc.start) captures them and backup.restore (cleanup)
+        # restores them.
         # 4. Start the game (snapshot -> insert -> register; Phase 3 proven)
         # Bug 3: if a previous game is still active (mid-game, or won but not
         # yet cleaned up), clean it up first so no stale hiders accumulate in
