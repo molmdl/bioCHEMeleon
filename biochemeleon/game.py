@@ -94,33 +94,82 @@ class GameController:
         return sum(1 for r in self.registry.all()
                    if r.status == registry.HIDER_STATUS_HIDDEN)
 
-    def on_pick(self, picked_id):
-        """Handle a picked atom id (called by PickWizard.do_pick).
+    def on_pick(self, picked_id, alt='', resv=None):
+        """Handle a picked atom (called by PickWizard.do_pick).
+
+        Alt-conf hiders SHARE ids with the original trace (research Pitfall
+        10), so id alone can't distinguish a real-trace click from a hider
+        click. The wizard reads (model, ID, alt, resv) from pk1 (Pitfall 11:
+        ``cmd.identify`` returns no alt) and passes alt+resv here. Dual
+        lookup + gate (research sec 5 scoring truth table):
+
+          1. ``registry.get(id)`` -- anchor-id hit (the registered middle CA).
+          2. if None and resv is not None: ``get_altconf_by_resv(resv)`` -- a
+             non-anchor middle atom (USER REQ 3: click ANY middle atom).
+          3. if rec.is_altconf: gate on ``alt == rec.alt_tag AND
+             rv1 < resv < rv2`` (strictly between endpoints; resv None -> Miss;
+             real trace alt='' -> Miss; endpoint -> Miss). Non-alt-conf
+             (sphere/line/stick): gate skipped (unique id, alt='').
+          4. ``_mark_found(rec.id, rec)`` -- rec.id (anchor), NOT picked_id
+             (Pitfall 13: non-anchor middle clicks would KeyError on picked_id).
+
+        ``getattr(rec, 'is_altconf', False)`` defends against records rebuilt
+        by old ``reconstruct_from_sentinels`` (which defaults is_altconf=False).
+        Existing sphere/line/stick: is_altconf=False -> gate skipped ->
+        ``_mark_found(rec.id, rec)`` where rec.id == picked_id -> identical to
+        prior behavior (backward-compatible signature: ``on_pick(100)`` still
+        works -- alt='', resv=None -> gate skipped for non-altconf records).
 
         Registry is the single source of truth (LOOP-02). Logic:
           - rec is None -> miss (non-hider); log 'Miss!', no harm (LOOP-01)
           - rec.status == 'found' -> already-found; log, no double-mark
-          - else: hidden hider -> mark_found + cmd.color green + callbacks;
+          - else: hidden hider -> mark_found + cmd.color + callbacks;
             if remaining == 0 -> win()
         """
         rec = self.registry.get(self.target_obj, picked_id)
+        if rec is None and resv is not None:
+            rec = self.registry.get_altconf_by_resv(self.target_obj, resv)
         if rec is None:
             self._on_log("Miss!")
             return
         if rec.status == registry.HIDER_STATUS_FOUND:
             self._on_log("Already found!")
             return
-        self._mark_found(picked_id)
+        if getattr(rec, 'is_altconf', False):
+            rv1, rv2 = rec.endpoint_resvs
+            if (resv is None or alt != rec.alt_tag
+                    or not (rv1 < resv < rv2)):
+                self._on_log("Miss!")
+                return
+        self._mark_found(rec.id, rec)
         remaining = self._remaining()
         self._on_log("Found one! %d remaining" % remaining)
         self._on_remaining_changed(remaining)
         if remaining == 0:
             self.win()
 
-    def _mark_found(self, hider_id):
-        """Shared mark+color helper. Does NOT log or fire win (callers do those)."""
+    def _mark_found(self, hider_id, rec=None):
+        """Shared mark+color helper. Does NOT log or fire win (callers do those).
+
+        For alt-conf hiders (``rec.is_altconf`` truthy + ``endpoint_resvs`` set),
+        color ONLY the GAME middle-range atoms (``segi GAME and resi <rv1+1>-<rv2-1>``)
+        -- NOT the shared id (Pitfall 14: coloring by id colors the real trace
+        too, since alt-conf atoms share ids with their originals). For
+        non-alt-conf (sphere/line/stick, or ``rec=None`` for backward compat),
+        color by id (existing behavior). ``rec=None`` defaults to the by-id
+        branch so existing callers like ``reveal_one``/``reveal_all`` passing
+        ``_mark_found(rec.id)`` (no rec) stay unchanged.
+        """
         self.registry.mark_found(self.target_obj, hider_id)
-        cmd.color(self._found_color, "%s and id %s" % (self.target_obj, hider_id))
+        if (rec is not None and getattr(rec, 'is_altconf', False)
+                and rec.endpoint_resvs is not None):
+            rv1, rv2 = rec.endpoint_resvs
+            cmd.color(self._found_color,
+                      "%s and segi GAME and resi %d-%d" % (
+                          self.target_obj, rv1 + 1, rv2 - 1))
+        else:
+            cmd.color(self._found_color,
+                      "%s and id %s" % (self.target_obj, hider_id))
 
     def win(self):
         """All hiders found: fire on_win(elapsed). Wizard deactivation is

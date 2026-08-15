@@ -213,6 +213,189 @@ class TestGameControllerOnPick(unittest.TestCase):
         self.assertIsNone(gc2._on_win(0.0))
 
 
+class TestOnPickAltconf(unittest.TestCase):
+    """Test GameController.on_pick alt-conf scoring truth table (Phase 11).
+
+    Alt-conf hiders SHARE ids with their originals (research Pitfall 10), so
+    on_pick(picked_id, alt='', resv=None) does a dual lookup (anchor-id then
+    get_altconf_by_resv) + gates scoring on alt == rec.alt_tag AND
+    rv1 < resv < rv2 (research sec 5). These 7 tests encode the full scoring
+    truth table + backward compat with sphere/line/stick.
+
+    Each test builds a GameController('1ubq') WITHOUT calling start() and
+    manually populates the registry with alt-conf records (is_altconf=True,
+    endpoint_resvs, alt_tag='B'). Mock callbacks verify the scoring wiring.
+    """
+
+    def setUp(self):
+        """Build a fresh GameController with a clean mock cmd history."""
+        self.gc = GameController('1ubq')
+        game.cmd.reset_mock()
+
+    def _register_altconf(self, hider_id=100, endpoint_resvs=(2, 4),
+                          alt_tag='B', status=HIDER_STATUS_HIDDEN,
+                          rep='cartoon', obj='1ubq'):
+        """Helper: register one alt-conf hider record with the given fields."""
+        return self.gc.registry.register(
+            obj, hider_id, rep, status=status,
+            is_altconf=True, endpoint_resvs=endpoint_resvs, alt_tag=alt_tag)
+
+    # ---- 1. anchor middle CA scores ----
+
+    def test_altconf_anchor_middle_ca_scores(self):
+        """on_pick(anchor_id, alt='B', resv=3) where 3 is strictly between
+        rv1=2 and rv2=4 -> status FOUND; cmd.color 'green' with the GAME
+        middle-range selection 'segi GAME and resi 3-3' (rv1+1=3 to rv2-1=3).
+
+        The anchor CA is the registered middle CA; clicking it scores via the
+        anchor-id lookup (registry.get hit)."""
+        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4), alt_tag='B')
+        log = MagicMock()
+        rem = MagicMock()
+        self.gc.set_callbacks(log, rem)
+
+        self.gc.on_pick(100, alt='B', resv=3)
+
+        rec = self.gc.registry.get('1ubq', 100)
+        self.assertEqual(rec.status, HIDER_STATUS_FOUND)
+        game.cmd.color.assert_called_once_with(
+            'green', "1ubq and segi GAME and resi 3-3")
+        log.assert_called_once()
+        self.assertIn("Found one!", log.call_args[0][0])
+        rem.assert_called_once_with(0)
+
+    # ---- 2. non-anchor middle atom scores (USER REQ 3: click ANY middle atom) ----
+
+    def test_altconf_non_anchor_middle_atom_scores(self):
+        """on_pick(non_registered_id=200, alt='B', resv=3) where resv=3 is in
+        the alt-conf middle range -> registry.get(200) is None (only the anchor
+        100 is registered) -> get_altconf_by_resv('1ubq', 3) finds the record
+        -> SCORE; status FOUND + cmd.color middle range.
+
+        USER REQUIREMENT 3: clicking ANY middle atom (not just the anchor CA)
+        scores. The dual lookup (id then resv) is the mechanism."""
+        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4), alt_tag='B')
+        log = MagicMock()
+        self.gc.set_callbacks(log)
+
+        self.gc.on_pick(200, alt='B', resv=3)
+
+        rec = self.gc.registry.get('1ubq', 100)
+        self.assertEqual(rec.status, HIDER_STATUS_FOUND)
+        game.cmd.color.assert_called_once_with(
+            'green', "1ubq and segi GAME and resi 3-3")
+        log.assert_called_once()
+        self.assertIn("Found one!", log.call_args[0][0])
+
+    # ---- 3. endpoint miss ----
+
+    def test_altconf_endpoint_miss(self):
+        """on_pick(100, alt='B', resv=2) where resv=2 == rv1 (endpoint) ->
+        gate 'rv1 < resv < rv2' is '2 < 2' = False -> 'Miss!' logged; status
+        stays HIDDEN; cmd.color NOT called.
+
+        Endpoints coincide with the real trace (blend); they are NOT clickable
+        hiders."""
+        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4), alt_tag='B')
+        log = MagicMock()
+        self.gc.set_callbacks(log)
+
+        self.gc.on_pick(100, alt='B', resv=2)
+
+        rec = self.gc.registry.get('1ubq', 100)
+        self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        log.assert_called_once_with("Miss!")
+        game.cmd.color.assert_not_called()
+
+    # ---- 4. real-trace miss (alt='') ----
+
+    def test_altconf_real_trace_miss(self):
+        """on_pick(100, alt='', resv=3) -- clicking the REAL trace (alt='') at
+        a middle resv -> gate 'alt != rec.alt_tag' ('' != 'B') -> 'Miss!';
+        status HIDDEN.
+
+        This is the load-bearing scoring fix (research sec 5): alt-conf atoms
+        share ids with originals, so id alone can't distinguish. The alt check
+        rejects the real trace (the 05-08 latent limitation is SOLVED)."""
+        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4), alt_tag='B')
+        log = MagicMock()
+        self.gc.set_callbacks(log)
+
+        self.gc.on_pick(100, alt='', resv=3)
+
+        rec = self.gc.registry.get('1ubq', 100)
+        self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        log.assert_called_once_with("Miss!")
+        game.cmd.color.assert_not_called()
+
+    # ---- 5. no resv miss (backward-compat call without alt/resv) ----
+
+    def test_altconf_no_resv_miss(self):
+        """on_pick(100) (no resv/alt) on an alt-conf record -> gate 'resv is
+        None' -> 'Miss!'; status HIDDEN.
+
+        A bare on_pick(id) call (e.g. from an old wizard or a test) on an
+        alt-conf record does NOT score -- the alt/resv gate requires resv to
+        confirm the click is in the middle range. Backward-compatible: old
+        callers passing on_pick(id) on non-altconf records still score (gate
+        skipped; test_sphere_backward_compat covers that)."""
+        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4), alt_tag='B')
+        log = MagicMock()
+        self.gc.set_callbacks(log)
+
+        self.gc.on_pick(100)
+
+        rec = self.gc.registry.get('1ubq', 100)
+        self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        log.assert_called_once_with("Miss!")
+        game.cmd.color.assert_not_called()
+
+    # ---- 6. already-found check BEFORE alt-conf gate (order matters) ----
+
+    def test_altconf_already_found(self):
+        """on_pick(100, alt='B', resv=3) on an already-found alt-conf record
+        -> 'Already found!' (the found-check runs BEFORE the alt-conf gate;
+        order matters -- a found hider should not re-enter the gate).
+
+        Regression guard: if the gate ran first and resv was out of range,
+        a found hider would log 'Miss!' instead of 'Already found!'."""
+        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4),
+                               alt_tag='B', status=HIDER_STATUS_FOUND)
+        log = MagicMock()
+        rem = MagicMock()
+        win_cb = MagicMock()
+        self.gc.set_callbacks(log, rem, win_cb)
+
+        self.gc.on_pick(100, alt='B', resv=3)
+
+        log.assert_called_once_with("Already found!")
+        rem.assert_not_called()
+        win_cb.assert_not_called()
+        game.cmd.color.assert_not_called()
+
+    # ---- 7. sphere backward compat (gate skipped, colors by id) ----
+
+    def test_sphere_backward_compat(self):
+        """on_pick(100) on a non-altconf sphere record -> is_altconf=False ->
+        gate skipped -> _mark_found(rec.id=100, rec) -> else branch (by id) ->
+        cmd.color('green', '1ubq and id 100'). MUST match the existing
+        test_found assertion (backward-compatible signature + behavior)."""
+        self.gc.registry.register('1ubq', 100, 'spheres')
+        log = MagicMock()
+        rem = MagicMock()
+        win_cb = MagicMock()
+        self.gc.set_callbacks(log, rem, win_cb)
+        self.gc._start_time = 1000.0
+
+        self.gc.on_pick(100)
+
+        rec = self.gc.registry.get('1ubq', 100)
+        self.assertEqual(rec.status, HIDER_STATUS_FOUND)
+        game.cmd.color.assert_called_once_with('green', "1ubq and id 100")
+        rem.assert_called_once_with(0)
+        win_cb.assert_called_once()
+
+
 class TestGameControllerHintReveal(unittest.TestCase):
     """Test GameController.hint / reveal_one / reveal_all / _mark_found /
     counters / on_counts_changed (Phase 6).
