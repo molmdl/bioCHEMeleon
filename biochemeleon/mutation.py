@@ -99,9 +99,9 @@ def fetch_all_hider_ids(object):
     game.py as dependency injection, keeping the registry pure) and by the
     Phase 3 smoke test's id-stability spike.
 
-    The iterate call uses an explicit ``space=`` dict (NOT ``space=None``,
-    which runs the expression against the global ``pymol.__dict__`` -- the
-    legacy ``stored.xxx`` pattern that pollutes the global namespace;
+    The iterate call uses an explicit ``space=`` dict (NOT the bare None
+    default, which runs the expression against the global ``pymol.__dict__``
+    -- the legacy ``stored.xxx`` pattern that pollutes the global namespace;
     RESEARCH sec Q3). The explicit dict is the hygienic pattern
     (editor.py:156).
 
@@ -477,6 +477,102 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
     #     render in ribbon too (research sec Q10). 05-09: was hardcoded
     #     'cartoon'; now parameterized via rep= so ribbon hiders show in ribbon.
     cmd.show(rep, _id_sele(all_game_ids))  # viewing.py:491 -- rep param (05-09)
+    return clickable_id
+
+
+# ---- Alt-conf cartoon/ribbon inserter (Phase 11) ----
+
+def insert_altconf_cartoon_hider(object, chain, start_resi, end_resi, handle,
+                                  backup_name, rep='cartoon', displacement=None,
+                                  is_first_altconf=True, segi='GAME', b=-999.0):
+    """Insert a backbone-only alt-conf segment (cartoon/ribbon hider) and
+    return the anchor middle-CA stable id.
+
+    Construction (research §3b -- the 4-call sequence, 10/10 headless verified):
+      1. cmd.create(tmp, '<backup> and chain X and resi N-M and backbone', 1, 1, zoom=0)
+         -- copy BACKBONE ONLY from the CLEAN backup (Bug 4 Part A; USER REQ 1).
+      2. cmd.alter(tmp, "alt='B'; segi='GAME'; ss='L'", space={})
+         -- tag alt-conf + sentinel + loop ss on TEMP (hygienic space={}; Pitfall 12).
+      3. alter_state(1, '<tmp middle>', "x=x+dx; y=y+dy; z=z+dz", space={})
+         -- rigid-translate ALL middle backbone atoms by the SAME offset (Pitfall 15).
+         Endpoints NOT displaced (coincidence = blend; USER REQ 2).
+      4. cmd.create(object, tmp, target_state=(0 if first else -1), zoom=0)
+         -- append as true alt-conf. 1st -> state 1; 2nd+ -> new state (Bug 4 Part B).
+         zoom=0 (Bug 3).
+      5. cmd.delete(tmp); cmd.sort(object) (defensive -- preserves id, reassigns index).
+
+    Anchor (USER REQ 3): b=-999 on FIRST MIDDLE residue CA (resi=start_resi+1).
+    fetch_all_hider_ids (segi GAME and b < 0) returns exactly 1 atom per hider.
+
+    ``handle`` is accepted for signature symmetry with the other inserters but is
+    UNUSED in this body -- the anchor is selected by ``chain + resi + name CA +
+    segi GAME`` (NOT by atom name ``handle``), because the alt-conf copies inherit
+    the source residue's atom names (N/CA/C/O), not a throwaway ``handle``.
+
+    Args:
+        object (str): existing PyMOL object to append the alt-conf INTO.
+        chain (str): chain identifier of the segment.
+        start_resi (int): residue number of the FIRST endpoint residue (NOT displaced).
+        end_resi (int): residue number of the LAST endpoint residue (NOT displaced).
+        handle (str): UNUSED -- kept for signature symmetry with insert_hider/
+            insert_line_stick_hider/insert_cartoon_hider (see docstring note).
+        backup_name (str): name of the CLEAN backup object to source from
+            (Bug 4 Part A -- NEVER source from ``object``, which may already hold
+            alt-conf atoms from a prior hider in the same round).
+        rep (str): 'cartoon' or 'ribbon' -- shown on the GAME segment.
+        displacement (sequence of 3 floats or None): [dx, dy, dz] rigid offset
+            applied to ALL middle backbone atoms (Pitfall 15). None = no
+            displacement (segment coincides with real trace; for testing).
+        is_first_altconf (bool): True for the 1st alt-conf hider in this round
+            (appends to state 1 via target_state=0); False for 2nd+ (appends as
+            a NEW state via target_state=-1, Bug 4 Part B).
+        segi (str): sentinel segment id (default 'GAME').
+        b (float): sentinel b-factor VALUE set on the anchor CA (default -999.0).
+            The SELECTOR is ``b < 0`` (NEVER an exact-match on the sentinel
+            value -- PyMOL has no exact-match b-factor selector and the literal
+            equality form is malformed, silently matching nothing; AGENTS.md).
+
+    Returns:
+        int: the anchor middle-CA's stable id (shared with the original CA --
+            Bug 1; the registry disambiguates by ``alt`` at pick time).
+
+    Raises:
+        AssertionError: if identify does not return exactly one anchor id.
+    """
+    # 1. Copy BACKBONE ONLY from CLEAN backup to temp (Bug 4 Part A; USER REQ 1).
+    tmp = cmd.get_unused_name("_bchm_alt")
+    segment_sele = "%s and chain %s and resi %d-%d and backbone" % (
+        backup_name, chain, start_resi, end_resi)
+    cmd.create(tmp, segment_sele, 1, 1, zoom=0)  # creating.py:960; zoom=0 (Bug 3)
+    # 2. Tag alt-conf + sentinel + loop ss on TEMP (hygienic space={}; Pitfall 12).
+    cmd.alter(tmp, "alt='B'; segi='%s'; ss='L'" % segi, space={})  # editing.py:1424
+    # 3. Rigid-translate ALL middle backbone atoms by the SAME offset (Pitfall 15).
+    #    Endpoints NOT displaced -- coincidence with real trace IS the blend (USER REQ 2).
+    if displacement is not None:
+        dx, dy, dz = displacement
+        mid_sele = "%s and resi %d-%d" % (tmp, start_resi + 1, end_resi - 1)
+        cmd.alter_state(1, mid_sele,
+                        "x=x+%.6f; y=y+%.6f; z=z+%.6f" % (dx, dy, dz),
+                        space={})
+    # 4. Append alt-conf atoms. 1st -> state 1 (0); 2nd+ -> new state (-1) (Bug 4 Part B).
+    target_state = 0 if is_first_altconf else -1
+    cmd.create(object, tmp, target_state=target_state, zoom=0)  # creating.py:960
+    # 5. Clean up temp + defensive sort (preserves id, reassigns index).
+    cmd.delete(tmp)
+    cmd.sort(object)  # editing.py:1457
+    # 6. Set b=-999 sentinel on FIRST MIDDLE residue's CA (anchor / clickable atom).
+    #    Anchor is MIDDLE residue (USER REQ 3). segi GAME scopes alter to COPY only.
+    anchor_resi = start_resi + 1  # first middle residue (segment_size >= 3)
+    anchor_sele = ("%s and chain %s and resi %d and name CA and segi %s"
+                   % (object, chain, anchor_resi, segi))
+    cmd.alter(anchor_sele, "b=%.1f" % b, space={})  # b=-999.0; sentinel VALUE
+    # 7. Fetch anchor's stable id (mode=0 = id list, NOT index; querying.py:1269).
+    ids = cmd.identify(anchor_sele + " and b < 0", mode=0)  # b < 0 SELECTOR (AGENTS.md)
+    assert len(ids) == 1, "expected 1 anchor middle-CA id, got %r" % (ids,)
+    clickable_id = ids[0]
+    # 8. Show requested rep on GAME segment (NOT hardcoded cartoon; ribbon hiders show ribbon).
+    cmd.show(rep, "%s and chain %s and resi %d-%d and segi %s" % (
+        object, chain, start_resi, end_resi, segi))  # viewing.py:491
     return clickable_id
 
 
