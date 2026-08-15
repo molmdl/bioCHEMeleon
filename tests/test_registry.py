@@ -994,5 +994,128 @@ class TestAltconfFields(unittest.TestCase):
         self.assertIsNone(reg.get_altconf_by_resv('other', 3))
 
 
+class TestAltconfSerialization(unittest.TestCase):
+    """Test the .bcm serialization extension for the 3 Phase 11 alt-conf
+    fields (is_altconf, endpoint_resvs, alt_tag) — to_dict/from_dict/
+    reconstruct_from_sentinels/reconcile_with_bcm carry the fields through
+    the .bcm sidecar with NO version bump (research §8).
+
+    to_dict omits the fields when default (compact sidecar; backward-
+    compatible with Phase 8 sidecars). from_dict/reconcile read them with
+    defaults (absent -> non-altconf). endpoint_resvs serializes as a LIST
+    (JSON has no tuples) and is coerced back to a TUPLE on reconcile so
+    rv1 < resv < rv2 works (lists fail < in py3). reconstruct_from_sentinels
+    defaults the 3 fields (sentinel carries no alt-conf info; the .bcm
+    reconciles).
+    """
+
+    def test_to_dict_omits_defaults(self):
+        """HiderRecord(100,'1ubq','spheres') (defaults) -> to_dict() does
+        NOT contain is_altconf/endpoint_resvs/alt_tag (compact sidecar;
+        backward-compatible with Phase 8 sidecars)."""
+        rec = HiderRecord(100, '1ubq', 'spheres')
+        d = rec.to_dict()
+        self.assertNotIn('is_altconf', d)
+        self.assertNotIn('endpoint_resvs', d)
+        self.assertNotIn('alt_tag', d)
+
+    def test_to_dict_includes_altconf(self):
+        """HiderRecord with is_altconf=True, endpoint_resvs=(2,4),
+        alt_tag='B' -> to_dict() contains 'is_altconf': True,
+        'endpoint_resvs': [2,4] (LIST for JSON), 'alt_tag': 'B'."""
+        rec = HiderRecord(100, '1ubq', 'cartoon', is_altconf=True,
+                         endpoint_resvs=(2, 4), alt_tag='B')
+        d = rec.to_dict()
+        self.assertEqual(d['is_altconf'], True)
+        self.assertEqual(d['endpoint_resvs'], [2, 4])
+        self.assertIsInstance(d['endpoint_resvs'], list)
+        self.assertEqual(d['alt_tag'], 'B')
+
+    def test_from_dict_altconf_roundtrip(self):
+        """register alt-conf record -> to_dict -> from_dict -> reconstructed
+        record has the 3 fields (round-trip preserves
+        is_altconf/endpoint_resvs/alt_tag)."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                     endpoint_resvs=(2, 4), alt_tag='B')
+        d = reg.to_dict()
+        reg2 = HiderRegistry.from_dict(d)
+        rec = reg2.get('1ubq', 100)
+        self.assertIsNotNone(rec)
+        self.assertTrue(rec.is_altconf)
+        self.assertEqual(rec.endpoint_resvs, (2, 4))
+        self.assertEqual(rec.alt_tag, 'B')
+
+    def test_from_dict_defaults_when_absent(self):
+        """A hider dict WITHOUT the 3 new keys (a Phase 8 sidecar) ->
+        from_dict reconstructs with defaults (is_altconf=False,
+        endpoint_resvs=None, alt_tag=''). BACKWARD COMPATIBLE — Phase 8
+        sidecars load unchanged."""
+        d = {'version': 1, 'hiders': [
+            {'id': 100, 'object': '1ubq', 'rep': 'spheres',
+             'status': HIDER_STATUS_HIDDEN}]}
+        reg = HiderRegistry.from_dict(d)
+        rec = reg.get('1ubq', 100)
+        self.assertIsNotNone(rec)
+        self.assertFalse(rec.is_altconf)
+        self.assertIsNone(rec.endpoint_resvs)
+        self.assertEqual(rec.alt_tag, '')
+
+    def test_reconstruct_from_sentinels_defaults(self):
+        """reconstruct_from_sentinels(iter) -> rebuilt records have
+        is_altconf=False, endpoint_resvs=None, alt_tag='' (sentinel carries
+        no alt-conf info; Plan 05/06 reconcile from .bcm restores them)."""
+        reg = HiderRegistry()
+        reg.reconstruct_from_sentinels(lambda: [('1ubq', 100), ('1ubq', 200)])
+        for rec in reg.all():
+            self.assertFalse(rec.is_altconf)
+            self.assertIsNone(rec.endpoint_resvs)
+            self.assertEqual(rec.alt_tag, '')
+
+    def test_reconcile_with_bcm_restores_altconf(self):
+        """Sentinel-rebuild a record (rep=None, defaults), then
+        reconcile_with_bcm([{...is_altconf:True, endpoint_resvs:[2,4],
+        alt_tag:'B'}]) -> record's is_altconf/endpoint_resvs/alt_tag
+        restored. endpoint_resvs is a TUPLE (list->tuple coercion)."""
+        reg = HiderRegistry()
+        reg.reconstruct_from_sentinels(lambda: [('1ubq', 100)])
+        bcm = [{'id': 100, 'object': '1ubq', 'rep': 'cartoon',
+                'status': HIDER_STATUS_HIDDEN, 'is_altconf': True,
+                'endpoint_resvs': [2, 4], 'alt_tag': 'B'}]
+        reg.reconcile_with_bcm(bcm)
+        rec = reg.get('1ubq', 100)
+        self.assertTrue(rec.is_altconf)
+        self.assertEqual(rec.endpoint_resvs, (2, 4))
+        self.assertEqual(rec.alt_tag, 'B')
+
+    def test_reconcile_defaults_when_bcm_lacks_fields(self):
+        """Reconcile a sentinel record with a .bcm hider dict that LACKS
+        the 3 fields -> record keeps defaults (is_altconf=False,
+        endpoint_resvs=None, alt_tag=''). BACKWARD COMPATIBLE."""
+        reg = HiderRegistry()
+        reg.reconstruct_from_sentinels(lambda: [('1ubq', 100)])
+        bcm = [{'id': 100, 'object': '1ubq', 'rep': 'spheres',
+                'status': HIDER_STATUS_HIDDEN}]
+        reg.reconcile_with_bcm(bcm)
+        rec = reg.get('1ubq', 100)
+        self.assertFalse(rec.is_altconf)
+        self.assertIsNone(rec.endpoint_resvs)
+        self.assertEqual(rec.alt_tag, '')
+
+    def test_reconcile_endpoint_resvs_list_to_tuple(self):
+        """The .bcm JSON stores endpoint_resvs as [2,4] (list); reconcile
+        stores it as a TUPLE (2,4) on the record (so rv1 < resv < rv2
+        comparison works — lists would fail < in py3)."""
+        reg = HiderRegistry()
+        reg.reconstruct_from_sentinels(lambda: [('1ubq', 100)])
+        bcm = [{'id': 100, 'object': '1ubq', 'rep': 'cartoon',
+                'status': HIDER_STATUS_HIDDEN, 'is_altconf': True,
+                'endpoint_resvs': [2, 4], 'alt_tag': 'B'}]
+        reg.reconcile_with_bcm(bcm)
+        rec = reg.get('1ubq', 100)
+        self.assertIsInstance(rec.endpoint_resvs, tuple)
+        self.assertEqual(rec.endpoint_resvs, (2, 4))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
