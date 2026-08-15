@@ -61,47 +61,31 @@ class GameController:
         self.registry = registry.HiderRegistry()  # fresh per round
         self._reveal_count = 0  # reset per round (DIFF-01)
         self._hint_count = 0  # reset per round (DIFF-01)
-        # Phase 11: 1st alt-conf -> state 1; 2nd+ -> new state (Bug 4 Part B).
-        # Flipped to False after the first 4-tuple cartoon/ribbon insert so
-        # subsequent alt-conf hiders append as a NEW state (target_state=-1),
-        # avoiding retroactive coord corruption on the 1st alt-conf.
-        self._first_altconf = True
-        altconf_count = 0
         for i, (payload, rep) in enumerate(hider_specs):
             handle = "H%03d" % i
-            # Phase 11: 4-tuple cartoon/ribbon payloads are alt-conf hiders.
-            # Register the 3 alt-conf fields (is_altconf/endpoint_resvs/
-            # alt_tag) so on_pick's dual lookup + alt/resv gate works. The
-            # **extra dict is empty for spheres/lines/sticks + legacy 3-tuple
+            # Phase 11 refactor: cartoon/ribbon 4-tuple hiders are now
+            # SINGLE-STATE new-chain backbone segments (insert_cartoon_segment_hider),
+            # NO alt-conf, NO multi-state, NO all_states. cmd.create preserves
+            # source ids (backup=snapshot), so the copy SHARES its id with the
+            # real-trace CA; the copy's RESI is shifted to a NEW range
+            # (mutation.cartoon_hider_resi_range) so its resv differs from the
+            # real CA's resv. endpoint_resvs is registered with that NEW range so
+            # on_pick's resv-range gate scores the hider (resv in the new range)
+            # + misses the real trace (resv in the original range), and
+            # _mark_found colors the fragment's middle on found. is_altconf stays
+            # False (id-keyed; the resv gate replaces the alt-conf alt gate).
+            # The **extra dict is empty for spheres/lines/sticks + legacy 3-tuple
             # cartoon (backward compatible).
             extra = {}
             if rep in ('cartoon', 'ribbon') and len(payload) == 4:
                 _chain, start_resi, end_resi, _disp = payload
-                extra = {'is_altconf': True,
-                         'endpoint_resvs': (start_resi, end_resi),
-                         'alt_tag': 'B'}
+                extra = {'endpoint_resvs': mutation.cartoon_hider_resi_range(
+                    start_resi, end_resi)}
             aid = mutation.insert_hider_for_rep(
                 self.target_obj, rep, payload, handle,
-                backup_name=self._backup_name,
-                is_first_altconf=self._first_altconf)
+                backup_name=self._backup_name)
             self.registry.register(object=self.target_obj, id=aid, rep=rep,
                                    **extra)
-            if rep in ('cartoon', 'ribbon') and len(payload) == 4:
-                self._first_altconf = False
-                altconf_count += 1
-        # Phase 11 Open Risk 5 / Bug 4 Part B: object-scoped all_states=on
-        # when >=2 alt-conf hiders exist. NOTE: after the visibility-regression
-        # fix (union-create), alt-conf hiders are single-state (all coexist in
-        # state 1), so all_states=on is now a HARMLESS NO-OP (1 state -> shows
-        # state 1 regardless). Kept for backward compat with .pse/import_state
-        # re-apply logic + the smoke checks that assert _all_states_was_set.
-        # Object-scoped (research Example 9) -- NOT global (a global all_states
-        # set with NO object arg leaks to ALL subsequent objects). Reset in
-        # cleanup()/abort_on_error() via the _all_states_was_set flag.
-        self._all_states_was_set = False
-        if altconf_count >= 2:
-            cmd.set("all_states", "on", self.target_obj)
-            self._all_states_was_set = True
         self._started = True
         return self._backup_name
 
@@ -141,21 +125,37 @@ class GameController:
         lookup + gate (research sec 5 scoring truth table):
 
           1. ``registry.get(id)`` -- anchor-id hit (the registered middle CA).
-          2. if None and resv is not None: ``get_altconf_by_resv(resv)`` -- a
-             non-anchor middle atom (USER REQ 3: click ANY middle atom).
-          3. if rec.is_altconf: gate on ``alt == rec.alt_tag AND
-             rv1 < resv < rv2`` (strictly between endpoints; resv None -> Miss;
-             real trace alt='' -> Miss; endpoint -> Miss). Non-alt-conf
-             (sphere/line/stick): gate skipped (unique id, alt='').
+          2. if None and resv is not None: ``get_altconf_by_resv(resv)`` --
+             dormant (new games have no is_altconf records; kept for old
+             alt-conf .bcmz).
+          3. FRAGMENT gate (Phase 11 single-state refactor): if
+             ``rec.endpoint_resvs`` is set (cartoon/ribbon backbone-segment
+             copy), the copy SHARES its id with the real-trace CA (cmd.create
+             preserves source ids; backup=snapshot). The copy's RESI is
+             shifted to a NEW range (``cartoon_hider_resi_range``), so its
+             resv differs from the real CA's resv. Gate on
+             ``rv1 < resv < rv2`` (strictly between endpoints; resv None ->
+             Miss; real trace resv in the original range -> Miss; endpoint ->
+             Miss). Non-fragment (sphere/line/stick, endpoint_resvs None):
+             gate skipped (unique id, by-id scoring).
           4. ``_mark_found(rec.id, rec)`` -- rec.id (anchor), NOT picked_id
              (Pitfall 13: non-anchor middle clicks would KeyError on picked_id).
 
         ``getattr(rec, 'is_altconf', False)`` defends against records rebuilt
         by old ``reconstruct_from_sentinels`` (which defaults is_altconf=False).
-        Existing sphere/line/stick: is_altconf=False -> gate skipped ->
+        Existing sphere/line/stick: endpoint_resvs None -> gate skipped ->
         ``_mark_found(rec.id, rec)`` where rec.id == picked_id -> identical to
         prior behavior (backward-compatible signature: ``on_pick(100)`` still
-        works -- alt='', resv=None -> gate skipped for non-altconf records).
+        works -- alt='', resv=None -> gate skipped for non-fragment records).
+
+        Phase 11 refactor: NEW cartoon/ribbon hiders are SINGLE-STATE new-chain
+        backbone segments. They SHARE ids with the real trace (cmd.create
+        preserves ids) but their resv is in a NEW range, so the resv gate
+        (endpoint_resvs) disambiguates -- NO alt-conf, NO multi-state. Only the
+        anchor middle-CA is registered (like main/legacy cartoon), so clicking
+        a non-anchor middle atom (N/C/O) misses (get_altconf_by_resv is
+        dormant: is_altconf=False). The old alt-conf alt gate is removed (no
+        new game produces is_altconf=True); old alt-conf .bcmz are obsolete.
 
         Registry is the single source of truth (LOOP-02). Logic:
           - rec is None -> miss (non-hider); log 'Miss!', no harm (LOOP-01)
@@ -172,10 +172,14 @@ class GameController:
         if rec.status == registry.HIDER_STATUS_FOUND:
             self._on_log("Already found!")
             return
-        if getattr(rec, 'is_altconf', False):
+        # Fragment (cartoon/ribbon) resv-range gate: the copy shares its id
+        # with the real-trace CA; its NEW resv disambiguates. Strictly between
+        # endpoints (endpoints blend with the real trace -> not clickable).
+        # resv None (non-fragment pick path) -> Miss. Non-fragment (sphere/
+        # line/stick, endpoint_resvs None) -> gate skipped -> by-id scoring.
+        if rec.endpoint_resvs is not None:
             rv1, rv2 = rec.endpoint_resvs
-            if (resv is None or alt != rec.alt_tag
-                    or not (rv1 < resv < rv2)):
+            if resv is None or not (rv1 < resv < rv2):
                 self._on_log("Miss!")
                 return
         self._mark_found(rec.id, rec)
@@ -188,18 +192,18 @@ class GameController:
     def _mark_found(self, hider_id, rec=None):
         """Shared mark+color helper. Does NOT log or fire win (callers do those).
 
-        For alt-conf hiders (``rec.is_altconf`` truthy + ``endpoint_resvs`` set),
-        color ONLY the GAME middle-range atoms (``segi GAME and resi <rv1+1>-<rv2-1>``)
-        -- NOT the shared id (Pitfall 14: coloring by id colors the real trace
-        too, since alt-conf atoms share ids with their originals). For
-        non-alt-conf (sphere/line/stick, or ``rec=None`` for backward compat),
-        color by id (existing behavior). ``rec=None`` defaults to the by-id
-        branch so existing callers like ``reveal_one``/``reveal_all`` passing
-        ``_mark_found(rec.id)`` (no rec) stay unchanged.
+        For FRAGMENT hiders (``rec.endpoint_resvs`` set -- the single-state
+        cartoon/ribbon backbone segment on chain H), color ONLY the GAME middle
+        range (``segi GAME and resi <rv1+1>-<rv2-1>``) -- the displaced bump --
+        NOT just the anchor id (a single-atom color would leave the rest of the
+        bump uncolored). For single-atom hiders (sphere/line/stick, or ``rec=None``
+        for backward compat), color by id (existing behavior). ``rec=None``
+        defaults to the by-id branch so existing callers like
+        ``reveal_one``/``reveal_all`` passing ``_mark_found(rec.id)`` (no rec)
+        stay unchanged.
         """
         self.registry.mark_found(self.target_obj, hider_id)
-        if (rec is not None and getattr(rec, 'is_altconf', False)
-                and rec.endpoint_resvs is not None):
+        if (rec is not None and rec.endpoint_resvs is not None):
             rv1, rv2 = rec.endpoint_resvs
             cmd.color(self._found_color,
                       "%s and segi GAME and resi %d-%d" % (
@@ -351,31 +355,12 @@ class GameController:
         for rec in self.registry.all():
             if rec.status == registry.HIDER_STATUS_FOUND:
                 cmd.color(self._found_color,
-                          "%s and id %d" % (self.target_obj, rec.id))
-        # Phase 11 Open Risk 3 fallback: defensively re-apply alt on GAME
-        # atoms. .pse alt survival is MEDIUM (reasoned, not smoke-verified);
-        # re-applying is idempotent (alt='B' on atoms that already have
-        # alt='B' is a no-op) and scoped to segi GAME so originals (segi A)
-        # are untouched (Pitfall 12: NEVER alter alt on a too-broad sele that
-        # could hit the real trace). Runs AFTER apply_bcm_dict so
-        # rec.alt_tag/endpoint_resvs are reconciled from the .bcm sidecar.
-        # Hygienic space={} (AGENTS.md: never the bare None default).
-        for rec in self.registry.all():
-            if (getattr(rec, 'is_altconf', False) and rec.alt_tag
-                    and rec.endpoint_resvs):
-                rv1, rv2 = rec.endpoint_resvs
-                cmd.alter("%s and segi GAME and resi %d-%d" % (
-                    self.target_obj, rv1, rv2),
-                    "alt='%s'" % rec.alt_tag, space={})
-        # Phase 11 Open Risk 5: re-apply object-scoped all_states when >=2
-        # alt-conf records reconciled (each 2nd+ lives in its own state;
-        # all_states makes every state visible). Idempotent if already on
-        # (.pse may preserve the setting; re-applying is a safe no-op).
-        altconf_reloaded = sum(1 for r in self.registry.all()
-                               if getattr(r, 'is_altconf', False))
-        if altconf_reloaded >= 2:
-            cmd.set("all_states", "on", self.target_obj)
-            self._all_states_was_set = True
+                           "%s and id %d" % (self.target_obj, rec.id))
+        # Phase 11 refactor: the alt-conf alt re-apply is removed (no new game
+        # produces is_altconf records; the single-state copy is alt=''). New
+        # cartoon/ribbon hiders are chain-H backbone copies with NEW resi; the
+        # .pse preserves them (chain H + segi GAME + alt '') and on_pick's resv
+        # gate (endpoint_resvs, reconciled from the .bcm sidecar) disambiguates.
         self._backup_name = backup.snapshot(self.target_obj)  # FRESH post-import
         self._started = True
         self._is_imported = True
@@ -399,13 +384,6 @@ class GameController:
         """
         if not self._started:
             return True
-        # Phase 11: Reset object-scoped all_states BEFORE the restore so the
-        # setting is cleared even if restore raises (research Example 9). Use
-        # getattr in case start() never set it (e.g. <2 alt-conf hiders or a
-        # pre-Phase-11 game imported via import_state without alt-conf records).
-        if getattr(self, '_all_states_was_set', False):
-            cmd.set("all_states", "off", self.target_obj)
-            self._all_states_was_set = False
         # Restore from backup: removes hiders + restores hint-colored real
         # atoms to their original colors. The backup was created in start()
         # before any mutation or hint coloring, so it has the original atoms
@@ -427,13 +405,6 @@ class GameController:
         Use when cleanup() returned False OR an unexpected error occurred mid-game."""
         if not self._started:
             return True
-        # Phase 11: Reset object-scoped all_states BEFORE the restore so the
-        # setting is cleared even if restore raises (research Example 9). Use
-        # getattr in case start() never set it (e.g. <2 alt-conf hiders or a
-        # pre-Phase-11 game). Mirrors cleanup()'s reset block.
-        if getattr(self, '_all_states_was_set', False):
-            cmd.set("all_states", "off", self.target_obj)
-            self._all_states_was_set = False
         ok = backup.restore(self.target_obj, self._backup_name)
         backup.discard(self._backup_name)
         self._backup_name = None

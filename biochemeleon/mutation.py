@@ -480,63 +480,114 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
     return clickable_id
 
 
-# ---- Alt-conf cartoon/ribbon inserter (Phase 11) ----
+# ---- Cartoon/ribbon segment inserter (Phase 11 single-state refactor) ----
 
-def insert_altconf_cartoon_hider(object, chain, start_resi, end_resi, handle,
-                                  backup_name, rep='cartoon', displacement=None,
-                                  is_first_altconf=True, segi='GAME', b=-999.0):
-    """Insert a backbone-only alt-conf segment (cartoon/ribbon hider) and
-    return the anchor middle-CA stable id.
+# The cartoon/ribbon fragment is a copy of a REAL backbone segment (cmd.create
+# preserves the source atom ids, and the backup is a snapshot -> the copy SHARES
+# its id with the real-trace CA). To keep the id-keyed registry able to
+# disambiguate a hider click from a real-trace click (which would share the
+# id), the copy's RESI is shifted to a NEW range (disjoint from the real
+# segment's resi AND from sphere/stick hiders at resi 9001). The copy then
+# shares the id but has a DIFFERENT resv -> on_pick's resv-range gate (built on
+# endpoint_resvs) scores the hider (resv in the new range) and misses the real
+# trace (resv in the original range). Offset 10000 keeps the new resi clear of
+# typical protein resi (< ~1000) and the sphere/stick resi (9001); pick_segments
+# returns disjoint segments so two fragments get disjoint new resi ranges.
+CARTOON_RESI_OFFSET = 10000
 
-    Construction (research §3b -- the 4-call sequence, 10/10 headless verified):
-       1. cmd.create(tmp, '<backup> and chain X and resi N-M and backbone', 1, 1, zoom=0)
-          -- copy BACKBONE ONLY from the CLEAN backup (Bug 4 Part A; USER REQ 1).
-       2. cmd.alter(tmp, "alt='B'; segi='GAME'; ss='L'", space={})
-          -- tag alt-conf + sentinel + loop ss on TEMP (hygienic space={}; Pitfall 12).
-       3. alter_state(1, '<tmp middle>', "x=x+dx; y=y+dy; z=z+dz", space={})
-          -- rigid-translate ALL middle backbone atoms by the SAME offset (Pitfall 15).
-          Endpoints NOT displaced (coincidence = blend; USER REQ 2).
-       4. UNION MERGE into state 1 (visibility-regression fix): build a COMBINED object
-          from "(object) or (tmp)" (union of the current object -- originals + any
-          prior hiders -- and tmp), then replace object's state 1 with combined.
-          CRITICAL: cmd.create(target, source) REPLACES the target state's coord set
-          (verified headless: cmd.create(obj, tmp, target_state=0) wiped the original
-          660 atoms' state-1 coords, leaving only tmp's 12 -- only the alt-conf segment
-          rendered; the original structure + prior sphere/stick hiders were invisible).
-          The union build includes the current object's atoms so they survive the
-          state replace. Single-state (NO multi-state / all_states): disjoint alt-conf
-          segments coexist in state 1 (different residues, each <=1 alt='B' copy), so
-          the Bug 4 Part B multi-state workaround (target_state=-1 for 2nd+) is
-          obsolete -- the union re-derives state 1 from the current object each time.
-       5. cmd.delete(tmp); cmd.sort(object) (defensive -- preserves id, reassigns index).
 
-    Anchor (USER REQ 3): b=-999 on FIRST MIDDLE residue CA (resi=start_resi+1).
-    fetch_all_hider_ids (segi GAME and b < 0) returns exactly 1 atom per hider.
+def cartoon_hider_resi_range(start_resi, end_resi):
+    """Map a real segment's resi range to the NEW resi range used by the
+    single-state cartoon/ribbon fragment copy.
 
-    ``handle`` is accepted for signature symmetry with the other inserters but is
-    UNUSED in this body -- the anchor is selected by ``chain + resi + name CA +
-    segi GAME`` (NOT by atom name ``handle``), because the alt-conf copies inherit
-    the source residue's atom names (N/CA/C/O), not a throwaway ``handle``.
+    Single source of truth shared by ``insert_cartoon_segment_hider`` (reassigns
+    the copy's resi) and ``GameController.start`` (registers ``endpoint_resvs``
+    so on_pick's resv-range gate + _mark_found's fragment coloring use the NEW
+    resi, not the real segment's resi).
 
     Args:
-        object (str): existing PyMOL object to append the alt-conf INTO.
-        chain (str): chain identifier of the segment.
-        start_resi (int): residue number of the FIRST endpoint residue (NOT displaced).
-        end_resi (int): residue number of the LAST endpoint residue (NOT displaced).
-        handle (str): UNUSED -- kept for signature symmetry with insert_hider/
-            insert_line_stick_hider/insert_cartoon_hider (see docstring note).
+        start_resi (int): real first-endpoint residue number.
+        end_resi (int): real last-endpoint residue number.
+
+    Returns:
+        tuple: ``(new_start_resi, new_end_resi)`` shifted by CARTOON_RESI_OFFSET.
+    """
+    return (start_resi + CARTOON_RESI_OFFSET, end_resi + CARTOON_RESI_OFFSET)
+
+
+def insert_cartoon_segment_hider(object, chain, start_resi, end_resi, handle,
+                                 backup_name, rep='cartoon', displacement=None,
+                                 segi='GAME', b=-999.0):
+    """Insert a backbone segment as NEW atoms (single-state cartoon/ribbon hider)
+    and return the anchor middle-CA's stable NEW id.
+
+    This is the single-state refactor of the Phase 11 alt-conf approach. A lone
+    pseudoatom is INVISIBLE for cartoon/ribbon (POLYMER-TRACE reps need real
+    backbone; verified headless -- a pseudoatom or pseudoatom-built fragment on
+    a NEW chain does NOT render). So this function copies a REAL 3-residue
+    backbone segment from the CLEAN backup as NEW atoms (NOT alt-conf copies
+    that share ids), merges it single-state, and shows the rep -- the cartoon
+    analog of the sphere/stick ``cmd.pseudoatom`` + ``cmd.show`` pattern, where
+    the "atom" for cartoon is a small real-backbone fragment and the "different
+    criteria" is the mid-chain segment placement (``pick_segments``).
+
+    Construction (single-state; 10/10 headless verified render + originals
+    preserved + single-state):
+       1. ``cmd.create(tmp, '<backup> and chain X and resi N-M and backbone', 1, 1, zoom=0)``
+          -- copy BACKBONE ONLY from the CLEAN backup (real geometry -> renders;
+          Bug 4 Part A; USER REQ 1: source from backup, NEVER the live object).
+       2. ``cmd.alter(tmp, "chain='H'; segi='GAME'; alt=''; ss='L'", space={})``
+          -- retag the copy to a NEW hider chain ('H', the project hider-chain
+          convention used by insert_hider/insert_line_stick_hider) + sentinel +
+          alt='' (NOT 'B' -> NO alt-conf, NO id-sharing, NO multi-state) + loop
+          ss. NEW chain -> NEW atom ids -> id-keyed registry like sphere/stick
+          (no KeyError from shared ids; no alt-conf scoring gate needed).
+       3. ``alter_state(1, '<tmp middle>', "x=x+dx; y=y+dy; z=z+dz", space={})``
+          -- rigid-translate ALL middle backbone atoms by the SAME offset
+          (Pitfall 15) so the segment bulges in the middle (a visible bump
+          distinct from the real trace). Endpoints NOT displaced (coincidence
+          with the real trace IS the blend; USER REQ 2).
+       4. UNION-CREATE merge into state 1 (single-state, preserves originals +
+          prior hiders): build a COMBINED object from ``(object) or (tmp)``
+          (union of the current object -- originals + any prior hiders -- and
+          tmp), then replace object's state 1 with combined. CRITICAL:
+          ``cmd.create(target_existing_obj, source)`` REPLACES the target
+          state's coord set (verified headless: it wiped the original 660
+          atoms' state-1 coords, leaving only tmp's 12). The union build
+          includes the current object's atoms so they survive the state
+          replace. Single-state (NO multi-state / all_states): disjoint segments
+          coexist in state 1 (different resi on chain H), so no all_states is
+          needed.
+       5. ``cmd.delete(tmp); cmd.delete(combined); cmd.sort(object)`` (defensive
+          -- sort preserves id, reassigns index).
+       6. Set ``b=-999`` on the MIDDLE residue's CA (anchor / clickable atom;
+          USER REQ 3). ``fetch_all_hider_ids`` (``segi GAME and b < 0``) then
+          returns exactly 1 atom per hider -> 1 registry entry.
+       7. Fetch the anchor's NEW stable id (``identify`` mode=0; querying.py:1269).
+       8. ``cmd.show(rep, '<obj> and chain H and resi N-M and segi GAME')`` --
+          show cartoon/ribbon on the new chain-H GAME fragment (viewing.py:491).
+
+    ``handle`` is accepted for signature symmetry with the other inserters but
+    is UNUSED -- the anchor is selected by ``chain H + resi + name CA + segi GAME``
+    (NOT by atom name ``handle``), because the copied backbone atoms inherit the
+    source residue's atom names (N/CA/C/O), not a throwaway ``handle``.
+
+    Args:
+        object (str): existing PyMOL object to merge the segment INTO.
+        chain (str): chain identifier of the SOURCE segment in the backup (the
+            copy is retagged to chain 'H' -- the hider chain).
+        start_resi (int): residue number of the FIRST endpoint residue (NOT
+            displaced; blends with the real trace).
+        end_resi (int): residue number of the LAST endpoint residue (NOT
+            displaced).
+        handle (str): UNUSED -- kept for signature symmetry (see docstring note).
         backup_name (str): name of the CLEAN backup object to source from
-            (Bug 4 Part A -- NEVER source from ``object``, which may already hold
-            alt-conf atoms from a prior hider in the same round).
-        rep (str): 'cartoon' or 'ribbon' -- shown on the GAME segment.
+            (Bug 4 Part A -- NEVER source from ``object``, which may already
+            hold chain-H GAME atoms from a prior hider in the same round).
+        rep (str): 'cartoon' or 'ribbon' -- shown on the chain-H GAME segment.
         displacement (sequence of 3 floats or None): [dx, dy, dz] rigid offset
             applied to ALL middle backbone atoms (Pitfall 15). None = no
             displacement (segment coincides with real trace; for testing).
-        is_first_altconf (bool): UNUSED after the visibility-regression fix (all
-            alt-conf hiders now merge into state 1 via the union create). Kept for
-            signature symmetry with the dispatcher / game.start wiring. Pre-fix,
-            this controlled target_state (0 for 1st -> state 1, -1 for 2nd+ -> new
-            state, Bug 4 Part B); the multi-state workaround is obsolete.
         segi (str): sentinel segment id (default 'GAME').
         b (float): sentinel b-factor VALUE set on the anchor CA (default -999.0).
             The SELECTOR is ``b < 0`` (NEVER an exact-match on the sentinel
@@ -544,43 +595,57 @@ def insert_altconf_cartoon_hider(object, chain, start_resi, end_resi, handle,
             equality form is malformed, silently matching nothing; AGENTS.md).
 
     Returns:
-        int: the anchor middle-CA's stable id (shared with the original CA --
-            Bug 1; the registry disambiguates by ``alt`` at pick time).
+        int: the anchor middle-CA's stable id. NOTE: cmd.create preserves the
+            source atom ids and the backup is a snapshot of the object, so the
+            copy SHARES its id with the real-trace CA at the same segment
+            position. The copy's RESI is shifted to a NEW range
+            (``cartoon_hider_resi_range``) so its resv differs from the real
+            CA's resv; on_pick's resv-range gate (endpoint_resvs) scores the
+            hider (resv in the new range) and misses the real trace (resv in
+            the original range). The registry stays id-keyed; resv is the
+            disambiguator for the shared id (NO alt-conf, NO multi-state).
 
     Raises:
         AssertionError: if identify does not return exactly one anchor id.
     """
-    # 1. Copy BACKBONE ONLY from CLEAN backup to temp (Bug 4 Part A; USER REQ 1).
-    tmp = cmd.get_unused_name("_bchm_alt")
+    new_start, new_end = cartoon_hider_resi_range(start_resi, end_resi)
+    new_mid = new_start + 1  # first middle residue's NEW resi (anchor; size>=3)
+    new_mid_lo, new_mid_hi = new_start + 1, new_end - 1  # middle range (NEW resi)
+    # 1. Copy BACKBONE ONLY from CLEAN backup to temp (real geometry -> renders).
+    tmp = cmd.get_unused_name("_bchm_seg")
     segment_sele = "%s and chain %s and resi %d-%d and backbone" % (
         backup_name, chain, start_resi, end_resi)
     cmd.create(tmp, segment_sele, 1, 1, zoom=0)  # creating.py:960; zoom=0 (Bug 3)
-    # 2. Tag alt-conf + sentinel + loop ss on TEMP (hygienic space={}; Pitfall 12).
-    cmd.alter(tmp, "alt='B'; segi='%s'; ss='L'" % segi, space={})  # editing.py:1424
-    # 3. Rigid-translate ALL middle backbone atoms by the SAME offset (Pitfall 15).
-    #    Endpoints NOT displaced -- coincidence with real trace IS the blend (USER REQ 2).
+    # 2. Retag the copy: NEW hider chain 'H' + sentinel + alt='' (NO alt-conf)
+    #    + loop ss + NEW resi (resv shifted by CARTOON_RESI_OFFSET so the copy's
+    #    resv differs from the real CA's resv -> on_pick resv-gate disambiguates
+    #    the shared id). alter exposes resv (numeric residue value) per-atom;
+    #    resi=resv+offset reassigns each atom's resi (resi is a regular string
+    #    field, unlike the immutable id). Hygienic space={} (Pitfall 12).
+    cmd.alter(tmp,
+              "chain='H'; segi='%s'; alt=''; ss='L'; resi=resv+%d" % (
+                  segi, CARTOON_RESI_OFFSET),
+              space={})
+    # 3. Rigid-translate ALL middle backbone atoms by the SAME offset (Pitfall
+    #    15). Endpoints NOT displaced -- coincidence with the real trace IS the
+    #    blend (USER REQ 2). The bump is the displaced middle (visible marker).
+    #    Select the middle by its NEW resi range (handles segment_size > 3).
     if displacement is not None:
         dx, dy, dz = displacement
-        mid_sele = "%s and resi %d-%d" % (tmp, start_resi + 1, end_resi - 1)
+        mid_sele = "%s and resi %d-%d" % (tmp, new_mid_lo, new_mid_hi)
         cmd.alter_state(1, mid_sele,
                         "x=x+%.6f; y=y+%.6f; z=z+%.6f" % (dx, dy, dz),
                         space={})
     # 4. Merge tmp INTO object's state 1 via a union-selection create. CRITICAL
-    #    fix (Phase 11 visibility regression): cmd.create(target, source) REPLACES
-    #    the target state's coordinate set (verified headless: cmd.create(obj, tmp,
-    #    target_state=0) wipes the original 660 atoms' state-1 coords, leaving only
-    #    tmp's 12 -- so ONLY the alt-conf segment rendered; the original structure
-    #    + prior hiders (sphere/stick) were invisible). The fix builds a COMBINED
-    #    object from the union of the current object (originals + any prior hiders)
-    #    and tmp, then replaces state 1 with the combined. This preserves every
-    #    existing atom's state-1 coords while adding the 12 alt-conf atoms.
-    #    Single-state (NO multi-state / all_states needed): disjoint alt-conf
-    #    segments coexist in state 1 (different residues, each with at most one
-    #    alt='B' copy), so the Bug 4 Part B multi-state workaround (target_state=-1
-    #    for 2nd+) is obsolete -- the union build re-derives state 1 from the
-    #    current object each time, so there is no retroactive coord corruption.
-    #    ``is_first_altconf`` is kept for signature compat but is now unused (all
-    #    alt-conf hiders go to state 1). creating.py:960; zoom=0 (Bug 3).
+    #    (Phase 11 visibility regression): cmd.create(target, source) REPLACES
+    #    the target state's coordinate set (verified headless: it wiped the
+    #    original 660 atoms' state-1 coords, leaving only tmp's 12). The fix
+    #    builds a COMBINED object from the union of the current object (originals
+    #    + any prior hiders) and tmp, then replaces state 1 with combined. This
+    #    preserves every existing atom's state-1 coords while adding the new
+    #    chain-H backbone atoms. Single-state (NO multi-state / all_states):
+    #    disjoint segments coexist in state 1 (different NEW resi on chain H),
+    #    so no all_states is needed. creating.py:960; zoom=0 (Bug 3).
     combined = cmd.get_unused_name("_bchm_comb")
     cmd.create(combined, "(%s) or (%s)" % (object, tmp),
                source_state=1, target_state=1, zoom=0)  # union: current obj + tmp
@@ -589,54 +654,57 @@ def insert_altconf_cartoon_hider(object, chain, start_resi, end_resi, handle,
     # 5. Clean up temp + defensive sort (preserves id, reassigns index).
     cmd.delete(tmp)
     cmd.sort(object)  # editing.py:1457
-    # 6. Set b=-999 sentinel on FIRST MIDDLE residue's CA (anchor / clickable atom).
-    #    Anchor is MIDDLE residue (USER REQ 3). segi GAME scopes alter to COPY only.
-    anchor_resi = start_resi + 1  # first middle residue (segment_size >= 3)
-    anchor_sele = ("%s and chain %s and resi %d and name CA and segi %s"
-                   % (object, chain, anchor_resi, segi))
+    # 6. Set b=-999 sentinel on the MIDDLE residue's CA (anchor / clickable atom;
+    #    USER REQ 3). The fragment is on chain H with NEW resi, so scope by
+    #    chain H + NEW middle resi + segi GAME (the copy only). segi GAME scopes
+    #    to the copy (NOT the real chain-A CA, which shares the id but has the
+    #    original resi + segi A).
+    anchor_sele = ("%s and chain H and resi %d and name CA and segi %s"
+                   % (object, new_mid, segi))
     cmd.alter(anchor_sele, "b=%.1f" % b, space={})  # b=-999.0; sentinel VALUE
-    # 7. Fetch anchor's stable id (mode=0 = id list, NOT index; querying.py:1269).
-    ids = cmd.identify(anchor_sele + " and b < 0", mode=0)  # b < 0 SELECTOR (AGENTS.md)
+    # 7. Fetch the anchor's stable id (mode=0 = id list, NOT index;
+    #    querying.py:1269). b < 0 SELECTOR (AGENTS.md; never exact-match b-factor).
+    #    The id is SHARED with the real CA (cmd.create preserves ids); resv
+    #    disambiguates at pick time.
+    ids = cmd.identify(anchor_sele + " and b < 0", mode=0)
     assert len(ids) == 1, "expected 1 anchor middle-CA id, got %r" % (ids,)
     clickable_id = ids[0]
-    # 8. Show requested rep on GAME segment (NOT hardcoded cartoon; ribbon hiders show ribbon).
-    cmd.show(rep, "%s and chain %s and resi %d-%d and segi %s" % (
-        object, chain, start_resi, end_resi, segi))  # viewing.py:491
+    # 8. Show the requested rep on the chain-H GAME segment (NOT hardcoded
+    #    cartoon; ribbon hiders show ribbon), scoped by the NEW resi range.
+    #    viewing.py:491.
+    cmd.show(rep, "%s and chain H and resi %d-%d and segi %s" % (
+        object, new_start, new_end, segi))
     return clickable_id
 
 
-def insert_hider_for_rep(object, rep, payload, handle, backup_name=None,
-                         is_first_altconf=True):
+def insert_hider_for_rep(object, rep, payload, handle, backup_name=None):
     """Dispatch hider insertion per representation.
 
-    Lets ``GameController.start`` stay a thin ``(payload, rep)`` loop --
-    the dispatcher hides the rep-specific insertion signature divergence
-    (research sec Q19): spheres need ``pos``, line/stick need
-    ``(offset, neighbor_id)``, cartoon/ribbon need EITHER a 3-tuple
-    ``(chain, terminus_resi, is_c_terminus)`` (legacy terminal-extension path,
-    Phase 5) OR a 4-tuple ``(chain, start_resi, end_resi, displacement_vec)``
-    (Phase 11 alt-conf path).
+    Lets ``GameController.start`` stay a thin ``(payload, rep)`` loop -- the
+    dispatcher hides the rep-specific insertion-signature divergence (research
+    sec Q19): spheres need ``pos``, line/stick need ``(offset, neighbor_id)``,
+    cartoon/ribbon need EITHER a 3-tuple ``(chain, terminus_resi, is_c_terminus)``
+    (legacy terminal-extension path, Phase 5) OR a 4-tuple
+    ``(chain, start_resi, end_resi, displacement_vec)`` (Phase 11 single-state
+    mid-chain segment path).
 
-    For spheres: calls the UNCHANGED Phase 3 ``insert_hider`` (which does
-    NOT show the rep) then shows spheres BY ID (NOT all GAME atoms -- the
-    dispatcher owns the sphere show so ``_on_start`` no longer shows ALL
-    GAME atoms as spheres, which would cross-contaminate stick/cartoon
-    hiders).
+    For spheres: calls the UNCHANGED Phase 3 ``insert_hider`` (which does NOT
+    show the rep) then shows spheres BY ID (NOT all GAME atoms -- the dispatcher
+    owns the sphere show so ``_on_start`` no longer shows ALL GAME atoms as
+    spheres, which would cross-contaminate stick/cartoon hiders).
 
     For lines/sticks: unpacks ``(offset, neighbor_id)`` and delegates to
     ``insert_line_stick_hider`` (which shows its own rep by id).
 
     For cartoon/ribbon: routes by payload ARITY (backward compatible):
         - 4-tuple ``(chain, start_resi, end_resi, displacement_vec)`` ->
-          ``insert_altconf_cartoon_hider`` (Phase 11 alt-conf backbone
-          copy; sources from *backup_name*; ``is_first_altconf`` is now unused
-          -- the visibility-regression fix merged all alt-conf hiders into
-          state 1 via a union create, making the Bug 4 Part B multi-state
-          workaround obsolete).
+          ``insert_cartoon_segment_hider`` (Phase 11 single-state mid-chain
+          backbone copy; sources from *backup_name*; NEW chain H + alt='' ->
+          id-keyed like sphere/stick, NO alt-conf, NO multi-state).
         - 3-tuple ``(chain, terminus_resi, is_c_terminus)`` ->
           ``insert_cartoon_hider`` (legacy Phase 5 terminal-extension path;
-          backward compat with phase5_smoke). ``backup_name`` and
-          ``is_first_altconf`` are NOT used on this path.
+          backward compat with phase5_smoke). ``backup_name`` is NOT used on
+          this path.
 
     Args:
         object (str): existing PyMOL object to insert INTO.
@@ -646,15 +714,12 @@ def insert_hider_for_rep(object, rep, payload, handle, backup_name=None,
             neighbor_id)`` (lines/sticks), ``(chain, terminus_resi,
             is_c_terminus)`` (legacy cartoon/ribbon 3-tuple), or
             ``(chain, start_resi, end_resi, displacement_vec)`` (Phase 11
-            alt-conf cartoon/ribbon 4-tuple).
+            single-state cartoon/ribbon 4-tuple).
         handle (str): throwaway atom *name* passed to the insert fn.
         backup_name (str or None): name of the CLEAN backup object. Used
-            ONLY by the 4-tuple cartoon/ribbon alt-conf path (Bug 4 Part A
+            ONLY by the 4-tuple cartoon/ribbon segment path (Bug 4 Part A
             -- source from backup, NOT the live object). Ignored by
             spheres/lines/sticks and the 3-tuple legacy cartoon path.
-        is_first_altconf (bool): True for the 1st alt-conf hider in this
-            round (appends to state 1); False for 2nd+ (appends as a NEW
-            state, Bug 4 Part B). Used ONLY by the 4-tuple alt-conf path.
 
     Returns:
         int: the new hider atom's stable id.
@@ -675,12 +740,12 @@ def insert_hider_for_rep(object, rep, payload, handle, backup_name=None,
                                        handle=handle, rep=rep)
     elif rep in ('cartoon', 'ribbon'):
         if len(payload) == 4:
-            # Phase 11 alt-conf path: (chain, start_resi, end_resi, displacement_vec)
+            # Phase 11 single-state path: (chain, start_resi, end_resi, displacement_vec)
             chain, start_resi, end_resi, displacement_vec = payload
-            return insert_altconf_cartoon_hider(
+            return insert_cartoon_segment_hider(
                 object, chain=chain, start_resi=start_resi, end_resi=end_resi,
                 handle=handle, backup_name=backup_name, rep=rep,
-                displacement=displacement_vec, is_first_altconf=is_first_altconf)
+                displacement=displacement_vec)
         else:
             # Legacy terminal-extension path (3-tuple): backward compat with phase5_smoke.
             chain, terminus_resi, is_c_terminus = payload

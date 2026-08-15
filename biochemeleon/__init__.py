@@ -193,24 +193,25 @@ class PluginDialog(QtWidgets.QDialog):
         # GLOBALLY DISJOINT across reps. Previously pick_segments was called
         # per rep independently; for count=1 it picks the DETERMINISTIC
         # centered window (generators.py:159-160, no RNG), so cartoon and
-        # ribbon both picked the SAME segment -> same anchor middle CA id
-        # (alt-conf copies SHARE ids with originals, Pitfall 10) ->
-        # registry.register raised KeyError on the second rep's duplicate
-        # (object, id). cartoon and ribbon both need the same kind of
-        # mid-chain backbone segment (insert_altconf_cartoon_hider is the
-        # same function; rep only controls cmd.show), so a single global
-        # pick is semantically correct AND guarantees distinct anchor ids.
-        # Mirrors the smoke-test Section I pattern (pick_segments(..., 2)
+        # ribbon both picked the SAME segment. With the single-state refactor,
+        # each hider copies its segment to a NEW chain-H fragment, so two
+        # hiders on the SAME resi range would both create chain-H GAME atoms
+        # at those resi -> the 2nd union-create merge would overwrite the 1st
+        # (same chain+resi+name+alt='') -> same anchor id -> registry.register
+        # KeyError on the duplicate (object, id). A single global pick is
+        # semantically correct (cartoon+ribbon both need a mid-chain backbone
+        # segment; rep only controls cmd.show) AND guarantees disjoint resi
+        # ranges -> distinct chain-H fragments -> distinct NEW anchor ids.
+        # Mirrors the smoke-test Section I/M pattern (pick_segments(..., 2)
         # once, split across reps). Segments are consumed in per_rep.items()
-        # order so hider_specs order (and thus is_first_altconf / all_states
-        # behavior in game.start) is unchanged.
-        _altconf_reps = [r for r in per_rep if r in ('cartoon', 'ribbon')]
-        _altconf_total = sum(per_rep[r] for r in _altconf_reps)
-        _altconf_segments = (generators.pick_segments(cas_by_chain, _altconf_total)
-                             if _altconf_total else [])
-        _altconf_disps = generators.generate_middle_displacement(
-            len(_altconf_segments))
-        _altconf_idx = 0  # consumed across reps in per_rep.items() order
+        # order so hider_specs order is unchanged.
+        _cartoon_reps = [r for r in per_rep if r in ('cartoon', 'ribbon')]
+        _cartoon_total = sum(per_rep[r] for r in _cartoon_reps)
+        _cartoon_segments = (generators.pick_segments(cas_by_chain, _cartoon_total)
+                             if _cartoon_total else [])
+        _cartoon_disps = generators.generate_middle_displacement(
+            len(_cartoon_segments))
+        _cartoon_idx = 0  # consumed across reps in per_rep.items() order
         _rng = _random.Random()  # neighbor sampling (non-deterministic is fine)
         for rep, count in per_rep.items():
             if rep == 'spheres':
@@ -223,19 +224,21 @@ class PluginDialog(QtWidgets.QDialog):
                 for off, nbr_id in zip(offsets, chosen):
                     hider_specs.append(((off, nbr_id), rep))
             elif rep in ('cartoon', 'ribbon'):
-                # Phase 11: alt-conf segment replication (replaces terminal
-                # extension). Segments come from the SINGLE global pick above
-                # (globally disjoint across cartoon+ribbon -> distinct anchor
-                # ids -> no KeyError; see the pre-loop comment). generate_
-                # middle_displacement produces one rigid [dx,dy,dz] per
-                # segment (USER REQ 2: endpoints fixed, middle displaced). The
-                # 4-tuple payload routes to insert_altconf_cartoon_hider via
-                # the dispatcher (Plan 04 arity check); start (Plan 05)
-                # registers is_altconf/endpoint_resvs/alt_tag.
-                _take = min(count, len(_altconf_segments) - _altconf_idx)
-                segments = _altconf_segments[_altconf_idx:_altconf_idx + _take]
-                disps = _altconf_disps[_altconf_idx:_altconf_idx + _take]
-                _altconf_idx += _take
+                # Phase 11 single-state: mid-chain backbone segment (replaces
+                # terminal extension AND the prior alt-conf approach). Segments
+                # come from the SINGLE global pick above (globally disjoint
+                # across cartoon+ribbon -> distinct chain-H fragments -> distinct
+                # NEW anchor ids -> no KeyError; see the pre-loop comment).
+                # generate_middle_displacement produces one rigid [dx,dy,dz] per
+                # segment (USER REQ 2: endpoints fixed, middle displaced -> a
+                # visible bump). The 4-tuple payload routes to
+                # insert_cartoon_segment_hider via the dispatcher (arity check);
+                # game.start registers endpoint_resvs (for _mark_found fragment
+                # coloring; is_altconf stays False -> id-keyed like sphere/stick).
+                _take = min(count, len(_cartoon_segments) - _cartoon_idx)
+                segments = _cartoon_segments[_cartoon_idx:_cartoon_idx + _take]
+                disps = _cartoon_disps[_cartoon_idx:_cartoon_idx + _take]
+                _cartoon_idx += _take
                 for (chain, start_resi, end_resi), disp in zip(segments, disps):
                     hider_specs.append(
                         ((chain, start_resi, end_resi, disp), rep))
@@ -259,13 +262,13 @@ class PluginDialog(QtWidgets.QDialog):
         if _gen_warnings:
             QtWidgets.QMessageBox.warning(self, "Fewer hiders generated",
                 "\n\n".join(_gen_warnings))
-        # Phase 11: alt-conf cartoon/ribbon hiders copy a backbone segment
-        # from the clean backup (insert_altconf_cartoon_hider) — they do NOT
-        # attach at a terminus, so the N-terminal valence does NOT need freeing
-        # (the legacy terminal-extension path that needed it is no longer used
-        # by _prepare_and_start). ACE caps + H atoms stay in the object; backup.
-        # snapshot (inside gc.start) captures them and backup.restore (cleanup)
-        # restores them.
+        # Phase 11 single-state: cartoon/ribbon hiders copy a backbone segment
+        # from the clean backup to a NEW chain-H fragment (insert_cartoon_segment_hider)
+        # — they do NOT attach at a terminus, so the N-terminal valence does NOT
+        # need freeing (the legacy terminal-extension path that needed it is no
+        # longer used by _prepare_and_start). ACE caps + H atoms stay in the
+        # object; backup.snapshot (inside gc.start) captures them and
+        # backup.restore (cleanup) restores them.
         # 4. Start the game (snapshot -> insert -> register; Phase 3 proven)
         # Bug 3: if a previous game is still active (mid-game, or won but not
         # yet cleaned up), clean it up first so no stale hiders accumulate in
