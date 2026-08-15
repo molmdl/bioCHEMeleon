@@ -119,9 +119,11 @@ class TestHiderRecord(unittest.TestCase):
         self.assertFalse(hasattr(rec, '__dict__'))
 
     def test_slots_defined(self):
-        """__slots__ contains exactly the 5 fields."""
+        """__slots__ contains exactly the 8 fields (5 Phase 3 + 3 Phase 11
+        alt-conf: is_altconf, endpoint_resvs, alt_tag)."""
         self.assertEqual(HiderRecord.__slots__,
-                         ('id', 'object', 'rep', 'status', 'pos'))
+                         ('id', 'object', 'rep', 'status', 'pos',
+                          'is_altconf', 'endpoint_resvs', 'alt_tag'))
 
     def test_cannot_set_unknown_attribute(self):
         """With __slots__, setting an unknown attribute raises AttributeError."""
@@ -874,6 +876,122 @@ class TestReconcileFromBcm(unittest.TestCase):
         reg.reconcile_with_bcm(bcm)
         # After reconcile: rep set from .bcm -> counts reflect it
         self.assertEqual(reg.counts_by_rep()['spheres'], 3)
+
+
+class TestAltconfFields(unittest.TestCase):
+    """Test the 3 Phase 11 alt-conf fields on HiderRecord + HiderRegistry
+    (is_altconf, endpoint_resvs, alt_tag) + the new get_altconf_by_resv
+    lookup.
+
+    Alt-conf atoms SHARE ids with originals (research Pitfall 10), so the
+    registry keyed by (object, id) cannot distinguish a real-trace click
+    from an alt-conf hider click by id alone. The scoring solution (Plan
+    05) reads alt + resv at pick time and gates on
+    alt == rec.alt_tag AND rv1 < resv < rv2. That requires the registry
+    to STORE is_altconf, endpoint_resvs, and alt_tag per record.
+    get_altconf_by_resv handles non-anchor middle-atom clicks (USER
+    REQUIREMENT 3: click ANY middle atom).
+
+    Backward-compatible defaults (is_altconf=False, endpoint_resvs=None,
+    alt_tag='') ensure existing Phase 3/4/5 callers passing only
+    (object, id, rep, ...) are unaffected.
+    """
+
+    # ---- HiderRecord defaults + alt-conf fields ----
+
+    def test_record_defaults(self):
+        """HiderRecord(100, '1ubq', 'cartoon') -> is_altconf=False,
+        endpoint_resvs=None, alt_tag='' (backward-compatible defaults)."""
+        rec = HiderRecord(100, '1ubq', 'cartoon')
+        self.assertFalse(rec.is_altconf)
+        self.assertIsNone(rec.endpoint_resvs)
+        self.assertEqual(rec.alt_tag, '')
+
+    def test_record_altconf_fields(self):
+        """HiderRecord with is_altconf=True, endpoint_resvs=(2,4), alt_tag='B'
+        -> fields set as passed."""
+        rec = HiderRecord(100, '1ubq', 'cartoon', is_altconf=True,
+                          endpoint_resvs=(2, 4), alt_tag='B')
+        self.assertTrue(rec.is_altconf)
+        self.assertEqual(rec.endpoint_resvs, (2, 4))
+        self.assertEqual(rec.alt_tag, 'B')
+
+    # ---- register alt-conf fields + backward compat ----
+
+    def test_register_altconf_fields(self):
+        """register with is_altconf/endpoint_resvs/alt_tag -> returned record
+        has the 3 fields; get() returns the same record with fields set."""
+        reg = HiderRegistry()
+        rec = reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                           endpoint_resvs=(2, 4), alt_tag='B')
+        self.assertTrue(rec.is_altconf)
+        self.assertEqual(rec.endpoint_resvs, (2, 4))
+        self.assertEqual(rec.alt_tag, 'B')
+        got = reg.get('1ubq', 100)
+        self.assertIsNotNone(got)
+        self.assertTrue(got.is_altconf)
+        self.assertEqual(got.endpoint_resvs, (2, 4))
+        self.assertEqual(got.alt_tag, 'B')
+
+    def test_register_backward_compat(self):
+        """register('1ubq', 101, 'spheres') with NO new fields ->
+        rec.is_altconf is False, endpoint_resvs is None, alt_tag == ''
+        (existing Phase 3/4/5 callers unaffected)."""
+        reg = HiderRegistry()
+        rec = reg.register('1ubq', 101, 'spheres')
+        self.assertFalse(rec.is_altconf)
+        self.assertIsNone(rec.endpoint_resvs)
+        self.assertEqual(rec.alt_tag, '')
+
+    # ---- get_altconf_by_resv ----
+
+    def test_get_altconf_by_resv_hit(self):
+        """Alt-conf record (100, endpoint_resvs=(2,4));
+        get_altconf_by_resv('1ubq', 3) -> returns that record (3 is strictly
+        between 2 and 4)."""
+        reg = HiderRegistry()
+        rec = reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                           endpoint_resvs=(2, 4), alt_tag='B')
+        got = reg.get_altconf_by_resv('1ubq', 3)
+        self.assertIs(got, rec)
+
+    def test_get_altconf_by_resv_endpoint_miss(self):
+        """get_altconf_by_resv('1ubq', 2) -> None (endpoint, NOT strictly
+        between); same for resv=4."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                     endpoint_resvs=(2, 4), alt_tag='B')
+        self.assertIsNone(reg.get_altconf_by_resv('1ubq', 2))
+        self.assertIsNone(reg.get_altconf_by_resv('1ubq', 4))
+
+    def test_get_altconf_by_resv_non_altconf_skipped(self):
+        """Non-altconf record (102, 'spheres', is_altconf=False) ->
+        get_altconf_by_resv('1ubq', 5) -> None (non-altconf records are
+        skipped by the resv lookup)."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 102, 'spheres')
+        self.assertIsNone(reg.get_altconf_by_resv('1ubq', 5))
+
+    def test_get_altconf_by_resv_first_match(self):
+        """Two alt-conf records with disjoint ranges (2,4) and (6,8);
+        get_altconf_by_resv('1ubq', 3) -> the first registered matching
+        record (O(N) first-match; insertion order)."""
+        reg = HiderRegistry()
+        r1 = reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                          endpoint_resvs=(2, 4), alt_tag='B')
+        r2 = reg.register('1ubq', 200, 'cartoon', is_altconf=True,
+                          endpoint_resvs=(6, 8), alt_tag='B')
+        # resv=3 is in (2,4) only -> first match is r1
+        self.assertIs(reg.get_altconf_by_resv('1ubq', 3), r1)
+        # resv=7 is in (6,8) only -> match is r2
+        self.assertIs(reg.get_altconf_by_resv('1ubq', 7), r2)
+
+    def test_get_altconf_by_resv_wrong_object(self):
+        """get_altconf_by_resv('other', 3) -> None (object filter)."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 100, 'cartoon', is_altconf=True,
+                     endpoint_resvs=(2, 4), alt_tag='B')
+        self.assertIsNone(reg.get_altconf_by_resv('other', 3))
 
 
 if __name__ == '__main__':
