@@ -213,18 +213,26 @@ class TestGameControllerOnPick(unittest.TestCase):
         self.assertIsNone(gc2._on_win(0.0))
 
 
-class TestOnPickAltconf(unittest.TestCase):
-    """Test GameController.on_pick alt-conf scoring truth table (Phase 11).
+class TestOnPickFragment(unittest.TestCase):
+    """Test GameController.on_pick fragment (cartoon/ribbon) scoring truth table
+    (Phase 11 single-state refactor).
 
-    Alt-conf hiders SHARE ids with their originals (research Pitfall 10), so
-    on_pick(picked_id, alt='', resv=None) does a dual lookup (anchor-id then
-    get_altconf_by_resv) + gates scoring on alt == rec.alt_tag AND
-    rv1 < resv < rv2 (research sec 5). These 7 tests encode the full scoring
-    truth table + backward compat with sphere/line/stick.
+    The single-state cartoon/ribbon hider is a REAL backbone copy on a NEW chain
+    'H' with a NEW resi range. cmd.create preserves source ids (backup=snapshot),
+    so the copy SHARES its id with the real-trace CA at the same segment position;
+    the copy's resv (NEW range) differs from the real CA's resv (original range).
+    on_pick(picked_id, alt, resv) does a dual lookup (anchor-id then
+    get_altconf_by_resv, dormant for new games) + gates scoring on
+    ``rec.endpoint_resvs is not None AND rv1 < resv < rv2`` (resv-range gate; NO
+    alt check -- alt-conf is gone). The resv gate scores the hider (resv in the
+    NEW range) and misses the real trace (resv in the ORIGINAL range). Only the
+    anchor middle-CA is registered (like main/legacy cartoon), so a non-anchor
+    middle atom (N/C/O) misses. These 7 tests encode the truth table + sphere
+    backward compat.
 
     Each test builds a GameController('1ubq') WITHOUT calling start() and
-    manually populates the registry with alt-conf records (is_altconf=True,
-    endpoint_resvs, alt_tag='B'). Mock callbacks verify the scoring wiring.
+    manually populates the registry with a fragment record (is_altconf=False,
+    endpoint_resvs=NEW range, alt_tag=''). Mock callbacks verify the wiring.
     """
 
     def setUp(self):
@@ -232,114 +240,117 @@ class TestOnPickAltconf(unittest.TestCase):
         self.gc = GameController('1ubq')
         game.cmd.reset_mock()
 
-    def _register_altconf(self, hider_id=100, endpoint_resvs=(2, 4),
-                          alt_tag='B', status=HIDER_STATUS_HIDDEN,
-                          rep='cartoon', obj='1ubq'):
-        """Helper: register one alt-conf hider record with the given fields."""
+    # NEW resi range mirrors mutation.cartoon_hider_resi_range (offset 10000):
+    # real segment resi 2-4 -> NEW resi 10002-10004; anchor (middle) at 10003.
+    _NEW_START, _NEW_END = 10002, 10004
+    _NEW_MID = 10003
+
+    def _register_fragment(self, hider_id=100,
+                           endpoint_resvs=(_NEW_START, _NEW_END),
+                           status=HIDER_STATUS_HIDDEN, rep='cartoon',
+                           obj='1ubq'):
+        """Helper: register one fragment (cartoon/ribbon) hider record with the
+        new single-state fields (is_altconf=False, alt_tag='')."""
         return self.gc.registry.register(
             obj, hider_id, rep, status=status,
-            is_altconf=True, endpoint_resvs=endpoint_resvs, alt_tag=alt_tag)
+            endpoint_resvs=endpoint_resvs)
 
     # ---- 1. anchor middle CA scores ----
 
-    def test_altconf_anchor_middle_ca_scores(self):
-        """on_pick(anchor_id, alt='B', resv=3) where 3 is strictly between
-        rv1=2 and rv2=4 -> status FOUND; cmd.color 'green' with the GAME
-        middle-range selection 'segi GAME and resi 3-3' (rv1+1=3 to rv2-1=3).
+    def test_fragment_anchor_middle_ca_scores(self):
+        """on_pick(anchor_id, resv=NEW_MID) where NEW_MID is strictly between
+        rv1=NEW_START and rv2=NEW_END -> status FOUND; cmd.color 'green' with the
+        GAME middle-range selection 'segi GAME and resi <NEW_MID>-<NEW_MID>'.
 
         The anchor CA is the registered middle CA; clicking it scores via the
-        anchor-id lookup (registry.get hit)."""
-        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4), alt_tag='B')
+        anchor-id lookup (registry.get hit) + the resv-range gate (resv in range)."""
+        self._register_fragment(hider_id=100)
         log = MagicMock()
         rem = MagicMock()
         self.gc.set_callbacks(log, rem)
 
-        self.gc.on_pick(100, alt='B', resv=3)
+        self.gc.on_pick(100, alt='', resv=self._NEW_MID)
 
         rec = self.gc.registry.get('1ubq', 100)
         self.assertEqual(rec.status, HIDER_STATUS_FOUND)
         game.cmd.color.assert_called_once_with(
-            'green', "1ubq and segi GAME and resi 3-3")
+            'green', "1ubq and segi GAME and resi %d-%d" % (
+                self._NEW_MID, self._NEW_MID))
         log.assert_called_once()
         self.assertIn("Found one!", log.call_args[0][0])
         rem.assert_called_once_with(0)
 
-    # ---- 2. non-anchor middle atom scores (USER REQ 3: click ANY middle atom) ----
+    # ---- 2. non-anchor middle atom MISSES (only the anchor CA is registered) ----
 
-    def test_altconf_non_anchor_middle_atom_scores(self):
-        """on_pick(non_registered_id=200, alt='B', resv=3) where resv=3 is in
-        the alt-conf middle range -> registry.get(200) is None (only the anchor
-        100 is registered) -> get_altconf_by_resv('1ubq', 3) finds the record
-        -> SCORE; status FOUND + cmd.color middle range.
+    def test_fragment_non_anchor_middle_atom_misses(self):
+        """on_pick(non_registered_id=200, resv=NEW_MID) -> registry.get(200) is
+        None (only the anchor 100 is registered) -> get_altconf_by_resv(NEW_MID)
+        is dormant (is_altconf=False -> returns None) -> 'Miss!'; status HIDDEN.
 
-        USER REQUIREMENT 3: clicking ANY middle atom (not just the anchor CA)
-        scores. The dual lookup (id then resv) is the mechanism."""
-        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4), alt_tag='B')
+        Like main/legacy cartoon: only the clickable C-alpha is registered, so
+        clicking another backbone atom (N/C/O) of the fragment misses. (The old
+        alt-conf 'click ANY middle atom' feature is dropped with alt-conf.)"""
+        self._register_fragment(hider_id=100)
         log = MagicMock()
         self.gc.set_callbacks(log)
 
-        self.gc.on_pick(200, alt='B', resv=3)
+        self.gc.on_pick(200, alt='', resv=self._NEW_MID)
 
         rec = self.gc.registry.get('1ubq', 100)
-        self.assertEqual(rec.status, HIDER_STATUS_FOUND)
-        game.cmd.color.assert_called_once_with(
-            'green', "1ubq and segi GAME and resi 3-3")
-        log.assert_called_once()
-        self.assertIn("Found one!", log.call_args[0][0])
+        self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
+        log.assert_called_once_with("Miss!")
+        game.cmd.color.assert_not_called()
 
     # ---- 3. endpoint miss ----
 
-    def test_altconf_endpoint_miss(self):
-        """on_pick(100, alt='B', resv=2) where resv=2 == rv1 (endpoint) ->
-        gate 'rv1 < resv < rv2' is '2 < 2' = False -> 'Miss!' logged; status
-        stays HIDDEN; cmd.color NOT called.
+    def test_fragment_endpoint_miss(self):
+        """on_pick(100, resv=NEW_START) where resv == rv1 (endpoint) -> gate
+        'rv1 < resv < rv2' is False -> 'Miss!'; status stays HIDDEN.
 
-        Endpoints coincide with the real trace (blend); they are NOT clickable
-        hiders."""
-        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4), alt_tag='B')
+        Endpoints coincide with the real trace (blend); they are NOT clickable."""
+        self._register_fragment(hider_id=100)
         log = MagicMock()
         self.gc.set_callbacks(log)
 
-        self.gc.on_pick(100, alt='B', resv=2)
+        self.gc.on_pick(100, alt='', resv=self._NEW_START)
 
         rec = self.gc.registry.get('1ubq', 100)
         self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
         log.assert_called_once_with("Miss!")
         game.cmd.color.assert_not_called()
 
-    # ---- 4. real-trace miss (alt='') ----
+    # ---- 4. real-trace miss (shared id, resv NOT in NEW range) ----
 
-    def test_altconf_real_trace_miss(self):
-        """on_pick(100, alt='', resv=3) -- clicking the REAL trace (alt='') at
-        a middle resv -> gate 'alt != rec.alt_tag' ('' != 'B') -> 'Miss!';
-        status HIDDEN.
+    def test_fragment_real_trace_miss(self):
+        """on_pick(100, resv=3) -- clicking the REAL trace (shares the anchor
+        id 100 via cmd.create id-preservation) at the ORIGINAL resv 3, which is
+        NOT in the NEW range (10002-10004) -> resv gate 'rv1 < resv < rv2' is
+        False -> 'Miss!'; status HIDDEN.
 
-        This is the load-bearing scoring fix (research sec 5): alt-conf atoms
-        share ids with originals, so id alone can't distinguish. The alt check
-        rejects the real trace (the 05-08 latent limitation is SOLVED)."""
-        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4), alt_tag='B')
+        This is the load-bearing scoring fix: the copy shares its id with the
+        real-trace CA, so id alone can't distinguish. The resv gate (NEW resi
+        range) rejects the real trace (original resv). The single-state refactor
+        replaces the old alt='B' alt-gate with the resv gate."""
+        self._register_fragment(hider_id=100)
         log = MagicMock()
         self.gc.set_callbacks(log)
 
-        self.gc.on_pick(100, alt='', resv=3)
+        self.gc.on_pick(100, alt='', resv=3)  # 3 = original resv, not in NEW range
 
         rec = self.gc.registry.get('1ubq', 100)
         self.assertEqual(rec.status, HIDER_STATUS_HIDDEN)
         log.assert_called_once_with("Miss!")
         game.cmd.color.assert_not_called()
 
-    # ---- 5. no resv miss (backward-compat call without alt/resv) ----
+    # ---- 5. no resv miss (backward-compat call without resv) ----
 
-    def test_altconf_no_resv_miss(self):
-        """on_pick(100) (no resv/alt) on an alt-conf record -> gate 'resv is
-        None' -> 'Miss!'; status HIDDEN.
-
-        A bare on_pick(id) call (e.g. from an old wizard or a test) on an
-        alt-conf record does NOT score -- the alt/resv gate requires resv to
-        confirm the click is in the middle range. Backward-compatible: old
-        callers passing on_pick(id) on non-altconf records still score (gate
-        skipped; test_sphere_backward_compat covers that)."""
-        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4), alt_tag='B')
+    def test_fragment_no_resv_miss(self):
+        """on_pick(100) (no resv) on a fragment record -> gate 'resv is None' ->
+        'Miss!'; status HIDDEN. A bare on_pick(id) call on a fragment record does
+        NOT score -- the resv gate requires resv to confirm the click is in the
+        NEW middle range. Backward-compatible: old callers passing on_pick(id) on
+        non-fragment (sphere/line/stick) records still score (gate skipped)."""
+        self._register_fragment(hider_id=100)
         log = MagicMock()
         self.gc.set_callbacks(log)
 
@@ -350,23 +361,19 @@ class TestOnPickAltconf(unittest.TestCase):
         log.assert_called_once_with("Miss!")
         game.cmd.color.assert_not_called()
 
-    # ---- 6. already-found check BEFORE alt-conf gate (order matters) ----
+    # ---- 6. already-found check BEFORE the resv gate (order matters) ----
 
-    def test_altconf_already_found(self):
-        """on_pick(100, alt='B', resv=3) on an already-found alt-conf record
-        -> 'Already found!' (the found-check runs BEFORE the alt-conf gate;
-        order matters -- a found hider should not re-enter the gate).
-
-        Regression guard: if the gate ran first and resv was out of range,
-        a found hider would log 'Miss!' instead of 'Already found!'."""
-        self._register_altconf(hider_id=100, endpoint_resvs=(2, 4),
-                               alt_tag='B', status=HIDER_STATUS_FOUND)
+    def test_fragment_already_found(self):
+        """on_pick(100, resv=NEW_MID) on an already-found fragment record ->
+        'Already found!' (the found-check runs BEFORE the resv gate; order
+        matters -- a found hider should not re-enter the gate)."""
+        self._register_fragment(hider_id=100, status=HIDER_STATUS_FOUND)
         log = MagicMock()
         rem = MagicMock()
         win_cb = MagicMock()
         self.gc.set_callbacks(log, rem, win_cb)
 
-        self.gc.on_pick(100, alt='B', resv=3)
+        self.gc.on_pick(100, alt='', resv=self._NEW_MID)
 
         log.assert_called_once_with("Already found!")
         rem.assert_not_called()
@@ -376,9 +383,9 @@ class TestOnPickAltconf(unittest.TestCase):
     # ---- 7. sphere backward compat (gate skipped, colors by id) ----
 
     def test_sphere_backward_compat(self):
-        """on_pick(100) on a non-altconf sphere record -> is_altconf=False ->
-        gate skipped -> _mark_found(rec.id=100, rec) -> else branch (by id) ->
-        cmd.color('green', '1ubq and id 100'). MUST match the existing
+        """on_pick(100) on a non-fragment sphere record -> endpoint_resvs is
+        None -> gate skipped -> _mark_found(rec.id=100, rec) -> else branch
+        (by id) -> cmd.color('green', '1ubq and id 100'). MUST match the existing
         test_found assertion (backward-compatible signature + behavior)."""
         self.gc.registry.register('1ubq', 100, 'spheres')
         log = MagicMock()
