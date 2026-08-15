@@ -70,4 +70,8 @@ verification:
   - exec_ grep gate: 1 hit at biochemeleon/gui_game.py:303 `msg.exec_()` on a QMessageBox (line 298 `msg = QtWidgets.QMessageBox(...)`) -- explicitly ALLOWED by AGENTS.md. Pre-existing, not introduced by this fix. Clean.
   - GUI human-verify (PENDING): the GUI/Qt path through `_prepare_and_start` with per_rep={'cartoon':1,'ribbon':1} (plus optional spheres=1, sticks=1) cannot be run from WSL (no display). Surfaced as a human-verify checkpoint -- see the return message. The headless Section M mirrors the fixed _prepare_and_start pattern at the cmd tier (single global pick + split), so the fix logic IS headless-verified; only the full Qt integration (PluginDialog -> Setup tab -> Start button) needs a human.
 files_changed: [biochemeleon/__init__.py, smoke/phase11_smoke.py, smoke/phase11_keyerror_repro.py, .planning/debug/phase11-cartoon-ribbon-hider-keyerror.md]
-commits: (pending commit on exec/11)
+commits:
+  - ebd5086 fix(11): consolidate cartoon+ribbon pick_segments to prevent duplicate anchor id KeyError
+  - 355889b test(11): add cross-rep disjoint smoke regression + keyerror repro
+  - 4c3e13a docs(11): debug session for cartoon+ribbon hider KeyError
+stability: smoke re-run from committed state -> 63/63 PASSED, exit 0 (not flaky).
