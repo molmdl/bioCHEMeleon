@@ -188,6 +188,29 @@ class PluginDialog(QtWidgets.QDialog):
         cas_by_chain = {}
         for chain, resi, ca_id in cas_list:
             cas_by_chain.setdefault(chain, []).append((resi, ca_id))
+        # Phase 11 fix (cartoon+ribbon KeyError): pick_segments is called ONCE
+        # for the COMBINED cartoon+ribbon count so the returned segments are
+        # GLOBALLY DISJOINT across reps. Previously pick_segments was called
+        # per rep independently; for count=1 it picks the DETERMINISTIC
+        # centered window (generators.py:159-160, no RNG), so cartoon and
+        # ribbon both picked the SAME segment -> same anchor middle CA id
+        # (alt-conf copies SHARE ids with originals, Pitfall 10) ->
+        # registry.register raised KeyError on the second rep's duplicate
+        # (object, id). cartoon and ribbon both need the same kind of
+        # mid-chain backbone segment (insert_altconf_cartoon_hider is the
+        # same function; rep only controls cmd.show), so a single global
+        # pick is semantically correct AND guarantees distinct anchor ids.
+        # Mirrors the smoke-test Section I pattern (pick_segments(..., 2)
+        # once, split across reps). Segments are consumed in per_rep.items()
+        # order so hider_specs order (and thus is_first_altconf / all_states
+        # behavior in game.start) is unchanged.
+        _altconf_reps = [r for r in per_rep if r in ('cartoon', 'ribbon')]
+        _altconf_total = sum(per_rep[r] for r in _altconf_reps)
+        _altconf_segments = (generators.pick_segments(cas_by_chain, _altconf_total)
+                             if _altconf_total else [])
+        _altconf_disps = generators.generate_middle_displacement(
+            len(_altconf_segments))
+        _altconf_idx = 0  # consumed across reps in per_rep.items() order
         _rng = _random.Random()  # neighbor sampling (non-deterministic is fine)
         for rep, count in per_rep.items():
             if rep == 'spheres':
@@ -201,27 +224,29 @@ class PluginDialog(QtWidgets.QDialog):
                     hider_specs.append(((off, nbr_id), rep))
             elif rep in ('cartoon', 'ribbon'):
                 # Phase 11: alt-conf segment replication (replaces terminal
-                # extension). pick_segments returns DISJOINT mid-chain
-                # (chain, start_resi, end_resi) tuples (Bug 1 fix); multi-hider
-                # per chain is supported (success criterion 3). generate_middle_
-                # displacement produces one rigid [dx,dy,dz] per segment (USER
-                # REQ 2: endpoints fixed, middle displaced). The 4-tuple payload
-                # routes to insert_altconf_cartoon_hider via the dispatcher
-                # (Plan 04 arity check); start (Plan 05) registers
-                # is_altconf/endpoint_resvs/alt_tag.
-                segments = generators.pick_segments(cas_by_chain, count)
-                disps = generators.generate_middle_displacement(len(segments))
+                # extension). Segments come from the SINGLE global pick above
+                # (globally disjoint across cartoon+ribbon -> distinct anchor
+                # ids -> no KeyError; see the pre-loop comment). generate_
+                # middle_displacement produces one rigid [dx,dy,dz] per
+                # segment (USER REQ 2: endpoints fixed, middle displaced). The
+                # 4-tuple payload routes to insert_altconf_cartoon_hider via
+                # the dispatcher (Plan 04 arity check); start (Plan 05)
+                # registers is_altconf/endpoint_resvs/alt_tag.
+                _take = min(count, len(_altconf_segments) - _altconf_idx)
+                segments = _altconf_segments[_altconf_idx:_altconf_idx + _take]
+                disps = _altconf_disps[_altconf_idx:_altconf_idx + _take]
+                _altconf_idx += _take
                 for (chain, start_resi, end_resi), disp in zip(segments, disps):
                     hider_specs.append(
                         ((chain, start_resi, end_resi, disp), rep))
-                if len(segments) < count:
+                if _take < count:
                     _gen_warnings.append(
                         "Requested %d %s hider%s but only %d disjoint mid-chain "
                         "segment%s available; %d hider%s generated (cartoon/ribbon "
                         "hiders need a >=3-residue mid-chain segment per hider)." %
                         (count, rep, "" if count == 1 else "s",
-                         len(segments), "" if len(segments) == 1 else "s",
-                         len(segments), "" if len(segments) == 1 else "s"))
+                         _take, "" if _take == 1 else "s",
+                         _take, "" if _take == 1 else "s"))
         # Fallback: if per_rep is empty (random mode unset), default to
         # spheres (Phase 4 behavior) using the total hider_count.
         if not hider_specs:
