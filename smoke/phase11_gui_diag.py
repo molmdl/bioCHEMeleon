@@ -23,7 +23,17 @@
 #   - prints a 9-step observation checklist covering all 6 Phase 11 success
 #     criteria + the 4 GUI-only failure modes
 # Item 9 (ribbon + mixed reps) uses the PLUGIN Setup tab (full integration).
+import os
 import sys
+
+# When run via PyMOL's `run` command, the script's directory (smoke/) is
+# added to sys.path, but the biochemeleon/ package lives one level up.
+# Insert the parent dir so we import the staged Phase 11 code, not a stale
+# installed copy.
+_HERE = os.path.dirname(os.path.abspath(__file__)) if '__file__' in dir() else os.getcwd()
+_PARENT = os.path.dirname(_HERE)
+if _PARENT not in sys.path:
+    sys.path.insert(0, _PARENT)
 
 from pymol import cmd
 from biochemeleon import game, mutation, generators
