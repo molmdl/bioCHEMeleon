@@ -304,6 +304,36 @@ class HiderRegistry(object):
                 return r
         return None
 
+    # ---- alt-conf field reader (Phase 11 helper) ----
+
+    @staticmethod
+    def _altconf_fields_from_hider_dict(h):
+        """Read the 3 Phase 11 alt-conf fields from a ``.bcm`` hider dict.
+
+        Returns ``(is_altconf, endpoint_resvs, alt_tag)`` with backward-
+        compatible defaults + list->tuple coercion for ``endpoint_resvs``:
+
+          - ``is_altconf``: ``bool`` (default ``False``). ``bool()``-coerced
+            so a truthy int (e.g. ``1`` from a hand-edited sidecar)
+            normalizes to ``True``.
+          - ``endpoint_resvs``: ``None`` or a 2-tuple of ints. Coerced
+            list->tuple because JSON has no tuples but the record needs a
+            tuple so ``rv1 < resv < rv2`` works (lists fail ``<`` in py3).
+            Already-tuple values pass through unchanged.
+          - ``alt_tag``: ``str`` (default ``''``).
+
+        Shared by :meth:`from_dict` (pass to :meth:`register`) and
+        :meth:`reconcile_with_bcm` (set on an existing record) to avoid
+        duplicating the list->tuple coercion + default-reading logic.
+        Pure (no ``pymol`` import).
+        """
+        is_altconf = bool(h.get('is_altconf', False))
+        ep = h.get('endpoint_resvs')
+        if isinstance(ep, list):
+            ep = tuple(ep)
+        alt_tag = h.get('alt_tag', '')
+        return is_altconf, ep, alt_tag
+
     # ---- serialization (Phase 8 .bcm sidecar shape) ----
 
     def to_dict(self):
@@ -341,14 +371,12 @@ class HiderRegistry(object):
         """
         reg = cls()
         for h in d.get('hiders', []):
-            ep = h.get('endpoint_resvs')
-            if isinstance(ep, list):
-                ep = tuple(ep)
+            is_altconf, ep, alt_tag = cls._altconf_fields_from_hider_dict(h)
             reg.register(h['object'], h['id'], h['rep'],
-                          h.get('status', HIDER_STATUS_HIDDEN), h.get('pos'),
-                          is_altconf=h.get('is_altconf', False),
-                          endpoint_resvs=ep,
-                          alt_tag=h.get('alt_tag', ''))
+                         h.get('status', HIDER_STATUS_HIDDEN), h.get('pos'),
+                         is_altconf=is_altconf,
+                         endpoint_resvs=ep,
+                         alt_tag=alt_tag)
         return reg
 
     # ---- sentinel reconstruction (dependency injection) ----
@@ -433,15 +461,10 @@ class HiderRegistry(object):
             if 'pos' in h and h['pos'] is not None:
                 rec.pos = list(h['pos'])
             # Phase 11 alt-conf fields (alongside rep/status/pos). Defaults
-            # when absent (backward-compatible with Phase 8 sidecars).
-            # endpoint_resvs coerced list->tuple so rv1 < resv < rv2 works
-            # (lists fail < in py3).
-            rec.is_altconf = bool(h.get('is_altconf', False))
-            if 'endpoint_resvs' in h and h['endpoint_resvs'] is not None:
-                rec.endpoint_resvs = tuple(h['endpoint_resvs'])
-            else:
-                rec.endpoint_resvs = None
-            rec.alt_tag = h.get('alt_tag', '')
+            # when absent (backward-compatible with Phase 8 sidecars);
+            # endpoint_resvs coerced list->tuple via the shared helper.
+            (rec.is_altconf, rec.endpoint_resvs, rec.alt_tag) = \
+                self._altconf_fields_from_hider_dict(h)
         for key, h in bcm_index.items():
             if key not in self._records:
                 missing_from_pse.append(key)
