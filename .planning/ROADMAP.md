@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 8: Persistence & Shareable Puzzles** - Save/load game state + generate&export / import
 - [ ] **Phase 9: Large Demo Fetch & Source Attribution** - Membrane/glycoprotein fetch + DATA_SOURCES.md
 - [ ] **Phase 10: Polish, Endgame & Help** - Tooltips, controls help, win-screen stats, post-game debrief
-- [ ] **Phase 11: Alt-conf Cartoon/Ribbon Hider (v1 Follow-up)** - Re-research + implement the alt-conf segment replication approach (replaces terminal extension for connected cartoon blend)
+- [x] **Phase 11: Alt-conf Cartoon/Ribbon Hider (v1 Follow-up)** - Re-research + implement the alt-conf segment replication approach (replaces terminal extension for connected cartoon blend)
 
 ## Phase Details
 
@@ -229,14 +229,16 @@ Plans:
 **Plans**: 8 plans
 
 Plans:
-- [ ] 11-01-PLAN.md — TDD pure generators: pick_segments (disjoint mid-chain segments) + generate_middle_displacement (rigid unit vectors) — Wave 1 (parallel with 02)
-- [ ] 11-02-PLAN.md — TDD pure registry: 3 alt-conf fields (is_altconf/endpoint_resvs/alt_tag) + get_altconf_by_resv + serialization/.bcm round-trip — Wave 1 (parallel with 01)
-- [ ] 11-03-PLAN.md — TDD persistence .bcm round-trip tests for the 3 alt-conf fields (NO version bump; backward-compat with Phase 8 sidecars) — Wave 2 (parallel with 04)
-- [ ] 11-04-PLAN.md — mutation.py insert_altconf_cartoon_hider (4-call construction + 4 Bug fixes + displacement) + insert_hider_for_rep dispatcher (arity-based backward-compat routing) — Wave 2 (parallel with 03)
-- [ ] 11-05-PLAN.md — game.py + wizard.py: on_pick alt/resv gate + get_altconf_by_resv dual lookup + _mark_found is_altconf coloring + start backup_name/is_first_altconf/all_states + do_pick iterate pk1 + import_state alt fallback — Wave 3
-- [ ] 11-06-PLAN.md — __init__.py _prepare_and_start: build 4-tuple alt-conf payloads (pick_segments + generate_middle_displacement) + drop free_nterminal_valence — Wave 4
-- [ ] 11-07-PLAN.md — smoke/phase11_smoke.py headless smoke (construction + scoring + cleanup + multi-hider + mixed-rep + .bcm + .pse alt survival) — Wave 5
-- [ ] 11-08-PLAN.md — smoke/phase11_gui_diag.py + checkpoint:human-verify (all 6 success criteria + 4 GUI-only failure modes in real Windows PyMOL) — Wave 6, autonomous: false
+- [x] 11-01-PLAN.md — TDD pure generators: pick_segments (disjoint mid-chain segments) + generate_middle_displacement (rigid unit vectors) — Wave 1 (parallel with 02)
+- [x] 11-02-PLAN.md — TDD pure registry: 3 alt-conf fields (is_altconf/endpoint_resvs/alt_tag) + get_altconf_by_resv + serialization/.bcm round-trip — Wave 1 (parallel with 01)
+- [x] 11-03-PLAN.md — TDD persistence .bcm round-trip tests for the 3 alt-conf fields (NO version bump; backward-compat with Phase 8 sidecars) — Wave 2 (parallel with 04)
+- [x] 11-04-PLAN.md — mutation.py insert_altconf_cartoon_hider (4-call construction + 4 Bug fixes + displacement) + insert_hider_for_rep dispatcher (arity-based backward-compat routing) — Wave 2 (parallel with 03)
+- [x] 11-05-PLAN.md — game.py + wizard.py: on_pick alt/resv gate + get_altconf_by_resv dual lookup + _mark_found is_altconf coloring + start backup_name/is_first_altconf/all_states + do_pick iterate pk1 + import_state alt fallback — Wave 3
+- [x] 11-06-PLAN.md — __init__.py _prepare_and_start: build 4-tuple alt-conf payloads (pick_segments + generate_middle_displacement) + drop free_nterminal_valence — Wave 4
+- [x] 11-07-PLAN.md — smoke/phase11_smoke.py headless smoke (construction + scoring + cleanup + multi-hider + mixed-rep + .bcm + .pse alt survival) — Wave 5
+- [x] 11-08-PLAN.md — smoke/phase11_gui_diag.py + checkpoint:human-verify (all 6 success criteria + 4 GUI-only failure modes in real Windows PyMOL) — Wave 6, autonomous: false
+
+**MAJOR mid-execution deviation (documented):** The 8 plans above describe the ORIGINAL alt-conf design (alt='B', shared atom ids, multi-state `all_states` scaffolding). During execution, two debug sessions discovered this approach caused GUI-only visibility regressions (only cartoon rendered; multi-state `cmd.create` wiped original coords). The executor refactored to a **single-state new-chain copy** approach: `insert_altconf_cartoon_hider` → `insert_cartoon_segment_hider` (copy a real 3-residue backbone to a NEW chain 'H' + `alt=''` + `CARTOON_RESI_OFFSET=10000` NEW resi, single-state union-create merge); `game.py` dropped `all_states`/`is_first_altconf`; `on_pick` uses a resv-range gate (not an alt gate); `_mark_found` uses `endpoint_resvs`-based fragment coloring. The plan `must_haves` are STALE (describe alt-conf); verification was against the 6 outcome-based SUCCESS CRITERIA (design-agnostic). See `.planning/debug/phase11-cartoon-hider-single-state-refactor.md` (status: resolved) + `11-08-SUMMARY.md` + `11-VERIFICATION.md`. Key refactor commits: `d65fb2c`, `8f3e274`, `548050c`, `4c5b14b`, `3b7d7b1`.
 
 **RESEARCH REQUIRED (do NOT skip):** This phase has the HIGHEST research flag. A prior attempt (05-06 spike + 05-08 implementation, 2026-08-09) proved the alt-conf mechanism viable in isolation (10/10 headless) but multi-rep integration revealed 4 cascading GUI-only bug classes. Re-research MUST address:
 
@@ -268,7 +270,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 8. Persistence & Shareable Puzzles | 0/5 | Not started (5 plans in 4 waves) | - |
 | 9. Large Demo Fetch & Source Attribution | 0/4 | Not started (4 plans in 3 waves) | - |
 | 10. Polish, Endgame & Help | 0/TBD | Not started | - |
-| 11. Alt-conf Cartoon/Ribbon Hider (v1 Follow-up) | 0/0 | Not planned (research required) | - |
+| 11. Alt-conf Cartoon/Ribbon Hider (v1 Follow-up) | 8/8 | ✓ Complete | 2026-08-16 |
 
 ## Research Flags
 
@@ -276,7 +278,7 @@ Phases likely needing deeper `/gsd-research-phase` during planning (from researc
 
 - **Phase 1**: Qt-vs-Tk runtime validation — confirm `pymol.Qt` import works in the `setenv.bat`-launched PyMOL (closes the last LOW-confidence gap). Light research — mostly a smoke test.
 - **Phase 3**: `cmd.create` merge-append vs replace semantics (MEDIUM); `.pse` round-trip `id`/`index` stability (MEDIUM). A small smoke test resolves both.
-- **Phase 5 (HIGHEST research flag — v1 RESOLVED, alt-conf DEFERRED to Phase 11)**: Cartoon/ribbon hider geometry — "replicate a segment (loop) as alternate position" via C-alpha. The terminal-extension approach shipped (works; ribbon rep support added via 05-09 gap closure — `cmd.show(rep, ...)` parameterized, 41/41 headless smoke). The cosmetic disconnection on 1ubq remains (terminal-extension limitation). The alt-conf approach was spike-verified in isolation but multi-rep integration failed (4 GUI-only bug cycles, reverted). Deferred to Phase 11 — see Phase 11 details for re-research requirements + lessons.
+- **Phase 5 (HIGHEST research flag — v1 RESOLVED, alt-conf DEFERRED to Phase 11 — RESOLVED by Phase 11 single-state refactor 2026-08-16)**: Cartoon/ribbon hider geometry — "replicate a segment (loop) as alternate position" via C-alpha. The terminal-extension approach shipped (works; ribbon rep support added via 05-09 gap closure — `cmd.show(rep, ...)` parameterized, 41/41 headless smoke). The cosmetic disconnection on 1ubq remained (terminal-extension limitation). The alt-conf approach was spike-verified in isolation but multi-rep integration failed (4 GUI-only bug cycles, reverted). Deferred to Phase 11 — **RESOLVED by Phase 11 (single-state new-chain copy refactor, 2026-08-16)**: the alt-conf design was abandoned mid-execution in favor of `insert_cartoon_segment_hider` (copy a real backbone to a NEW chain 'H', single-state, NEW resi via `CARTOON_RESI_OFFSET`); the HIDER-03/HIDER-05 disconnected-look gap is closed (user-verified on 1ubq). See Phase 11 details + `11-VERIFICATION.md`.
 - **Phase 11 (HIGHEST research flag)**: Alt-conf cartoon/ribbon integration — re-research `cmd.create` append side effects (state/rep/coord corruption) + GUI-runnable verification (headless auto_zoom gap was the methodology failure) + unique-id strategy for alt-conf atoms. Prior attempt's spike proved the mechanism; re-research must focus on INTEGRATION, not re-proving the mechanism.
 - **Phase 8**: ~~`.pse` + companion `.bcm` co-location UX — two-file share is awkward; decide zip-together vs document "keep both files"~~ RESOLVED (2026-08-12): zip-together (`.bcmz` archive containing `game.pse` + `game.bcm`); Import uses `cmd.load(partial=1)` MERGE with refuse-first collision detection. Three parallel research files on disk at `.planning/phases/08-persistence-and-shareable-puzzles/`.
 - **Phase 9**: MemProtMD per-entry license verification (site was unreachable at research time) — must verify before bundling membrane coordinates.

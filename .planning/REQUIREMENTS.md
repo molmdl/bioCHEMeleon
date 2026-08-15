@@ -183,4 +183,4 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 
 ---
 *Requirements defined: 2026-08-02*
-*Last updated: 2026-08-12 after Phase 7 completion (GAME-08, GAME-10, BTN-06, DIFF-04 marked Complete)*
+*Last updated: 2026-08-16 after Phase 11 completion — HIDER-03/HIDER-05 alt-conf cosmetic gap from Phase 5 closed by Phase 11 (single-state new-chain copy refactor; requirement status unchanged: both were already Complete from Phase 5; Phase 11 was a v1 follow-up, not a new requirement)*
