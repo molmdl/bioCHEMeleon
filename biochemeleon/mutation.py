@@ -519,7 +519,7 @@ def insert_cartoon_segment_hider(object, chain, start_resi, end_resi, handle,
                                  backup_name, rep='cartoon', displacement=None,
                                  segi='GAME', b=-999.0):
     """Insert a backbone segment as NEW atoms (single-state cartoon/ribbon hider)
-    and return the anchor middle-CA's stable NEW id.
+    and return the anchor middle-atom's stable NEW id.
 
     This is the single-state refactor of the Phase 11 alt-conf approach. A lone
     pseudoatom is INVISIBLE for cartoon/ribbon (POLYMER-TRACE reps need real
@@ -568,9 +568,10 @@ def insert_cartoon_segment_hider(object, chain, start_resi, end_resi, handle,
           show cartoon/ribbon on the new chain-H GAME fragment (viewing.py:491).
 
     ``handle`` is accepted for signature symmetry with the other inserters but
-    is UNUSED -- the anchor is selected by ``chain H + resi + name CA + segi GAME``
-    (NOT by atom name ``handle``), because the copied backbone atoms inherit the
-    source residue's atom names (N/CA/C/O), not a throwaway ``handle``.
+    is UNUSED -- the anchor is selected by ``chain H + resi +
+    (name CA or name P) + segi GAME`` (NOT by atom name ``handle``), because the
+    copied backbone atoms inherit the source residue's atom names (N/CA/C/O for
+    protein, P/O5'/C5'/C4'/C3'/O3' for nucleic acid), not a throwaway ``handle``.
 
     Args:
         object (str): existing PyMOL object to merge the segment INTO.
@@ -589,21 +590,23 @@ def insert_cartoon_segment_hider(object, chain, start_resi, end_resi, handle,
             applied to ALL middle backbone atoms (Pitfall 15). None = no
             displacement (segment coincides with real trace; for testing).
         segi (str): sentinel segment id (default 'GAME').
-        b (float): sentinel b-factor VALUE set on the anchor CA (default -999.0).
+        b (float): sentinel b-factor VALUE set on the anchor atom (CA for
+            protein, P for nucleic acid; default -999.0).
             The SELECTOR is ``b < 0`` (NEVER an exact-match on the sentinel
             value -- PyMOL has no exact-match b-factor selector and the literal
             equality form is malformed, silently matching nothing; AGENTS.md).
 
     Returns:
-        int: the anchor middle-CA's stable id. NOTE: cmd.create preserves the
-            source atom ids and the backup is a snapshot of the object, so the
-            copy SHARES its id with the real-trace CA at the same segment
-            position. The copy's RESI is shifted to a NEW range
-            (``cartoon_hider_resi_range``) so its resv differs from the real
-            CA's resv; on_pick's resv-range gate (endpoint_resvs) scores the
-            hider (resv in the new range) and misses the real trace (resv in
-            the original range). The registry stays id-keyed; resv is the
-            disambiguator for the shared id (NO alt-conf, NO multi-state).
+        int: the anchor middle-atom's stable id (CA for protein, P for nucleic
+            acid). NOTE: cmd.create preserves the source atom ids and the backup
+            is a snapshot of the object, so the copy SHARES its id with the
+            real-trace anchor at the same segment position. The copy's RESI is
+            shifted to a NEW range (``cartoon_hider_resi_range``) so its resv
+            differs from the real anchor's resv; on_pick's resv-range gate
+            (endpoint_resvs) scores the hider (resv in the new range) and misses
+            the real trace (resv in the original range). The registry stays
+            id-keyed; resv is the disambiguator for the shared id (NO alt-conf,
+            NO multi-state).
 
     Raises:
         AssertionError: if identify does not return exactly one anchor id.
@@ -654,20 +657,23 @@ def insert_cartoon_segment_hider(object, chain, start_resi, end_resi, handle,
     # 5. Clean up temp + defensive sort (preserves id, reassigns index).
     cmd.delete(tmp)
     cmd.sort(object)  # editing.py:1457
-    # 6. Set b=-999 sentinel on the MIDDLE residue's CA (anchor / clickable atom;
-    #    USER REQ 3). The fragment is on chain H with NEW resi, so scope by
-    #    chain H + NEW middle resi + segi GAME (the copy only). segi GAME scopes
-    #    to the copy (NOT the real chain-A CA, which shares the id but has the
-    #    original resi + segi A).
-    anchor_sele = ("%s and chain H and resi %d and name CA and segi %s"
+    # 6. Set b=-999 sentinel on the MIDDLE residue's anchor atom (CA for
+    #    protein, P for nucleic acid; USER REQ 3). The fragment is on chain H
+    #    with NEW resi, so scope by chain H + NEW middle resi + segi GAME (the
+    #    copy only). segi GAME scopes to the copy (NOT the real chain-A CA,
+    #    which shares the id but has the original resi + segi A). 'name CA or
+    #    name P' matches the anchor in EITHER a protein backbone copy (CA) or
+    #    a nucleic-acid backbone copy (P); exactly one matches per residue
+    #    (protein backbones have no P; nucleic backbones have no CA).
+    anchor_sele = ("%s and chain H and resi %d and (name CA or name P) and segi %s"
                    % (object, new_mid, segi))
     cmd.alter(anchor_sele, "b=%.1f" % b, space={})  # b=-999.0; sentinel VALUE
     # 7. Fetch the anchor's stable id (mode=0 = id list, NOT index;
     #    querying.py:1269). b < 0 SELECTOR (AGENTS.md; never exact-match b-factor).
-    #    The id is SHARED with the real CA (cmd.create preserves ids); resv
-    #    disambiguates at pick time.
+    #    The id is SHARED with the real anchor atom (cmd.create preserves ids);
+    #    resv disambiguates at pick time.
     ids = cmd.identify(anchor_sele + " and b < 0", mode=0)
-    assert len(ids) == 1, "expected 1 anchor middle-CA id, got %r" % (ids,)
+    assert len(ids) == 1, "expected 1 anchor id, got %r" % (ids,)
     clickable_id = ids[0]
     # 8. Show the requested rep on the chain-H GAME segment (NOT hardcoded
     #    cartoon; ribbon hiders show ribbon), scoped by the NEW resi range.

@@ -164,25 +164,34 @@ class PluginDialog(QtWidgets.QDialog):
         _gen_warnings = []  # collected under-generation warnings (05-05 Issue 1)
         # Pre-fetch the data the pure generators need (cmd-coupled, here in
         # _prepare_and_start so generators.py stays pure):
-        # For line/stick: pool of real neighbor CA atom ids (to bond hiders to).
-        # MUST use 'name CA' (NOT all atoms) — CA atoms are stable backbone atoms
-        # and valid bond targets for insert_line_stick_hider. (05-07 fix: non-CA
-        # atoms could be removed by a terminal-valence step before insert,
-        # causing IndexError on nbr[0]; Phase 11 alt-conf path no longer runs
-        # that step, but 'name CA' remains the correct pool.)
+        # For line/stick: pool of real neighbor backbone-anchor atom ids (to
+        # bond hiders to). Uses 'name CA or name P' so BOTH protein (CA =
+        # C-alpha) and nucleic acid (P = phosphate) backbones are covered —
+        # nucleic acids have NO 'name CA' atoms (headless-verified 2026-08-16:
+        # 5e54/1k8p/2qbz all return 0 for 'name CA'). P is the nucleic-acid
+        # equivalent of CA: a stable one-per-residue backbone atom and a valid
+        # bond target. (05-07 fix note: the original 'name CA' rationale was
+        # that non-CA atoms could be removed by a terminal-valence step; Phase
+        # 11 single-state path no longer runs that step, so the pool just needs
+        # stable one-per-residue backbone atoms — CA for protein, P for NA.)
         neighbor_ids = []
-        cmd.iterate("%s and not segi GAME and name CA" % target_obj,
+        cmd.iterate("%s and not segi GAME and (name CA or name P)" % target_obj,
                     "stored.append(ID)", space={'stored': neighbor_ids})
-        # For cartoon/ribbon: per-chain C-alpha (resi, id) list. Phase 11
-        # pick_segments consumes this for mid-chain segments (replacing the
-        # Phase 5 terminal-extension path).
+        # For cartoon/ribbon: per-chain backbone-anchor (resi, id) list. Phase
+        # 11 pick_segments consumes this for mid-chain segments (replacing the
+        # Phase 5 terminal-extension path). 'polymer and (name CA or name P)'
+        # covers protein (CA trace) + nucleic acid (P trace); PyMOL's cartoon
+        # renderer draws the trace through CA (protein) or P (nucleic), so a
+        # copied backbone segment renders in either case. Variable name
+        # 'cas_list'/'cas_by_chain' is retained for continuity — entries are
+        # (resi, anchor_id) where anchor is CA (protein) or P (nucleic).
         cas_list = []
         # resv (numeric residue value, already int) NOT int(resi): the hygienic
         # space= dict does not expose Python builtins, so int(resi) raises
         # NameError (symbol table editing.py:1444-1449; mirrors smoke/phase5_smoke.py).
         # Bug 2: captured BEFORE any insert (alt-conf construction reads from
         # the backup temp, not the live object).
-        cmd.iterate("%s and polymer and name CA" % target_obj,
+        cmd.iterate("%s and polymer and (name CA or name P)" % target_obj,
                     "stored.append((chain, resv, ID))",
                     space={'stored': cas_list})
         cas_by_chain = {}
