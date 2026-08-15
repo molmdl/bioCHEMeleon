@@ -26,6 +26,9 @@
 #      read->import_state->reconcile.
 #   K. .PSE ALT SURVIVAL: alt == 'B' after reload (or import_state fallback);
 #      all_states re-applied.
+#   M. CROSS-REP DISJOINT: cartoon+ribbon in one game via the FIXED single-
+#      global-pick pattern (no KeyError, distinct anchor ids, disjoint
+#      segments). Regression for the Phase 11 cartoon+ribbon KeyError.
 #   L. SUMMARY: print pass/fail counts, sys.exit(1) on any fail.
 import sys
 import os
@@ -346,6 +349,56 @@ check("K: alt == 'B' after import_state (survival or fallback)",
 check("K: all_states re-applied (>=2 alt-conf, Open Risk 5)",
       gc_imp._all_states_was_set is True)
 gc_imp.cleanup()
+
+# --- M. CROSS-REP DISJOINT (cartoon+ribbon; KeyError bug fix) ---
+# Regression for the Phase 11 cartoon+ribbon KeyError. _prepare_and_start
+# used to call pick_segments INDEPENDENTLY per rep; for count=1 both reps
+# picked the SAME deterministic centered window -> same anchor middle CA
+# id -> registry.register KeyError on the second rep. The fix picks ALL
+# cartoon+ribbon segments in ONE pick_segments call (globally disjoint),
+# then splits across reps (mirrors the fixed _prepare_and_start). Pure
+# pymol.cmd.* (NO Qt) so this runs headlessly. GUI checklist item 9
+# (phase11_gui_diag.py) covers the full _prepare_and_start integration.
+cmd.delete(obj)
+cmd.fetch(obj, async_=0)
+mutation.collapse_to_single_state(obj)
+_orig_count_m = cmd.count_atoms(obj)
+cas_m = build_cas_by_chain()
+# FIXED pattern: ONE pick_segments for cartoon+ribbon combined, then split
+# (cartoon first, then ribbon -- mirrors per_rep.items() order).
+altconf_total_m = 2  # cartoon=1 + ribbon=1
+segs_m = generators.pick_segments(cas_m, altconf_total_m)
+check("M: 2 disjoint segments available for cartoon+ribbon", len(segs_m) == 2)
+disps_m = generators.generate_middle_displacement(len(segs_m), seed=42,
+                                                   magnitude=1.5)
+specs_m = [((segs_m[0][0], segs_m[0][1], segs_m[0][2], disps_m[0]), 'cartoon'),
+          ((segs_m[1][0], segs_m[1][1], segs_m[1][2], disps_m[1]), 'ribbon')]
+gc_m = game.GameController(obj)
+gc_m.start(specs_m)  # would KeyError before the fix (same anchor id)
+recs_m = gc_m.registry.all()
+check("M: no KeyError; registry len == 2", len(recs_m) == 2)
+counts_m = gc_m.registry.counts_by_rep()
+check("M: counts cartoon==1 ribbon==1",
+      counts_m.get('cartoon') == 1 and counts_m.get('ribbon') == 1)
+# Invariant 1: the two alt-conf hiders have DISTINCT anchor ids (the core
+# KeyError guard -- no duplicate (object, id)).
+ids_m = [r.id for r in recs_m]
+check("M: distinct anchor ids (no duplicate (object,id))",
+      len(set(ids_m)) == len(ids_m) and len(ids_m) == 2)
+# Invariant 2: segments are globally disjoint across reps (no shared
+# residues -- end of one < start of the other after sorting by start).
+_ranges_m = sorted((r.endpoint_resvs[0], r.endpoint_resvs[1]) for r in recs_m)
+_disjoint_m = all(_ranges_m[i][1] < _ranges_m[i + 1][0]
+                  for i in range(len(_ranges_m) - 1))
+check("M: segments globally disjoint across reps", _disjoint_m)
+# Both hiders are alt-conf with the expected endpoint_resvs/alt_tag.
+check("M: both is_altconf True", all(r.is_altconf for r in recs_m))
+check("M: both alt_tag == 'B'", all(r.alt_tag == 'B' for r in recs_m))
+check("M: all_states set (>=2 alt-conf)", gc_m._all_states_was_set is True)
+gc_m.cleanup()
+check("M: cleanup restores atom count",
+      cmd.count_atoms(obj) == _orig_count_m)
+cmd.delete(obj)
 
 # --- L. SUMMARY ---
 _n_pass = sum(1 for _, ok in RESULTS if ok)
