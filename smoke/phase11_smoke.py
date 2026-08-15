@@ -159,7 +159,16 @@ check("E: registry len == 2", len(gc3.registry.all()) == 2)
 check("E: both is_altconf", all(r.is_altconf for r in gc3.registry.all()))
 check("E: all_states set (>=2 alt-conf, object-scoped)",
       gc3._all_states_was_set is True)
-check("E: count_states >= 2", cmd.count_states(obj) >= 2)
+# Phase 11 visibility-regression fix: the alt-conf hider merge now uses a
+# union-selection create (combined = current-object OR tmp -> replace state 1)
+# so the original atoms + prior hiders KEEP their state-1 coords. Pre-fix,
+# cmd.create(object, tmp, target_state=0) REPLACED state 1 with only tmp's 12
+# atoms, wiping the 660 originals (invisible). The fix is single-state (disjoint
+# alt-conf segments coexist in state 1), so count_states == 1 (was >= 2).
+check("E: count_states == 1 (single-state; union-create fix)",
+      cmd.count_states(obj) == 1)
+check("E: originals survive in state 1 (visibility regression fix)",
+      cmd.count_atoms("%s and not segi GAME and polymer" % obj, state=1) > 0)
 # No coord corruption (Bug 4): 1st anchor (state 1) displaced by disp0, NOT
 # collapsed. The GAME anchor IS a segment atom so iterate_state is safe
 # (Pitfall 7 only corrupts NON-segment atoms). Compare against PRE-CAPTURED
@@ -282,6 +291,17 @@ check("I: cartoon GAME atoms visible",
       cmd.count_atoms("%s and segi GAME and rep cartoon" % obj) > 0)
 check("I: ribbon GAME atoms visible",
       cmd.count_atoms("%s and segi GAME and rep ribbon" % obj) > 0)
+# Phase 11 visibility-regression fix: pre-fix, cmd.create(object, tmp) REPLACED
+# state 1, wiping the original structure + sphere/stick hiders (only the 12
+# cartoon alt-conf atoms remained in state 1). The union-create fix preserves
+# ALL atoms in state 1. These per-state checks are the regression guard.
+check("I: single state (union-create fix)", cmd.count_states(obj) == 1)
+check("I: original polymer in state 1 (not wiped)",
+      cmd.count_atoms("%s and not segi GAME and polymer" % obj, state=1) > 0)
+check("I: sphere hider in state 1 (not wiped)",
+      cmd.count_atoms("%s and id %d" % (obj, gc5.registry.all()[0].id), state=1) > 0)
+check("I: stick hider in state 1 (not wiped)",
+      cmd.count_atoms("%s and id %d" % (obj, gc5.registry.all()[1].id), state=1) > 0)
 gc5.cleanup()
 
 # --- J. .BCM ROUND-TRIP (is_altconf/endpoint_resvs/alt_tag survive) ---
