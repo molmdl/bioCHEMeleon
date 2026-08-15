@@ -90,11 +90,14 @@ class GameController:
                 self._first_altconf = False
                 altconf_count += 1
         # Phase 11 Open Risk 5 / Bug 4 Part B: object-scoped all_states=on
-        # when >=2 alt-conf hiders exist (each 2nd+ lives in its own state;
-        # all_states makes every state visible). Object-scoped (research
-        # Example 9) -- NOT global (a global all_states set with NO object
-        # arg leaks to ALL subsequent objects). Reset in cleanup()/
-        # abort_on_error() via the _all_states_was_set flag.
+        # when >=2 alt-conf hiders exist. NOTE: after the visibility-regression
+        # fix (union-create), alt-conf hiders are single-state (all coexist in
+        # state 1), so all_states=on is now a HARMLESS NO-OP (1 state -> shows
+        # state 1 regardless). Kept for backward compat with .pse/import_state
+        # re-apply logic + the smoke checks that assert _all_states_was_set.
+        # Object-scoped (research Example 9) -- NOT global (a global all_states
+        # set with NO object arg leaks to ALL subsequent objects). Reset in
+        # cleanup()/abort_on_error() via the _all_states_was_set flag.
         self._all_states_was_set = False
         if altconf_count >= 2:
             cmd.set("all_states", "on", self.target_obj)

@@ -489,17 +489,26 @@ def insert_altconf_cartoon_hider(object, chain, start_resi, end_resi, handle,
     return the anchor middle-CA stable id.
 
     Construction (research §3b -- the 4-call sequence, 10/10 headless verified):
-      1. cmd.create(tmp, '<backup> and chain X and resi N-M and backbone', 1, 1, zoom=0)
-         -- copy BACKBONE ONLY from the CLEAN backup (Bug 4 Part A; USER REQ 1).
-      2. cmd.alter(tmp, "alt='B'; segi='GAME'; ss='L'", space={})
-         -- tag alt-conf + sentinel + loop ss on TEMP (hygienic space={}; Pitfall 12).
-      3. alter_state(1, '<tmp middle>', "x=x+dx; y=y+dy; z=z+dz", space={})
-         -- rigid-translate ALL middle backbone atoms by the SAME offset (Pitfall 15).
-         Endpoints NOT displaced (coincidence = blend; USER REQ 2).
-      4. cmd.create(object, tmp, target_state=(0 if first else -1), zoom=0)
-         -- append as true alt-conf. 1st -> state 1; 2nd+ -> new state (Bug 4 Part B).
-         zoom=0 (Bug 3).
-      5. cmd.delete(tmp); cmd.sort(object) (defensive -- preserves id, reassigns index).
+       1. cmd.create(tmp, '<backup> and chain X and resi N-M and backbone', 1, 1, zoom=0)
+          -- copy BACKBONE ONLY from the CLEAN backup (Bug 4 Part A; USER REQ 1).
+       2. cmd.alter(tmp, "alt='B'; segi='GAME'; ss='L'", space={})
+          -- tag alt-conf + sentinel + loop ss on TEMP (hygienic space={}; Pitfall 12).
+       3. alter_state(1, '<tmp middle>', "x=x+dx; y=y+dy; z=z+dz", space={})
+          -- rigid-translate ALL middle backbone atoms by the SAME offset (Pitfall 15).
+          Endpoints NOT displaced (coincidence = blend; USER REQ 2).
+       4. UNION MERGE into state 1 (visibility-regression fix): build a COMBINED object
+          from "(object) or (tmp)" (union of the current object -- originals + any
+          prior hiders -- and tmp), then replace object's state 1 with combined.
+          CRITICAL: cmd.create(target, source) REPLACES the target state's coord set
+          (verified headless: cmd.create(obj, tmp, target_state=0) wiped the original
+          660 atoms' state-1 coords, leaving only tmp's 12 -- only the alt-conf segment
+          rendered; the original structure + prior sphere/stick hiders were invisible).
+          The union build includes the current object's atoms so they survive the
+          state replace. Single-state (NO multi-state / all_states): disjoint alt-conf
+          segments coexist in state 1 (different residues, each <=1 alt='B' copy), so
+          the Bug 4 Part B multi-state workaround (target_state=-1 for 2nd+) is
+          obsolete -- the union re-derives state 1 from the current object each time.
+       5. cmd.delete(tmp); cmd.sort(object) (defensive -- preserves id, reassigns index).
 
     Anchor (USER REQ 3): b=-999 on FIRST MIDDLE residue CA (resi=start_resi+1).
     fetch_all_hider_ids (segi GAME and b < 0) returns exactly 1 atom per hider.
@@ -523,9 +532,11 @@ def insert_altconf_cartoon_hider(object, chain, start_resi, end_resi, handle,
         displacement (sequence of 3 floats or None): [dx, dy, dz] rigid offset
             applied to ALL middle backbone atoms (Pitfall 15). None = no
             displacement (segment coincides with real trace; for testing).
-        is_first_altconf (bool): True for the 1st alt-conf hider in this round
-            (appends to state 1 via target_state=0); False for 2nd+ (appends as
-            a NEW state via target_state=-1, Bug 4 Part B).
+        is_first_altconf (bool): UNUSED after the visibility-regression fix (all
+            alt-conf hiders now merge into state 1 via the union create). Kept for
+            signature symmetry with the dispatcher / game.start wiring. Pre-fix,
+            this controlled target_state (0 for 1st -> state 1, -1 for 2nd+ -> new
+            state, Bug 4 Part B); the multi-state workaround is obsolete.
         segi (str): sentinel segment id (default 'GAME').
         b (float): sentinel b-factor VALUE set on the anchor CA (default -999.0).
             The SELECTOR is ``b < 0`` (NEVER an exact-match on the sentinel
@@ -554,9 +565,27 @@ def insert_altconf_cartoon_hider(object, chain, start_resi, end_resi, handle,
         cmd.alter_state(1, mid_sele,
                         "x=x+%.6f; y=y+%.6f; z=z+%.6f" % (dx, dy, dz),
                         space={})
-    # 4. Append alt-conf atoms. 1st -> state 1 (0); 2nd+ -> new state (-1) (Bug 4 Part B).
-    target_state = 0 if is_first_altconf else -1
-    cmd.create(object, tmp, target_state=target_state, zoom=0)  # creating.py:960
+    # 4. Merge tmp INTO object's state 1 via a union-selection create. CRITICAL
+    #    fix (Phase 11 visibility regression): cmd.create(target, source) REPLACES
+    #    the target state's coordinate set (verified headless: cmd.create(obj, tmp,
+    #    target_state=0) wipes the original 660 atoms' state-1 coords, leaving only
+    #    tmp's 12 -- so ONLY the alt-conf segment rendered; the original structure
+    #    + prior hiders (sphere/stick) were invisible). The fix builds a COMBINED
+    #    object from the union of the current object (originals + any prior hiders)
+    #    and tmp, then replaces state 1 with the combined. This preserves every
+    #    existing atom's state-1 coords while adding the 12 alt-conf atoms.
+    #    Single-state (NO multi-state / all_states needed): disjoint alt-conf
+    #    segments coexist in state 1 (different residues, each with at most one
+    #    alt='B' copy), so the Bug 4 Part B multi-state workaround (target_state=-1
+    #    for 2nd+) is obsolete -- the union build re-derives state 1 from the
+    #    current object each time, so there is no retroactive coord corruption.
+    #    ``is_first_altconf`` is kept for signature compat but is now unused (all
+    #    alt-conf hiders go to state 1). creating.py:960; zoom=0 (Bug 3).
+    combined = cmd.get_unused_name("_bchm_comb")
+    cmd.create(combined, "(%s) or (%s)" % (object, tmp),
+               source_state=1, target_state=1, zoom=0)  # union: current obj + tmp
+    cmd.create(object, combined, source_state=1, target_state=1, zoom=0)  # replace state 1
+    cmd.delete(combined)
     # 5. Clean up temp + defensive sort (preserves id, reassigns index).
     cmd.delete(tmp)
     cmd.sort(object)  # editing.py:1457
@@ -600,8 +629,10 @@ def insert_hider_for_rep(object, rep, payload, handle, backup_name=None,
     For cartoon/ribbon: routes by payload ARITY (backward compatible):
         - 4-tuple ``(chain, start_resi, end_resi, displacement_vec)`` ->
           ``insert_altconf_cartoon_hider`` (Phase 11 alt-conf backbone
-          copy; sources from *backup_name*; ``is_first_altconf`` controls
-          target_state for the multi-hider Bug 4 Part B fix).
+          copy; sources from *backup_name*; ``is_first_altconf`` is now unused
+          -- the visibility-regression fix merged all alt-conf hiders into
+          state 1 via a union create, making the Bug 4 Part B multi-state
+          workaround obsolete).
         - 3-tuple ``(chain, terminus_resi, is_c_terminus)`` ->
           ``insert_cartoon_hider`` (legacy Phase 5 terminal-extension path;
           backward compat with phase5_smoke). ``backup_name`` and
