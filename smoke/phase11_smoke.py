@@ -469,6 +469,63 @@ check("M: cleanup restores atom count",
       cmd.count_atoms(obj) == _orig_count_m)
 cmd.delete(obj)
 
+# --- N. BLANK-CHAIN REGRESSION (MemProtMD blank-chain selector bug) ---
+# Regression for the Phase 11 bug where insert_cartoon_segment_hider crashed
+# with `AssertionError: expected 1 anchor id, got [id, id]` on structures with
+# a BLANK chain identifier (MemProtMD 1gzm/3gp6/sasdpg4 — all atoms on a single
+# unnamed chain). Root cause: the unquoted `chain ` (blank, no value) PyMOL
+# selector is malformed — it ignores the object scope and matches blank-chain
+# atoms from EVERY object in the session (backup + live), doubling the atom
+# count in cmd.create. The fix: single-quote the chain value (`chain '%s'`).
+# This section retags 1ubq to a blank chain (reproducing the MemProtMD layout)
+# and verifies the cartoon hider inserts cleanly. See debug session
+# .planning/debug/pending/phase11-membrane-altconf-duplicate-anchor-id.md.
+cmd.fetch(obj, async_=0)
+mutation.collapse_to_single_state(obj)
+# Retag ALL atoms to blank chain (mimics MemProtMD 1gzm/3gp6 single-blank-chain
+# layout). alter chain='' sets the chain to the empty/blank identifier.
+cmd.alter(obj, "chain=''", space={})
+chains_n = []
+cmd.iterate(obj, "stored.append(chain)", space={'stored': chains_n})
+check("N: retag to blank chain (all atoms chain='')",
+      bool(chains_n) and all(c == '' for c in chains_n))
+# Build cas_by_chain on the blank-chain object + pick a mid-chain segment.
+cas_n = build_cas_by_chain()
+check("N: blank-chain cas_by_chain has 1 key (empty str)",
+      len(cas_n) == 1 and '' in cas_n)
+segs_n = generators.pick_segments(cas_n, 1)
+check("N: pick_segments returns 1 segment on blank chain", len(segs_n) == 1)
+# game.start with a cartoon hider — before the fix this raised
+# `AssertionError: expected 1 anchor id, got [id, id]` because the segment
+# selection matched atoms from both the backup and the live object.
+_n_orig = cmd.count_atoms(obj)
+disp_n = generators.generate_middle_displacement(1, seed=42, magnitude=1.5)[0]
+gc_n = game.GameController(obj)
+_assertion_ok = True
+try:
+    gc_n.start([((segs_n[0][0], segs_n[0][1], segs_n[0][2], disp_n), 'cartoon')])
+except AssertionError:
+    _assertion_ok = False
+check("N: blank-chain cartoon hider inserts without AssertionError",
+      _assertion_ok)
+if _assertion_ok:
+    check("N: blank-chain registry len == 1", len(gc_n.registry.all()) == 1)
+    if gc_n.registry.all():
+        rec_n = gc_n.registry.all()[0]
+        check("N: blank-chain hider id is an int", isinstance(rec_n.id, int))
+        check("N: blank-chain endpoint_resvs is a 2-tuple",
+              isinstance(rec_n.endpoint_resvs, tuple) and len(rec_n.endpoint_resvs) == 2)
+    ok_n = gc_n.cleanup()
+    check("N: blank-chain cleanup restores atom count",
+          ok_n is True and cmd.count_atoms(obj) == _n_orig)
+    check("N: blank-chain no GAME atoms after cleanup",
+          cmd.count_atoms("%s and segi GAME" % obj) == 0)
+else:
+    check("N: blank-chain registry len == 1", False)
+    check("N: blank-chain cleanup restores atom count", False)
+    check("N: blank-chain no GAME atoms after cleanup", False)
+cmd.delete(obj)
+
 # --- L. SUMMARY ---
 _n_pass = sum(1 for _, ok in RESULTS if ok)
 print("\n=== Phase 11 smoke: %d/%d PASSED ===" % (_n_pass, len(RESULTS)))

@@ -387,7 +387,7 @@ def insert_cartoon_hider(object, chain, terminus_resi, is_c_terminus,
         AssertionError: if the id-diff does not yield exactly one clickable
         C-alpha (the attach or alter did not produce the expected atoms).
     """
-    residue_sele = "%s and chain %s and resi %d" % (object, chain, terminus_resi)
+    residue_sele = "%s and chain '%s' and resi %d" % (object, chain, terminus_resi)
     # 1. Read neighbor (terminal residue) C-alpha color for blending
     #    (research sec Q13: iterate exposes color lowercase). ss is NOT
     #    copied -- the display ss is hardcoded to 'L' (loop) in step 8 so the
@@ -615,8 +615,21 @@ def insert_cartoon_segment_hider(object, chain, start_resi, end_resi, handle,
     new_mid = new_start + 1  # first middle residue's NEW resi (anchor; size>=3)
     new_mid_lo, new_mid_hi = new_start + 1, new_end - 1  # middle range (NEW resi)
     # 1. Copy BACKBONE ONLY from CLEAN backup to temp (real geometry -> renders).
+    #    The chain value is SINGLE-QUOTED in the selector (chain '%s') to
+    #    correctly handle BLANK chain identifiers. When the chain is '' (blank,
+    #    common in MemProtMD structures like 1gzm/3gp6 where all atoms are on a
+    #    single unnamed chain), the UNQUOTED form `chain ` (trailing space, no
+    #    value) is a malformed PyMOL selector that IGNORES the object scope and
+    #    matches blank-chain atoms from EVERY object in the session -- so with
+    #    the backup + live object both loaded, the selection matches each atom
+    #    TWICE, cmd.create produces duplicate-id atoms, and the downstream
+    #    identify returns [id, id] -> AssertionError. The quoted form `chain ''`
+    #    is unambiguous: the parser scopes to the named object and matches only
+    #    the specified chain (verified headless: 15 atoms, no dups, on both
+    #    blank-chain 3gp6 and named-chain 1ubq). See debug session
+    #    .planning/debug/pending/phase11-membrane-altconf-duplicate-anchor-id.md.
     tmp = cmd.get_unused_name("_bchm_seg")
-    segment_sele = "%s and chain %s and resi %d-%d and backbone" % (
+    segment_sele = "%s and chain '%s' and resi %d-%d and backbone" % (
         backup_name, chain, start_resi, end_resi)
     cmd.create(tmp, segment_sele, 1, 1, zoom=0)  # creating.py:960; zoom=0 (Bug 3)
     # 2. Retag the copy: NEW hider chain 'H' + sentinel + alt='' (NO alt-conf)
@@ -825,21 +838,21 @@ def free_nterminal_valence(obj, chain, terminus_resi):
         chain (str): chain identifier of the N-terminal residue.
         terminus_resi (int): residue number of the N-terminal residue.
     """
-    n_sele = "%s and chain %s and resi %d and name N" % (obj, chain, terminus_resi)
+    n_sele = "%s and chain '%s' and resi %d and name N" % (obj, chain, terminus_resi)
     # Step 1: identify cap residues (residues of atoms bonded to N that
     # are NOT in the terminal residue). Uses explicit outer parens around
     # neighbor (...) to avoid PyMOL selector precedence swallowing the
     # intersect into the neighbor argument (05-04 smoke pitfall).
     cap_resis = []
     cmd.iterate(
-        "(neighbor (%s)) and not (%s and chain %s and resi %d)" %
+        "(neighbor (%s)) and not (%s and chain '%s' and resi %d)" %
         (n_sele, obj, chain, terminus_resi),
         "stored.append((chain, resv))",
         space={'stored': cap_resis})
     # Step 2: remove all atoms in cap residues (entire ACE/formyl group)
     for cap_chain, cap_resi in set(cap_resis):
-        cmd.remove("%s and chain %s and resi %d" % (obj, cap_chain, cap_resi))
+        cmd.remove("%s and chain '%s' and resi %d" % (obj, cap_chain, cap_resi))
     # Step 3: remove H atoms bonded to N in the terminal residue
     cmd.remove(
-        "(neighbor (%s)) and (%s and chain %s and resi %d and elem H)" %
+        "(neighbor (%s)) and (%s and chain '%s' and resi %d and elem H)" %
         (n_sele, obj, chain, terminus_resi))
