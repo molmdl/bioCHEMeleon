@@ -238,13 +238,13 @@ Plans:
 - [ ] 10-02-PLAN.md — Setup-tab tooltips on ~25 widgets (UX-01) — Wave 1
 - [ ] 10-03-PLAN.md — Help button + modal Help dialog with 6 sections (UX-01 + UX-02, verified controls) — Wave 1
 - [ ] 10-04-PLAN.md — Pre-implementation audit: verify 10 research claims vs current code (read-only) — Wave 1
-- [ ] 10-05-PLAN.md — Endgame win-stats GUI (DIFF-02): _finish_win setInformativeText time/hints/reveals — Wave 2
-- [ ] 10-06-PLAN.md — Endgame debrief GUI (DIFF-03): _show_all_hiders_for_debrief + _finish_debrief + moved cleanup gate — Wave 3
-- [ ] 10-07-PLAN.md — Game-tab tooltips on ~8 widgets (UX-01) — Wave 4
-- [ ] 10-08-PLAN.md — Headless smoke for the debrief fragment-aware cmd.show path — Wave 4
-- [ ] 10-09-PLAN.md — Human-verify checkpoint: all 5 success criteria in real Windows PyMOL (autonomous: false) — Wave 5
-- [ ] 10-10-PLAN.md — README finalization (SC5): keep vibe-coding warning, remove UNDER DEVELOPMENT, v1 complete — Wave 6
-- [ ] 10-11-PLAN.md — Post-implementation audit: verify README + docs vs shipped code (read-only) — Wave 7
+- [ ] 10-05-PLAN.md — Endgame win-stats GUI (DIFF-02): _finish_win setInformativeText time/hints/reveals — Wave 1
+- [ ] 10-06-PLAN.md — Endgame debrief GUI (DIFF-03): _show_all_hiders_for_debrief + _finish_debrief + moved cleanup gate — Wave 2
+- [ ] 10-07-PLAN.md — Game-tab tooltips on ~8 widgets (UX-01) — Wave 3
+- [ ] 10-08-PLAN.md — Headless smoke for the debrief fragment-aware cmd.show path — Wave 3
+- [ ] 10-09-PLAN.md — Human-verify checkpoint: all 5 success criteria in real Windows PyMOL (autonomous: false) — Wave 4
+- [ ] 10-10-PLAN.md — README finalization (SC5): keep vibe-coding warning, remove UNDER DEVELOPMENT, v1 complete — Wave 5
+- [ ] 10-11-PLAN.md — Post-implementation audit: verify README + docs vs shipped code (read-only) — Wave 6
 
 ### Phase 11: Alt-conf Cartoon/Ribbon Hider (v1 Follow-up)
 **Goal**: Replace the terminal-extension cartoon hider with "replicate a segment (loop) as an alternate position using C-alpha geometry" for a connected, blended visual — closing the Phase 5 cosmetic gap (disconnected-look on 1ubq) and adding full ribbon support.
