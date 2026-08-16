@@ -1,6 +1,6 @@
 # Phase 11 Bug: Membrane-protein cartoon-segment hider — duplicate anchor id
 
-**Status:** resolved — fix applied + headless-verified (commit 0702563); GUI human-verify PENDING (2026-08-16)
+**Status:** RESOLVED — fix applied (commit 0702563) + headless-verified (86/86 smoke) + GUI human-verified APPROVED on 1gzm (2026-08-16). Root cause was NOT alt-confs (the original hypothesis was wrong) — it was an unquoted blank-chain PyMOL selector. See "Corrected Root Cause" section below.
 **Scope:** Phase 11 (cartoon/ribbon segment hider), NOT Phase 9
 **Severity:** blocks mixed-rep on membrane proteins (1gzm, 3gp6, sasdpg4) — sphere hiders work fine
 **Triggered by:** selecting 1gzm / 3gp6 / sasdpg4 (MemProtMD / SASBDB demos) + any non-sphere hider (cartoon or mixed-rep with cartoon/ribbon)
