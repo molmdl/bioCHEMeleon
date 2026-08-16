@@ -2,7 +2,8 @@
 status: resolved
 trigger: "nucleic acid systems seems to accept only sphere hiders. confirmed that cartoon hider has error with finding connection point so fallback to sphere. not sure about wire/stick/ribbon. tested with bundled nucleic acid. unsure if glycoprotein/membrane has this issue."
 created: 2026-08-16T00:00:00Z
-updated: 2026-08-16T00:30:00Z
+updated: 2026-08-16T01:00:00Z
+gui_verified: 2026-08-16 — user confirmed PASS in real Windows PyMOL GUI on 1k8p (DNA): cartoon/ribbon segment P atoms (DG`10004/P, DG`10003/P, DT`10007/P) + sphere hiders (HIDER`9001/H000-H003) clickable; real-trace miss (A/K`26/K); mark_found green recolor fires ("Colored 1180 atoms"). Session closed by user ("working, can close it now").
 ---
 
 ## Current Focus
@@ -152,11 +153,11 @@ verification:
   - Phase 11 smoke (smoke/phase11_smoke.py): 77/77 PASS — no protein regression.
   - WSL gates: py_compile OK, 112/112 unit tests, 0 pitfall-1 matches,
     exec_ gate clean (QMessageBox only).
-  - GUI verification (human-verify): DEFERRED — the interactive click-to-find
-    loop requires the PyMOL GUI (Qt), which cannot be run from WSL. The
-    headless tests prove insertion + rendering work; the click-to-find scoring
-    (on_pick resv-gate) uses the same mechanism as protein cartoon hiders,
-    so it should work identically.
+  - GUI verification (human-verify): PASSED 2026-08-16 — user confirmed in a
+    real Windows PyMOL GUI session on 1k8p (DNA bundled demo). Cartoon/ribbon
+    segment P atoms + sphere hiders register clicks; real-trace atoms miss;
+    mark_found green recolor fires. Session closed by user
+    ("working, can close it now").
 
 files_changed:
   - biochemeleon/__init__.py: `name CA` → `(name CA or name P)` at lines 174, 185
@@ -169,8 +170,8 @@ deferred:
     'protein' (have CA atoms), so the fix doesn't affect them. They require
     network fetch (not bundled), so headless verification was not possible.
     Defer to Phase 9 checkpoint.
-  - GUI human-verify: the interactive click-to-find loop on a nucleic acid
-    demo needs a human in a real PyMOL session (Qt GUI not runnable from WSL).
+  - GUI human-verify: RESOLVED 2026-08-16 (user-verified PASS on 1k8p DNA;
+    see frontmatter `gui_verified`).
   - Known pre-existing limitation: `new_mid = new_start + 1` in
     insert_cartoon_segment_hider assumes consecutive resi values in the
     segment window. This applies to BOTH protein and nucleic (missing residues
