@@ -177,6 +177,12 @@ class HiderRegistry(object):
     (dependency-injected sentinel rebuild after ``.pse`` reload;
     ``rep=None`` tolerance - the sentinel carries no rep). registry.py
     is functionally complete for Phase 3 (10 methods).
+
+    Phase 4.1 method: ``remaining_by_rep`` - the hidden-filtered
+    counterpart of :meth:`counts_by_rep` (counts ONLY records with
+    ``status == HIDER_STATUS_HIDDEN`` so the per-rep counts sum to the
+    total remaining; GAME-03 data source). Pure, additive, no backward-
+    compat impact on ``counts_by_rep`` or its callers.
     """
 
     def __init__(self):
@@ -261,6 +267,36 @@ class HiderRegistry(object):
             if r.rep is None:
                 continue
             out[r.rep] = out.get(r.rep, 0) + 1
+        return out
+
+    # ---- Hidden-only per-rep counts (Phase 4.1) ----
+
+    def remaining_by_rep(self):
+        """Return ``{rep: count}`` for HIDDEN records, keyed by GAME_REPS.
+
+        Mirrors :meth:`counts_by_rep` but filters
+        ``status == HIDER_STATUS_HIDDEN`` so the per-rep counts SUM to the
+        total remaining hiders (the GAME-03 data source + the SC3 contract:
+        ``sum(remaining_by_rep().values())`` equals what the game's
+        remaining-count helper returns). Used by the Game tab label (Plan
+        04.1-03) to render per-rep remaining counts.
+
+        Skips ``rep=None`` records (same as :meth:`counts_by_rep` - the
+        post-``.pse``-reload ghosts from :meth:`reconstruct_from_sentinels`):
+        the returned dict has only :data:`GAME_REPS` keys, never a
+        ``None`` key, and never raises. Zero-fills reps with no hidden
+        hiders so the caller can render ``"cartoon: 0"`` unconditionally.
+
+        Pure (no pymol import, no Qt) - WSL-unit-testable like the rest of
+        registry.py. Does NOT alter :meth:`counts_by_rep` (separate method;
+        existing callers + smoke + tests are untouched).
+        """
+        out = {rep: 0 for rep in GAME_REPS}
+        for r in self._records.values():
+            if r.rep is None:
+                continue
+            if r.status == HIDER_STATUS_HIDDEN:
+                out[r.rep] = out.get(r.rep, 0) + 1
         return out
 
     def mark_found(self, object, id):
