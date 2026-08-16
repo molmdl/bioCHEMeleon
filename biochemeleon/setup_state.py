@@ -411,3 +411,37 @@ def validate_state(state, atom_count=None):
     result["pdb_pool"] = _validate_pdb_pool(state.get("pdb_pool", PDB_POOL))
 
     return result
+
+
+# ---- Remaining-hiders label formatter (Phase 4.1, GAME-03) ----
+
+def format_remaining(total, counts_by_rep, easy_mode):
+    """Format the remaining-hiders label (GAME-03 per-rep display).
+
+    Pure helper: stdlib only, no Qt, no molecular viewer coupling, so it
+    is unit-testable in WSL. The GameTab label setter calls this with the
+    total remaining hider count and a per-rep breakdown and writes the
+    returned string straight onto its label widget.
+
+    Args:
+        total (int): total remaining (hidden) hiders.
+        counts_by_rep (dict|None): {rep: count} of REMAINING (hidden-only)
+            hiders per rep. None or an empty dict collapses to the
+            total-only display.
+        easy_mode (bool): True = easy (show the per-rep breakdown); False
+            = hard (total-only, byte-identical to the Phase 4 label, SC2).
+
+    Returns:
+        str: the label text. In easy mode the per-rep entries appear in
+        GAME_REPS order, only reps whose count is greater than zero, and
+        exactly two spaces separate the total from the opening paren
+        (SC1). A None/empty counts dict, or an all-zero win state, yields
+        the total-only form so the label never shows an empty parenthetical.
+    """
+    if not easy_mode or not counts_by_rep:
+        return "Remaining: %d" % total
+    parts = ["%s: %d" % (rep, counts_by_rep[rep])
+            for rep in GAME_REPS if counts_by_rep.get(rep, 0) > 0]
+    if not parts:
+        return "Remaining: %d" % total
+    return "Remaining: %d  (%s)" % (total, ", ".join(parts))
