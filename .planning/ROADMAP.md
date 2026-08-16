@@ -229,6 +229,8 @@ Plans:
   5. README.md is updated to reflect the final shipped feature set, install instructions, and usage
 **Plans**: TBD
 
+**Note for planning:** The controls-help reference (SC2) and README/tooltips (SC1/SC5) should remind the user that toggling/changing the active representation in PyMOL can help spot hiders — since hiders blend into a specific rep, switching reps (e.g. hiding cartoon, showing spheres) can make a cartoon hider stand out. This is a legitimate observation strategy, not a cheat.
+
 Plans:
 - [ ] 10-01: TBD during planning
 
