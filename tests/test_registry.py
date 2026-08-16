@@ -360,6 +360,115 @@ class TestHiderRegistryQueries(unittest.TestCase):
             self.reg.mark_found('1ubq', 999)
 
 
+class TestRemainingByRep(unittest.TestCase):
+    """Test HiderRegistry.remaining_by_rep - hidden-filtered per-rep counts.
+
+    Phase 4.1 Plan 01 (GAME-03 data source). Mirrors counts_by_rep but
+    filters status == HIDER_STATUS_HIDDEN so the per-rep counts SUM to the
+    total remaining (the same count GameController._remaining returns -
+    SC3 contract). Skips rep=None records (post-.pse reload ghosts, same as
+    counts_by_rep). Zero-fills reps with no hidden hiders. Pure (no pymol,
+    no Qt) - WSL-testable like the rest of registry.py.
+
+    Each test builds a fresh HiderRegistry and registers records as needed
+    (same pattern as TestHiderRegistryQueries: register('1ubq', N, rep) +
+    mark_found('1ubq', N) to flip status). Expected dict key order matches
+    GAME_REPS (lines, sticks, spheres, cartoon, ribbon).
+    """
+
+    def test_remaining_by_rep_empty_registry(self):
+        """Fresh registry: remaining_by_rep() == all 5 GAME_REPS keys
+        zero-filled (no records to count)."""
+        reg = HiderRegistry()
+        self.assertEqual(reg.remaining_by_rep(),
+                         {'lines': 0, 'sticks': 0, 'spheres': 0,
+                          'cartoon': 0, 'ribbon': 0})
+
+    def test_remaining_by_rep_all_reps_present(self):
+        """Register one record (any rep) -> result has ALL 5 GAME_REPS keys
+        (zero-fill for reps with no hidden hiders)."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')
+        counts = reg.remaining_by_rep()
+        self.assertEqual(set(counts.keys()), set(GAME_REPS))
+
+    def test_remaining_by_rep_hidden_only_filter(self):
+        """Register 3 spheres (ids 1,2,3 all hidden); mark id=2 found ->
+        remaining_by_rep()['spheres'] == 2 (the found one is NOT counted)."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')
+        reg.register('1ubq', 2, 'spheres')
+        reg.register('1ubq', 3, 'spheres')
+        reg.mark_found('1ubq', 2)
+        self.assertEqual(reg.remaining_by_rep()['spheres'], 2)
+
+    def test_remaining_by_rep_mixed_reps_mixed_statuses(self):
+        """Register sphere(hidden), stick(found), cartoon(hidden) ->
+        remaining_by_rep() == {'lines':0,'sticks':0,'spheres':1,
+        'cartoon':1,'ribbon':0} AND sum(values) == 2 (count of hidden)."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')                      # hidden
+        reg.register('1ubq', 2, 'sticks', status=HIDER_STATUS_FOUND)
+        reg.register('1ubq', 3, 'cartoon')                      # hidden
+        counts = reg.remaining_by_rep()
+        self.assertEqual(counts, {'lines': 0, 'sticks': 0, 'spheres': 1,
+                                  'cartoon': 1, 'ribbon': 0})
+        self.assertEqual(sum(counts.values()), 2)
+
+    def test_remaining_by_rep_sums_to_remaining(self):
+        """For an arbitrary mix of reps + statuses, sum(remaining_by_rep()
+        .values()) == count of hidden records (the SC3 contract - this is
+        exactly what GameController._remaining counts)."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')                      # hidden
+        reg.register('1ubq', 2, 'sticks', status=HIDER_STATUS_FOUND)
+        reg.register('1ubq', 3, 'cartoon')                      # hidden
+        reg.register('1ubq', 4, 'ribbon', status=HIDER_STATUS_FOUND)
+        reg.register('1ubq', 5, 'lines')                       # hidden
+        counts = reg.remaining_by_rep()
+        hidden_count = len([r for r in reg.all()
+                           if r.status == HIDER_STATUS_HIDDEN])
+        self.assertEqual(sum(counts.values()), hidden_count)
+        self.assertEqual(hidden_count, 3)
+
+    def test_remaining_by_rep_skips_rep_none(self):
+        """A rep=None record (from reconstruct_from_sentinels - the
+        sentinel carries no rep) is SKIPPED: remaining_by_rep() does NOT
+        raise and the rep=None record is NOT counted (all GAME_REPS values
+        unaffected by its presence)."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')                     # hidden, counted
+        reg.register('1ubq', 9, None)                           # rep=None ghost
+        counts = reg.remaining_by_rep()
+        # Does not raise; only GAME_REPS keys present (never a None key)
+        self.assertEqual(set(counts.keys()), set(GAME_REPS))
+        self.assertNotIn(None, counts)
+        # The rep=None record is invisible: only the 1 sphere is counted
+        self.assertEqual(counts['spheres'], 1)
+        self.assertEqual(sum(counts.values()), 1)
+
+    def test_remaining_by_rep_mark_found_decrement(self):
+        """Register 2 hidden spheres; remaining_by_rep()['spheres'] == 2;
+        mark_found one -> remaining_by_rep()['spheres'] == 1 (decremented
+        by 1, matching the total-remaining decrement)."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')
+        reg.register('1ubq', 2, 'spheres')
+        self.assertEqual(reg.remaining_by_rep()['spheres'], 2)
+        reg.mark_found('1ubq', 1)
+        self.assertEqual(reg.remaining_by_rep()['spheres'], 1)
+
+    def test_remaining_by_rep_equals_counts_by_rep_when_all_hidden(self):
+        """If every record has status == HIDER_STATUS_HIDDEN (none found),
+        remaining_by_rep() == counts_by_rep() (the hidden filter is a
+        no-op when nothing is found)."""
+        reg = HiderRegistry()
+        reg.register('1ubq', 1, 'spheres')
+        reg.register('1ubq', 2, 'spheres')
+        reg.register('1ubq', 3, 'sticks')
+        self.assertEqual(reg.remaining_by_rep(), reg.counts_by_rep())
+
+
 class TestHiderRegistrySerialize(unittest.TestCase):
     """Test HiderRegistry to_dict / from_dict round-trip (Phase 8 .bcm shape).
 
