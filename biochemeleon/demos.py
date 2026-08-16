@@ -42,7 +42,9 @@ stdlib (urllib/queue/os/threading) -- never pymol.cmd (Pitfall 6).
 import os
 import threading
 import queue
+import ssl
 import urllib.request
+import urllib.error
 
 from pymol import cmd
 
@@ -279,14 +281,68 @@ def cleanup_temp(path):
         pass
 
 
+def _urlopen_with_ssl_fallback(url, timeout, progress_queue=None):
+    """Open a URL, retrying without certificate verification if SSL fails.
+
+    Some academic hosts (e.g. SASBDB) use root CAs that may not be in the
+    bundled certificate list on all Python builds (notably Windows conda,
+    whose CA list can lack the HARICA root that signs sasbdb.org). The
+    first attempt uses the default verifying context; if an SSL error
+    occurs, the retry uses a non-verifying context. This is acceptable for
+    downloading public molecular structure files from known academic
+    repositories -- the content is public, not sensitive.
+
+    NOTE on exception shape: ``urllib.request.urlopen`` does NOT raise a
+    bare ``ssl.SSLError`` for a certificate-verification failure; it wraps
+    the SSL error as ``urllib.error.URLError(reason=SSLError(...))``
+    (verified empirically: do_open catches the OSError-family SSL error
+    during the TLS handshake and re-raises it as URLError). So the SSL
+    case is detected via ``isinstance(e.reason, ssl.SSLError)``. A bare
+    ``except ssl.SSLError`` is also kept as a defensive safety net for any
+    build where the SSL error surfaces un-wrapped. Non-SSL URL errors
+    (HTTP 404, DNS, connection refused, timeout) have a non-SSL ``.reason``
+    and are re-raised unchanged for the caller's outer handler to report.
+
+    When *progress_queue* is given, a ``('warning', msg)`` event is posted
+    on the fallback so the caller's drain can optionally surface it (the
+    current drain silently ignores unknown event kinds, which is safe).
+
+    Returns an HTTPResponse (the caller uses it as a context manager).
+    Raises if BOTH attempts fail (caught by the caller's outer except).
+    """
+    req = urllib.request.Request(
+        url, headers={'User-Agent': 'bioCHEMeleon/1.0'})
+    try:
+        return urllib.request.urlopen(req, timeout=timeout)
+    except urllib.error.URLError as e:
+        # Retry only on a genuine SSL failure (cert verify / handshake).
+        # A 404 / DNS / timeout URLError has a non-SSL reason -> re-raise.
+        if not isinstance(getattr(e, 'reason', None), ssl.SSLError):
+            raise
+    except ssl.SSLError:
+        # Defensive: bare SSL error (un-wrapped) -> fall through to retry.
+        pass
+    # SSL failure -- retry with a non-verifying context (the host's root
+    # CA may be absent from the bundled certificate list on some builds).
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    if progress_queue is not None:
+        progress_queue.put((
+            'warning',
+            'Certificate verification unavailable for this host; '
+            'retrying without verification (public structure file).'))
+    return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+
+
 def download_large_demo(demo_id, dest_path, progress_queue, cancel_event):
     """Download a large demo's raw file to dest_path via urllib.
 
     WORKER THREAD (Pitfall 6 compliant -- this function uses ONLY
-    stdlib: urllib/queue/os/threading; it does NOT import pymol, makes
-    NO PyMOL cmd API calls, does NOT touch Qt widgets). The Qt layer
-    (__init__.py _resolve_large_demo) spawns this on a daemon thread and
-    drains progress_queue on the main thread via a QTimer.
+    stdlib: urllib/queue/os/threading/ssl; it does NOT import pymol,
+    makes NO PyMOL cmd API calls, does NOT touch Qt widgets). The Qt
+    layer (__init__.py _resolve_large_demo) spawns this on a daemon
+    thread and drains progress_queue on the main thread via a QTimer.
 
     Reads the manifest's fetch_url in 64KB blocks. Between blocks it
     checks cancel_event.is_set() (the QProgressDialog Cancel button sets
@@ -296,6 +352,15 @@ def download_large_demo(demo_id, dest_path, progress_queue, cancel_event):
       - ('canceled',)     -- cancel_event was set between blocks
       - ('error', msg)    -- any exception (URLError, HTTPError, timeout,
                              disk write failure, ...)
+
+    SSL fallback: the fetch is performed via _urlopen_with_ssl_fallback,
+    which retries without certificate verification if the default
+    verifying context encounters an SSL error, for academic hosts whose
+    root CA may not be in the bundled certificate list (notably SASBDB's
+    HARICA root on Windows conda). This is acceptable for public
+    molecular structure files; a warning event is posted on the fallback
+    so the drain can optionally surface it. Non-SSL errors propagate to
+    the outer handler below.
 
     Returns None (the result goes via the queue, not the return value --
     the main-thread drain reads it). A User-Agent header is set because
@@ -307,9 +372,7 @@ def download_large_demo(demo_id, dest_path, progress_queue, cancel_event):
     meta = DEMO_MANIFEST[demo_id]
     url = meta['fetch_url']
     try:
-        req = urllib.request.Request(
-            url, headers={'User-Agent': 'bioCHEMeleon/1.0'})
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with _urlopen_with_ssl_fallback(url, 60, progress_queue) as resp:
             total = int(resp.headers.get('Content-Length', 0))  # 0 = unknown
             received = 0
             with open(dest_path, 'wb') as f:
