@@ -28,7 +28,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **BTN-02**: Randomize — randomize the setup parameters
 - [x] **BTN-03**: Save Setup — save game setup parameters to a file
 - [x] **BTN-04**: Load Setup — load setup parameters from a file
-- [ ] **BTN-05**: Generate & export — only generate the representation of the game and save the initial state to a file for sharing or later loading
+- [x] **BTN-05**: Generate & export — only generate the representation of the game and save the initial state to a file for sharing or later loading
 - [x] **BTN-06**: Cleanup model — remove all game-generated representations/atoms not in the original object (via `segi='GAME'` sentinel, never generic filters)
 - [ ] **BTN-07**: Start — store the initial state, generate hiders per setup, switch to the Game status tab, and count down 3-2-1
 
@@ -46,12 +46,12 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **GAME-01**: Rolling info box (status messages / log of clicks, hints, reveals)
 - [ ] **GAME-02**: Timer — counts up after the game starts, stops on win
 - [ ] **GAME-03**: Remaining hiders count — total, and per-representation when the easy difficulty toggle is set
-- [ ] **GAME-04**: Import button — import a game prepared by Generate & export
+- [x] **GAME-04**: Import button — import a game prepared by Generate & export
 - [x] **GAME-05**: Hint button — change color of the N atoms/residues around a hider (colors neighbors, not the hider itself)
 - [x] **GAME-06**: Reveal-one hider button — asks the user to confirm giving up, then marks one random hider "found" and counts the reveal use
 - [x] **GAME-07**: Reveal-all hiders button — asks the user to confirm giving up, then marks all hiders "found"
 - [x] **GAME-08**: Found-hider management dropdown — hide/show/change color of hiders with a "found" status
-- [ ] **GAME-09**: Save button — save the game state as a PyMOL session (`.pse`) + a companion `.bcm` JSON sidecar (registry, timer, reveal counts, setup) for checkpointing
+- [x] **GAME-09**: Save button — save the game state as a PyMOL session (`.pse`) + a companion `.bcm` JSON sidecar (registry, timer, reveal counts, setup) for checkpointing
 - [x] **GAME-10**: Restart button — restart the game from the stored initial state
 
 ### Core Loop
@@ -164,9 +164,9 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 | GAME-10 | Phase 7 | Complete |
 | BTN-06 | Phase 7 | Complete |
 | DIFF-04 | Phase 7 | Complete |
-| GAME-09 | Phase 8 | Pending |
-| GAME-04 | Phase 8 | Pending |
-| BTN-05 | Phase 8 | Pending |
+| GAME-09 | Phase 8 | Complete |
+| GAME-04 | Phase 8 | Complete |
+| BTN-05 | Phase 8 | Complete |
 | DEMO-02 | Phase 9 | Pending |
 | DEMO-03 | Phase 9 | Pending |
 | DEMO-04 | Phase 9 | Pending |
