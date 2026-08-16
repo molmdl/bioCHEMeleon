@@ -120,10 +120,12 @@ Plans:
   1. When the easy difficulty toggle is checked at game Start, the Game tab's remaining-hiders label shows a per-rep breakdown (e.g. "Remaining: 7  (spheres: 2, sticks: 3, cartoon: 2)") in addition to the total
   2. When the easy difficulty toggle is unchecked (hard mode), the label shows only the total — unchanged from Phase 4 behavior
   3. The per-rep counts update correctly as hiders are found (via counts_by_rep read after each on_pick / reveal)
-**Plans**: 0 plans (not yet planned)
+**Plans**: 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 04.1 to break down)
+- [ ] 04.1-01-PLAN.md — TDD registry.remaining_by_rep (hidden-filtered per-rep data source, pure/WSL)
+- [ ] 04.1-02-PLAN.md — TDD setup_state.format_remaining (pure label formatter, pure/WSL)
+- [ ] 04.1-03-PLAN.md — Plumb _easy_mode + pull-model _update_remaining + headless smoke + human-verify (GAME-03 close)
 
 **Details:**
 Gap analysis identified 3 work items: (1) plumb `difficulty_easy` from setup state → `GameTab.start_countdown` (new param or controller attribute); (2) extend the `_update_remaining` callback to carry `counts_by_rep` (signature change or new callback, backward-compat with Phase 6's `on_counts_changed`); (3) render per-rep breakdown in the label when easy mode is active. Qt+cmd-coupled — follows the Phase 7 human-verify checkpoint pattern (unit-test pure helper for formatting, headless-smoke the counts_by_rep read path, human-verify the label renders).
@@ -283,7 +285,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
 | 3. Mutation Safety & Hider Registry Foundation | 20/20 | ✓ Complete | 2026-08-06 |
 | 4. MVP Core Loop (Sphere) | 6/6 | ✓ Complete | 2026-08-08 |
-| 04.1. Per-rep remaining hiders display (easy mode) | 0/0 | Not planned (INSERTED) | - |
+| 04.1. Per-rep remaining hiders display (easy mode) | 0/3 | ◆ Planned (INSERTED) | - |
 | 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 + 05-09 | ✓ Complete (v1 scope; alt-conf deferred to Phase 11) | 2026-08-10 |
 | 6. Hint & Reveal | 3/3 | ✓ Complete | 2026-08-10 |
 | 7. Found-Hider Management, Restart & Cleanup | 3/3 | ✓ Complete | 2026-08-12 |
