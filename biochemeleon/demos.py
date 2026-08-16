@@ -356,6 +356,18 @@ def finalize_large_demo(demo_id, downloaded_path):
     blanket hetatm removal would nuke the 2601 glycan atoms; we do NOT
     do that). The downloaded file is handed to cmd.load as-is.
 
+    LOAD FORMAT: cmd.load is called with format='pdb' because the
+    on-disk extensions are not registered PyMOL file types. The
+    MemProtMD strip writes a .dry intermediate and the worker downloads
+    to a .raw temp; PyMOL's filename_to_format (importing.py) dispatches
+    by extension and neither .dry nor .raw is in the loadfunctions map
+    (nor has a molfile plugin), so without an explicit format cmd.load
+    raises CmdException('unsupported file type') and finalize returns
+    None. format='pdb' forces the PDB reader (read_pdbstr) regardless of
+    extension -- both .dry and .raw hold plain PDB content. The cache
+    .pdb.gz path (load_cached_demo) is unaffected: .pdb.gz is a
+    recognized extension (gzipped pdb) and needs no format kwarg.
+
     The cache is written by cmd.save to <cache_dir>/<cache_name> as a
     .pdb.gz (exporting.py:912 -- cmd.save opens gzip.open when the
     filename ends in .gz; one call writes the gzipped PDB). A cache
@@ -386,7 +398,17 @@ def finalize_large_demo(demo_id, downloaded_path):
         load_path = downloaded_path  # SASBDB (strip=False) -- load as-is
     win_path = to_windows_path(load_path)
     try:
-        cmd.load(win_path, object=obj_name, zoom=1)  # reads .pdb/.pdb.gz via file_read
+        # format='pdb' forces the PDB reader regardless of the on-disk
+        # extension: the MemProtMD strip writes a .dry intermediate and the
+        # worker downloads to a .raw temp, neither of which is a registered
+        # PyMOL file extension (importing.py filename_to_format dispatches by
+        # extension; .dry/.raw are not in loadfunctions and have no molfile
+        # plugin, so cmd.load would raise CmdException 'unsupported file
+        # type' and finalize would return None). Explicit format= overrides
+        # the extension dispatch (importing.py load() docstring: "The file
+        # extension is used to determine the format unless the format is
+        # provided explicitly"). Both .dry and .raw hold plain PDB content.
+        cmd.load(win_path, object=obj_name, zoom=1, format='pdb')
     except Exception:
         return None
     # Cache the loaded object as .pdb.gz (cmd.save writes gzip in one step

@@ -10,7 +10,7 @@
 # dialog is verified at the 09-03 human-verify checkpoint (needs the GUI + real
 # network timing).
 #
-# Sections (~30 checks):
+# Sections (~45 checks):
 #   SETUP: manifest 9 entries; 1gzm/3gp6/sasdpg4 present; TIER_LABELS 4 tiers;
 #      strip helper filters synthetic SOL/NA/CL (keeps DPP/MET + non-ATOM).
 #   A. SASBDB fetch round-trip: finalize_large_demo('sasdpg4', staged) -> 4123
@@ -24,6 +24,12 @@
 #   E. download_large_demo is cmd-free (Pitfall 6 static check via inspect).
 #   F. cache_path_for / is_cached: 1znf None (bundled); sasdpg4 ends .pdb.gz;
 #      is_cached sasdpg4 True; is_cached 1gzm False.
+#   G. MemProtMD finalize round-trip (09-03 bug fix): synthetic .raw -> strip ->
+#      .dry -> cmd.load(format='pdb') -> object loads with stripped atoms.
+#      Verifies the .dry extension fix (format='pdb' forces the PDB reader;
+#      without it cmd.load raised CmdException 'unsupported file type: dry').
+#      Bonus: loads the real orphaned 3gp6.raw.dry (from the failed GUI run)
+#      directly with format='pdb' to confirm the fix on real data.
 #   M. SUMMARY: print pass/fail counts, sys.exit(1) on any fail.
 import sys
 import os
@@ -179,6 +185,108 @@ check("F: cache_path_for('sasdpg4') endswith SASDPG4_fit2_model1.pdb.gz",
       _f_sas is not None and _f_sas.endswith('SASDPG4_fit2_model1.pdb.gz'))
 check("F: is_cached('sasdpg4') == True", demos.is_cached('sasdpg4') is True)
 check("F: is_cached('1gzm') == False (not fetched)", demos.is_cached('1gzm') is False)
+
+# --- G. MemProtMD finalize round-trip (.raw -> strip -> .dry -> cmd.load) ---
+# 09-03 bug fix: the MemProtMD strip writes a .dry intermediate whose extension
+# is NOT a registered PyMOL file type (importing.py filename_to_format: .dry is
+# not in loadfunctions, no molfile plugin). Without format='pdb', cmd.load
+# raises CmdException('unsupported file type: dry') and finalize returns None.
+# The fix adds format='pdb' to force the PDB reader regardless of extension.
+# This section exercises the FULL MemProtMD path: synthetic .raw -> strip ->
+# .dry -> cmd.load(format='pdb') -> object appears with stripped atoms.
+# Also covers the latent .raw extension bug (SASBDB first-fetch would hit the
+# same dispatch failure; format='pdb' on the shared cmd.load fixes both paths).
+
+# Clean any stale 3gp6 object + cache so the test is deterministic.
+if '3gp6' in cmd.get_names('objects'):
+    cmd.delete('3gp6')
+_3gp6_cache = demos.cache_path_for('3gp6')
+if _3gp6_cache and os.path.exists(_3gp6_cache):
+    try:
+        os.unlink(_3gp6_cache)
+    except OSError:
+        pass
+
+# Synthetic wet MemProtMD PDB: 2 MODELs, each with MET (protein), SOL (water),
+# NA (sodium), CL (chloride), DPP (DPPC lipid). After strip, SOL/NA/CL gone,
+# MET+DPP remain in each MODEL. PDB columns 18-20 (0-indexed 17:20) = resn.
+# Two models also verify multi-MODEL (MD trajectory) handling survives strip.
+_synthetic_memprotmd = (
+    'TITLE     synthetic MemProtMD wet\n'
+    'CRYST1   100.0  100.0  100.0  90.00  90.00  90.00 P 1\n'
+    'MODEL        1\n'
+    'ATOM      1  N   MET A   1      10.000  10.000  10.000  1.00 20.00           N\n'
+    'ATOM      2  OW  SOL A   2      20.000  20.000  20.000  1.00 20.00           O\n'
+    'ATOM      3  NA  NA  A   3      30.000  30.000  30.000  1.00 20.00          NA\n'
+    'ATOM      4  CL  CL  A   4      40.000  40.000  40.000  1.00 20.00          CL\n'
+    'ATOM      5  N   DPP A   5      50.000  50.000  50.000  1.00 20.00           N\n'
+    'TER\n'
+    'ENDMDL\n'
+    'MODEL        2\n'
+    'ATOM      6  N   MET A   1      11.000  11.000  11.000  1.00 20.00           N\n'
+    'ATOM      7  OW  SOL A   2      21.000  21.000  21.000  1.00 20.00           O\n'
+    'ATOM      8  NA  NA  A   3      31.000  31.000  31.000  1.00 20.00          NA\n'
+    'ATOM      9  CL  CL  A   4      41.000  41.000  41.000  1.00 20.00          CL\n'
+    'ATOM     10  N   DPP A   5      51.000  51.000  51.000  1.00 20.00           N\n'
+    'TER\n'
+    'ENDMDL\n'
+    'END\n'
+)
+
+# Stage the synthetic .raw file (simulating the worker download output).
+_memprotmd_dir = os.path.abspath(os.path.join(os.getcwd(), 'tmp', 'phase9-demos'))
+try:
+    os.makedirs(_memprotmd_dir, exist_ok=True)
+except OSError:
+    pass
+_synthetic_raw = os.path.join(_memprotmd_dir, '3gp6_synthetic.raw')
+with open(_synthetic_raw, 'w') as _f:
+    _f.write(_synthetic_memprotmd)
+check("G: staged synthetic MemProtMD .raw file", os.path.exists(_synthetic_raw))
+
+# THE BUG: before the fix, finalize returned None (cmd.load failed on .dry).
+_obj_g = demos.finalize_large_demo('3gp6', _synthetic_raw)
+check("G: finalize_large_demo('3gp6') returns '3gp6' (not None)", _obj_g == '3gp6')
+check("G: 3gp6 in loaded objects", '3gp6' in cmd.get_names('objects'))
+check("G: 3gp6 count_atoms > 0 (loaded)", cmd.count_atoms('3gp6') > 0)
+# SOL/NA/CL stripped (0 atoms for each stripped resn).
+check("G: SOL stripped (0 atoms)", cmd.count_atoms('3gp6 and resn SOL') == 0)
+check("G: NA stripped (0 atoms)", cmd.count_atoms('3gp6 and resn NA') == 0)
+check("G: CL stripped (0 atoms)", cmd.count_atoms('3gp6 and resn CL') == 0)
+# MET/DPP preserved (> 0 atoms).
+check("G: MET preserved (> 0 atoms)", cmd.count_atoms('3gp6 and resn MET') > 0)
+check("G: DPP preserved (> 0 atoms)", cmd.count_atoms('3gp6 and resn DPP') > 0)
+# Per-state: 2 atoms (MET + DPP) per model; 2 states (one per MODEL).
+check("G: state 1 has 2 atoms (MET+DPP)", cmd.count_atoms('3gp6', state=1) == 2)
+check("G: state 2 has 2 atoms (MET+DPP)", cmd.count_atoms('3gp6', state=2) == 2)
+# Cache .pdb.gz written.
+_g_cache = demos.cache_path_for('3gp6')
+check("G: cache .pdb.gz written", _g_cache is not None and os.path.exists(_g_cache))
+check("G: is_cached('3gp6') == True", demos.is_cached('3gp6') is True)
+# The .dry intermediate was cleaned up (cleanup_temp reached because load
+# succeeded -- before the fix, load failed and the .dry was orphaned).
+check("G: .dry intermediate cleaned up", not os.path.exists(_synthetic_raw + '.dry'))
+# Clean the synthetic .raw temp (the drain cleans .raw in the GUI; we do it
+# here for determinism).
+demos.cleanup_temp(_synthetic_raw)
+
+# Bonus: if the REAL 3gp6.raw.dry (orphaned from the failed GUI run) is staged,
+# load it directly with format='pdb' to confirm the fix works on real data.
+_real_dry = os.path.join(_memprotmd_dir, '3gp6.raw.dry')
+if os.path.exists(_real_dry):
+    if '3gp6_realdry' in cmd.get_names('objects'):
+        cmd.delete('3gp6_realdry')
+    try:
+        cmd.load(demos.to_windows_path(_real_dry), object='3gp6_realdry',
+                 format='pdb')
+        check("G: real 3gp6.raw.dry loads with format='pdb' (real data)",
+              cmd.count_atoms('3gp6_realdry') > 0)
+        cmd.delete('3gp6_realdry')
+    except Exception as _e:
+        check("G: real 3gp6.raw.dry loads with format='pdb' (exc: %s)" % _e,
+              False)
+else:
+    check("G: real 3gp6.raw.dry not staged (skipped)", True)
 
 # --- M. SUMMARY ---
 _n_pass = sum(1 for _, ok in RESULTS if ok)
