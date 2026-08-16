@@ -16,6 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Setup Tab Configuration & Bundled Demos** - Full Setup form + config buttons + bundled demo PDBs
 - [x] **Phase 3: Mutation Safety & Hider Registry Foundation** - De-risk object mutation + registry (highest-risk area)
 - [x] **Phase 4: MVP Core Loop (Sphere)** - THE core value: load → generate spheres → click-to-find → win
+- [ ] **Phase 04.1: Per-rep remaining hiders display (easy mode)** (INSERTED) - Close the GAME-03 per-rep display gap deferred from Phase 4
 - [x] **Phase 5: Line/Stick & Cartoon Generators** - The harder blend-in generators (cartoon = L-complexity swing)
 - [x] **Phase 6: Hint & Reveal** - Get-help / give-up mechanics with usage tracking
 - [x] **Phase 7: Found-Hider Management, Restart & Cleanup** - Manage found hiders, reset, and clean the model
@@ -110,6 +111,22 @@ Plans:
 - [x] 04-04-PLAN.md — Populate GameTab UI (log/timer/remaining/countdown/begin_play/on_win)
 - [x] 04-05-PLAN.md — Wire Start button → _on_start (BTN-07 core loop fan-in)
 - [x] 04-06-PLAN.md — Headless smoke + human-verify checkpoint (4 success criteria)
+
+### Phase 04.1: Per-rep remaining hiders display (easy mode) (INSERTED)
+**Goal:** Close the GAME-03 gap — when the easy difficulty toggle is set, the Game tab shows remaining hiders per representation (not just total). Phase 4 shipped total-only; the per-rep display was explicitly deferred (04-RESEARCH.md:618) and never picked up by any later phase.
+**Depends on**: Phase 4 (Game-tab display + GameController callbacks), Phase 3 (registry.counts_by_rep), Phase 2 (difficulty_easy in setup_state)
+**Requirements**: GAME-03
+**Success Criteria** (what must be TRUE):
+  1. When the easy difficulty toggle is checked at game Start, the Game tab's remaining-hiders label shows a per-rep breakdown (e.g. "Remaining: 7  (spheres: 2, sticks: 3, cartoon: 2)") in addition to the total
+  2. When the easy difficulty toggle is unchecked (hard mode), the label shows only the total — unchanged from Phase 4 behavior
+  3. The per-rep counts update correctly as hiders are found (via counts_by_rep read after each on_pick / reveal)
+**Plans**: 0 plans (not yet planned)
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 04.1 to break down)
+
+**Details:**
+Gap analysis identified 3 work items: (1) plumb `difficulty_easy` from setup state → `GameTab.start_countdown` (new param or controller attribute); (2) extend the `_update_remaining` callback to carry `counts_by_rep` (signature change or new callback, backward-compat with Phase 6's `on_counts_changed`); (3) render per-rep breakdown in the label when easy mode is active. Qt+cmd-coupled — follows the Phase 7 human-verify checkpoint pattern (unit-test pure helper for formatting, headless-smoke the counts_by_rep read path, human-verify the label renders).
 
 ### Phase 5: Line/Stick & Cartoon Generators
 **Goal**: Hiders can blend into line/stick and cartoon/ribbon representations, not just spheres. Cartoon/ribbon is the "L"-complexity swing feature (novel C-alpha geometry) and the phase most likely to need deeper research.
@@ -254,7 +271,7 @@ Plans:
 - The spike (05-06) proved the mechanism in isolation; the failure was integration. Re-research should focus on INTEGRATION, not re-proving the mechanism.
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10 → 11
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 04.1 → 5 → 6 → 7 → 8 → 9 → 10 → 11
 
 Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (both depend only on Phase 1); Phases 6 and 7 may overlap (both depend on Phase 4). Decimal phases (insertions) appear between their surrounding integers.
 
@@ -264,6 +281,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
 | 3. Mutation Safety & Hider Registry Foundation | 20/20 | ✓ Complete | 2026-08-06 |
 | 4. MVP Core Loop (Sphere) | 6/6 | ✓ Complete | 2026-08-08 |
+| 04.1. Per-rep remaining hiders display (easy mode) | 0/0 | Not planned (INSERTED) | - |
 | 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 + 05-09 | ✓ Complete (v1 scope; alt-conf deferred to Phase 11) | 2026-08-10 |
 | 6. Hint & Reveal | 3/3 | ✓ Complete | 2026-08-10 |
 | 7. Found-Hider Management, Restart & Cleanup | 3/3 | ✓ Complete | 2026-08-12 |

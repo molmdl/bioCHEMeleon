@@ -61,6 +61,7 @@ Progress: ███████████████████████�
 ## Accumulated Context
 
 ### Roadmap Evolution
+- Phase 04.1 inserted after Phase 4 (2026-08-16): Per-rep remaining hiders display (easy mode) (URGENT) — closes the GAME-03 gap (Phase 4 shipped total-only remaining count; per-rep display was explicitly deferred at 04-RESEARCH.md:618 and never picked up by any later phase). SETUP-06 (the toggle widget) is complete; GAME-03 (the per-rep display it controls) is not. Inserted before Phase 10 so Phase 10 stays focused on polish/endgame/help.
 - Phase 11 added (2026-08-09): Alt-conf Cartoon/Ribbon Hider (v1 Follow-up) — appended after Phase 10. Closes the HIDER-03/HIDER-05 alt-conf gap from Phase 5 (terminal-extension cartoon renders disconnected on 1ubq; the alt-conf "segment replication as alternate position" approach was spike-verified in isolation but multi-rep integration failed across 4 GUI-only bug cycles). Phase 11 has the HIGHEST research flag — requires re-research on `cmd.create` append side effects + GUI-runnable verification (headless auto_zoom gap was the methodology failure). Prior attempt's work preserved in `backup/05-08-attempts` branch but should NOT be used as implementation reference (re-research from scratch).
 
 ### Wave 1 outputs (02-01 + 02-02 — STILL AVAILABLE)
