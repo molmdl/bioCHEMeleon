@@ -221,7 +221,7 @@ The phase structure below is derived from the dependency DAG in ARCHITECTURE.md.
 - **Hidden object game genre** (Wikipedia) — conventions: hints, remaining counter, timer, zoom booster, time extension (we adopt hint + remaining + timer; skip zoom booster + time extension per cozy-educational tone).
 
 ### Tertiary (MEDIUM-LOW confidence — needs validation)
-- **MemProtMD** (`memprotmd.bioch.oxy.ac.uk`) — UNREACHABLE at research time (transport errors). Cite Stansfeld et al., *MemProtMD: Automated Coarse-Grained Membrane Protein Embedding Simulations*, Nat. Methods 2018 (`https://doi.org/10.1038/s41592-018-0220-9` — fetch timed out). Verify per-entry license at demos phase before bundling membrane coordinates.
+- **MemProtMD** (`memprotmd.bioch.ox.ac.uk`) — reachable (verified 2026-08-14, HTTP 200; the prior "unreachable" was a domain typo — "oxy" instead of "ox" in the hostname). License: CC-BY 4.0 (verified from site JS bundle). Cite Newport et al., *The MemProtMD database*, Nucleic Acids Res. 2019;47(D1):D390-D397 (DOI: 10.1093/nar/gky1047, primary) + Stansfeld et al., *MemProtMD*, Structure 2015;23(7):1350-1361 (DOI: 10.1016/j.str.2015.05.006, methodology). Per-entry license verified: CC-BY 4.0 for membrane coordinates (DPPC bilayer); PDB entries (1GZM, 3GP6) are CC0.
 - **Competitor existence** — no verified existing "molecular hide-and-seek" game; searched PyMOL/VMD/MolStar/ChimeraX/Jmol via webfetch — could not positively confirm absence, but no evidence surfaced. bioCHEMeleon appears novel.
 
 ---

@@ -72,7 +72,7 @@ The player can load a molecule, generate blended "hider" atoms that match the lo
   - Nucleic acid — Easy: RNA 5E54, DNA 1K8P; Hard: 2QBZ
   - Mixed: 4WB3
   - Challenge — Glycoprotein with glycan: an Alpha-1-glycoprotein model from SASBDB (https://www.sasbdb.org) — cite source and IDs in docs
-  - Very challenging — Membrane protein from MemProtMD (https://memprotmd.bioch.oxy.ac.uk) with full membrane (dppc-atomistic): 1GZM (helix), 3GP6 (sheets). Large files — strip water and salt, then compress before bundling.
+  - Very challenging — Membrane protein from MemProtMD (https://memprotmd.bioch.ox.ac.uk) with full membrane (dppc-atomistic): 1GZM (helix), 3GP6 (sheets). Large files — strip water and salt, then compress before bundling.
 - **Demo data strategy:** Bundle the small PDBs in the repo (in a data/ dir or git-ignored as needed); fetch the large membrane-protein files on demand. Cite all sources in documentation.
 - **Hider mechanic detail:** Hiders are new atoms/coordinates added INTO the same PyMOL object (not a separate object), so the player cannot trivially hide the whole new object. They adopt the same representation as at least one nearby/connecting item to blend in. Click detection uses standard PyMOL atom picking — we check whether the picked atom's index is a registered hider.
 
