@@ -12,6 +12,8 @@ import time
 
 from pymol.Qt import QtCore, QtWidgets
 
+from .setup_state import format_remaining
+
 
 class GameTab(QtWidgets.QWidget):
     """Game status tab: rolling log + timer + remaining + countdown + win."""
@@ -96,7 +98,14 @@ class GameTab(QtWidgets.QWidget):
         self._info_log.append(str(msg))
 
     def _update_remaining(self, remaining):
-        self._remaining_label.setText("Remaining: %d" % remaining)
+        # Phase 4.1 (GAME-03): pull hidden-filtered per-rep counts at render
+        # time + the easy-mode flag, format via the pure helper, set the label.
+        # Pull model (Option c) -- no callback signature change; reads the
+        # duck-typed controller (same precedent as gui_game.py:149
+        # registry.all()).
+        easy_mode = getattr(self._controller, '_easy_mode', False)
+        counts = self._controller.registry.remaining_by_rep() if easy_mode else None
+        self._remaining_label.setText(format_remaining(remaining, counts, easy_mode))
 
     def _confirm(self, title, text):
         """Yes/No confirm. Uses top-level window as parent so the dialog

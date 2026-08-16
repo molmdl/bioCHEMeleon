@@ -376,6 +376,7 @@ class PluginDialog(QtWidgets.QDialog):
         if self._controller is not None and self._controller._started:
             self._controller.cleanup()
         self._controller = game.GameController(target_obj)
+        self._controller._easy_mode = bool(state.get("difficulty_easy", True))  # Phase 4.1: easy-mode per-rep display (GAME-03)
         try:
             self._controller.start(hider_specs)
         except RuntimeError as exc:
