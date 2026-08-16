@@ -301,7 +301,17 @@ class GameTab(QtWidgets.QWidget):
         msg.setText("You found all hiders in %d:%02d!" % (mins, secs))
         msg.setWindowFlags(msg.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
         msg.exec_()
-        # After the user dismisses the dialog, clean up the hiders (sentinel
-        # remove) + discard the backup so the object is back to its pre-game
-        # state. cleanup() is idempotent (no-op if already _started=False).
-        self._controller.cleanup()
+        # After the user dismisses the dialog:
+        # - NON-IMPORTED game: cleanup() restores from the pre-game backup
+        #   (removes hiders, restores hint-colored real atoms, discards
+        #   backup) -> clean molecule ready for a new game.
+        # - IMPORTED game: do NOT call cleanup() here -- it would discard
+        #   the post-import backup, breaking subsequent Cleanup/Restart
+        #   (which need the backup to restore the imported initial state;
+        #   backup.restore with a discarded/None backup deletes the target
+        #   then fails to recreate it -> empty scene). The user clicks
+        #   Cleanup explicitly (imported two-step: restore + cleanup_hiders)
+        #   or Restart (restore + re-reconcile from _imported_bcm). The
+        #   hiders stay (all found+green) until the user acts.
+        if not getattr(self._controller, '_is_imported', False):
+            self._controller.cleanup()

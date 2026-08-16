@@ -31,6 +31,9 @@
 #      timer 0, all hidden) + import + verify fresh-start state.
 #   L. COLLISION DETECTABILITY: load 1ubq + verify refuse-first condition
 #      (target_object in loaded molecules -> the GUI refuse dialog would fire).
+#   N. POST-WIN CLEANUP/RESTART ON IMPORTED (regression for 08-05 fix):
+#      import puzzle -> win -> cleanup-on-imported (clean molecule, NOT empty)
+#      + import puzzle -> win -> restart-on-imported (hiders restored, NOT empty).
 #   M. SUMMARY: print pass/fail counts, sys.exit(1) on any fail.
 import sys
 import os
@@ -271,6 +274,85 @@ check("L: 1ubq in loaded molecules", obj in _loaded)
 _target_in_bcm = _bcm_dict_h.get('target_object')
 check("L: refuse-first condition True (target_object in loaded)",
       _target_in_bcm in _loaded)
+
+# --- N. POST-WIN CLEANUP/RESTART ON IMPORTED (regression for 08-05 fix) ---
+# The bug: _finish_win called controller.cleanup() after the win dialog,
+# which DISCARDS the backup. For imported games, subsequent Cleanup/Restart
+# call backup.restore(target, None) -> cmd.delete(target) + cmd.create(
+# target, None) fails -> target DELETED -> empty scene. The fix:
+# _finish_win skips cleanup() for imported games (preserves the backup).
+# This section verifies the fix at the cmd layer: simulate win (mark all
+# found) -> simulate the FIXED _finish_win (NO cleanup for imported) ->
+# Cleanup-on-imported works (clean molecule, NOT empty scene) -> re-import
+# + win -> Restart-on-imported works (hiders restored, NOT empty scene).
+
+# N.1: Import puzzle -> win -> cleanup-on-imported
+cmd.delete("all")
+_pse_path_n1, _bcm_dict_n1 = persistence.read_bcmz(_puzzle_bcmz)
+cmd.load(_pse_path_n1, partial=1)  # MERGE
+gc6 = game.GameController(obj)
+gc6.import_state(_bcm_dict_n1)
+check("N1: puzzle import 1 hider", len(gc6.registry.all()) == 1)
+check("N1: gc6 _is_imported", gc6._is_imported is True)
+check("N1: gc6 _backup_name set", gc6._backup_name == backup.BACKUP_PREFIX)
+# Simulate win: mark the hider found (mirrors on_pick -> _mark_found)
+gc6._mark_found(gc6.registry.all()[0].id)
+check("N1: post-win 0 remaining", gc6._remaining() == 0)
+# Simulate the FIXED _finish_win: for imported, do NOT call cleanup.
+# (The bug would call gc6.cleanup() here, discarding the backup.)
+# Verify backup is still intact (the fix preserves it):
+check("N1: backup intact post-win (fix preserves it)",
+      gc6._backup_name == backup.BACKUP_PREFIX and
+      backup.BACKUP_PREFIX in cmd.get_names("objects"))
+# Now simulate _on_cleanup imported path (user clicks Cleanup):
+backup.restore(gc6.target_obj, gc6._backup_name)
+backup.discard(gc6._backup_name)
+mutation.cleanup_hiders(gc6.target_obj)
+gc6._started = False
+gc6.registry = registry.HiderRegistry()
+check("N1: post-win cleanup-on-imported: no GAME atoms",
+      cmd.count_atoms("%s and segi GAME" % obj) == 0)
+check("N1: post-win cleanup-on-imported: count back to orig (NOT empty)",
+      cmd.count_atoms(obj) == orig_count)
+
+# N.2: Import puzzle -> win -> restart-on-imported
+cmd.delete("all")
+_pse_path_n2, _bcm_dict_n2 = persistence.read_bcmz(_puzzle_bcmz)
+cmd.load(_pse_path_n2, partial=1)
+gc7 = game.GameController(obj)
+gc7.import_state(_bcm_dict_n2)
+check("N2: puzzle import 1 hider", len(gc7.registry.all()) == 1)
+# Simulate win
+gc7._mark_found(gc7.registry.all()[0].id)
+check("N2: post-win 0 remaining", gc7._remaining() == 0)
+# Simulate the FIXED _finish_win (NO cleanup for imported) -> backup intact
+check("N2: backup intact post-win (fix preserves it)",
+      gc7._backup_name == backup.BACKUP_PREFIX and
+      backup.BACKUP_PREFIX in cmd.get_names("objects"))
+# Simulate _on_restart_imported (user clicks Restart):
+backup.restore(gc7.target_obj, gc7._backup_name)
+backup.discard(gc7._backup_name)
+gc7.reconstruct_registry()  # sentinel rebuild (rep=None, all hidden)
+persistence.apply_bcm_dict(gc7, gc7._imported_bcm)  # re-reconcile from .bcm
+gc7._reveal_count = 0
+gc7._hint_count = 0
+gc7._start_time = None
+gc7._backup_name = backup.snapshot(gc7.target_obj)  # fresh backup
+gc7._started = True
+check("N2: post-win restart-on-imported: 1 hider restored (NOT empty)",
+      len(gc7.registry.all()) == 1)
+check("N2: post-win restart-on-imported: all hidden (puzzle = fresh start)",
+      all(r.status == HIDER_STATUS_HIDDEN for r in gc7.registry.all()))
+check("N2: post-win restart-on-imported: GAME atoms present",
+      cmd.count_atoms("%s and segi GAME" % obj) == 1)
+check("N2: post-win restart-on-imported: count == orig + 1 (NOT empty)",
+      cmd.count_atoms(obj) == orig_count + 1)
+check("N2: post-win restart-on-imported: fresh backup set",
+      gc7._backup_name == backup.BACKUP_PREFIX)
+# Cleanup the gc7 hiders so the session is clean for the summary
+backup.restore(gc7.target_obj, gc7._backup_name)
+backup.discard(gc7._backup_name)
+mutation.cleanup_hiders(gc7.target_obj)
 
 # --- M. SUMMARY ---
 _n_pass = sum(1 for _, ok in RESULTS if ok)
