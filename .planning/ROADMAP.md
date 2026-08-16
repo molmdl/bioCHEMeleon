@@ -229,12 +229,22 @@ Plans:
   3. The winning message shows time taken, hints used, and reveals used
   4. After winning, all hiders are highlighted with an explanation of why each was hard to spot (the teachable debrief)
   5. README.md is updated to reflect the final shipped feature set, install instructions, and usage
-**Plans**: TBD
+**Plans**: 11 plans
 
 **Note for planning:** The controls-help reference (SC2) and README/tooltips (SC1/SC5) should remind the user that toggling/changing the active representation in PyMOL can help spot hiders — since hiders blend into a specific rep, switching reps (e.g. hiding cartoon, showing spheres) can make a cartoon hider stand out. This is a legitimate observation strategy, not a cheat.
 
 Plans:
-- [ ] 10-01: TBD during planning
+- [ ] 10-01-PLAN.md — TDD pure debrief formatter (DEBRIEF_EXPLANATIONS + format_debrief_text in setup_state.py + tests) — Wave 1
+- [ ] 10-02-PLAN.md — Setup-tab tooltips on ~25 widgets (UX-01) — Wave 1
+- [ ] 10-03-PLAN.md — Help button + modal Help dialog with 6 sections (UX-01 + UX-02, verified controls) — Wave 1
+- [ ] 10-04-PLAN.md — Pre-implementation audit: verify 10 research claims vs current code (read-only) — Wave 1
+- [ ] 10-05-PLAN.md — Endgame win-stats GUI (DIFF-02): _finish_win setInformativeText time/hints/reveals — Wave 2
+- [ ] 10-06-PLAN.md — Endgame debrief GUI (DIFF-03): _show_all_hiders_for_debrief + _finish_debrief + moved cleanup gate — Wave 3
+- [ ] 10-07-PLAN.md — Game-tab tooltips on ~8 widgets (UX-01) — Wave 4
+- [ ] 10-08-PLAN.md — Headless smoke for the debrief fragment-aware cmd.show path — Wave 4
+- [ ] 10-09-PLAN.md — Human-verify checkpoint: all 5 success criteria in real Windows PyMOL (autonomous: false) — Wave 5
+- [ ] 10-10-PLAN.md — README finalization (SC5): keep vibe-coding warning, remove UNDER DEVELOPMENT, v1 complete — Wave 6
+- [ ] 10-11-PLAN.md — Post-implementation audit: verify README + docs vs shipped code (read-only) — Wave 7
 
 ### Phase 11: Alt-conf Cartoon/Ribbon Hider (v1 Follow-up)
 **Goal**: Replace the terminal-extension cartoon hider with "replicate a segment (loop) as an alternate position using C-alpha geometry" for a connected, blended visual — closing the Phase 5 cosmetic gap (disconnected-look on 1ubq) and adding full ribbon support.
@@ -291,7 +301,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 7. Found-Hider Management, Restart & Cleanup | 3/3 | ✓ Complete | 2026-08-12 |
 | 8. Persistence & Shareable Puzzles | 5/5 | ✓ Complete | 2026-08-16 |
 | 9. Large Demo Fetch & Source Attribution | 4/4 | ✓ Complete (Phase 11 alt-conf bug on membrane proteins documented for follow-up) | 2026-08-16 |
-| 10. Polish, Endgame & Help | 0/TBD | Not started | - |
+| 10. Polish, Endgame & Help | 0/11 | Not started | - |
 | 11. Alt-conf Cartoon/Ribbon Hider (v1 Follow-up) | 8/8 | ✓ Complete | 2026-08-16 |
 
 ## Research Flags
