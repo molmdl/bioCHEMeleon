@@ -16,7 +16,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Setup Tab Configuration & Bundled Demos** - Full Setup form + config buttons + bundled demo PDBs
 - [x] **Phase 3: Mutation Safety & Hider Registry Foundation** - De-risk object mutation + registry (highest-risk area)
 - [x] **Phase 4: MVP Core Loop (Sphere)** - THE core value: load → generate spheres → click-to-find → win
-- [ ] **Phase 04.1: Per-rep remaining hiders display (easy mode)** (INSERTED) - Close the GAME-03 per-rep display gap deferred from Phase 4
+- [x] **Phase 04.1: Per-rep remaining hiders display (easy mode)** (INSERTED) - Close the GAME-03 per-rep display gap deferred from Phase 4 ✓ 2026-08-17
 - [x] **Phase 5: Line/Stick & Cartoon Generators** - The harder blend-in generators (cartoon = L-complexity swing)
 - [x] **Phase 6: Hint & Reveal** - Get-help / give-up mechanics with usage tracking
 - [x] **Phase 7: Found-Hider Management, Restart & Cleanup** - Manage found hiders, reset, and clean the model
@@ -123,9 +123,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04.1-01-PLAN.md — TDD registry.remaining_by_rep (hidden-filtered per-rep data source, pure/WSL)
-- [ ] 04.1-02-PLAN.md — TDD setup_state.format_remaining (pure label formatter, pure/WSL)
-- [ ] 04.1-03-PLAN.md — Plumb _easy_mode + pull-model _update_remaining + headless smoke + human-verify (GAME-03 close)
+- [x] 04.1-01-PLAN.md — TDD registry.remaining_by_rep (hidden-filtered per-rep data source, pure/WSL)
+- [x] 04.1-02-PLAN.md — TDD setup_state.format_remaining (pure label formatter, pure/WSL)
+- [x] 04.1-03-PLAN.md — Plumb _easy_mode + pull-model _update_remaining + headless smoke + human-verify (GAME-03 close)
 
 **Details:**
 Gap analysis identified 3 work items: (1) plumb `difficulty_easy` from setup state → `GameTab.start_countdown` (new param or controller attribute); (2) extend the `_update_remaining` callback to carry `counts_by_rep` (signature change or new callback, backward-compat with Phase 6's `on_counts_changed`); (3) render per-rep breakdown in the label when easy mode is active. Qt+cmd-coupled — follows the Phase 7 human-verify checkpoint pattern (unit-test pure helper for formatting, headless-smoke the counts_by_rep read path, human-verify the label renders).
@@ -285,7 +285,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 2. Setup Tab Configuration & Bundled Demos | 7/7 | ✓ Complete | 2026-08-05 |
 | 3. Mutation Safety & Hider Registry Foundation | 20/20 | ✓ Complete | 2026-08-06 |
 | 4. MVP Core Loop (Sphere) | 6/6 | ✓ Complete | 2026-08-08 |
-| 04.1. Per-rep remaining hiders display (easy mode) | 0/3 | ◆ Planned (INSERTED) | - |
+| 04.1. Per-rep remaining hiders display (easy mode) | 3/3 | ✓ Complete | 2026-08-17 |
 | 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 + 05-09 | ✓ Complete (v1 scope; alt-conf deferred to Phase 11) | 2026-08-10 |
 | 6. Hint & Reveal | 3/3 | ✓ Complete | 2026-08-10 |
 | 7. Found-Hider Management, Restart & Cleanup | 3/3 | ✓ Complete | 2026-08-12 |

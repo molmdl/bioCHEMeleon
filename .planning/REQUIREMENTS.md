@@ -45,7 +45,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **GAME-01**: Rolling info box (status messages / log of clicks, hints, reveals)
 - [ ] **GAME-02**: Timer — counts up after the game starts, stops on win
-- [ ] **GAME-03**: Remaining hiders count — total, and per-representation when the easy difficulty toggle is set
+- [x] **GAME-03**: Remaining hiders count — total, and per-representation when the easy difficulty toggle is set
 - [x] **GAME-04**: Import button — import a game prepared by Generate & export
 - [x] **GAME-05**: Hint button — change color of the N atoms/residues around a hider (colors neighbors, not the hider itself)
 - [x] **GAME-06**: Reveal-one hider button — asks the user to confirm giving up, then marks one random hider "found" and counts the reveal use
@@ -153,7 +153,7 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 | BTN-07 | Phase 4 | Complete |
 | GAME-01 | Phase 4 | Complete |
 | GAME-02 | Phase 4 | Complete |
-| GAME-03 | Phase 4 | Complete |
+| GAME-03 | Phase 4 + 4.1 | Complete |
 | HIDER-03 | Phase 5 | Complete |
 | HIDER-05 | Phase 5 | Complete |
 | GAME-05 | Phase 6 | Complete |
@@ -183,4 +183,4 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 
 ---
 *Requirements defined: 2026-08-02*
-*Last updated: 2026-08-16 after Phase 11 completion — HIDER-03/HIDER-05 alt-conf cosmetic gap from Phase 5 closed by Phase 11 (single-state new-chain copy refactor; requirement status unchanged: both were already Complete from Phase 5; Phase 11 was a v1 follow-up, not a new requirement)*
+*Last updated: 2026-08-17 after Phase 4.1 completion — GAME-03 per-rep display gap (deferred from Phase 4 at 04-RESEARCH.md:618) closed by Phase 4.1 (remaining_by_rep pure data source + format_remaining pure formatter + _easy_mode pull-model plumbing; 3 plans, 7/7 must-haves verified, human-verify APPROVED in real Windows PyMOL GUI with 1znf + 1ubq)*
