@@ -1,6 +1,6 @@
 # Phase 11 Bug: Membrane-protein cartoon-segment hider — duplicate anchor id
 
-**Status:** resolved — root cause found, fix applied + headless-verified (2026-08-16)
+**Status:** resolved — fix applied + headless-verified (commit 0702563); GUI human-verify PENDING (2026-08-16)
 **Scope:** Phase 11 (cartoon/ribbon segment hider), NOT Phase 9
 **Severity:** blocks mixed-rep on membrane proteins (1gzm, 3gp6, sasdpg4) — sphere hiders work fine
 **Triggered by:** selecting 1gzm / 3gp6 / sasdpg4 (MemProtMD / SASBDB demos) + any non-sphere hider (cartoon or mixed-rep with cartoon/ribbon)
