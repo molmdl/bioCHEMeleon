@@ -20,7 +20,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Hint & Reveal** - Get-help / give-up mechanics with usage tracking
 - [x] **Phase 7: Found-Hider Management, Restart & Cleanup** - Manage found hiders, reset, and clean the model
 - [x] **Phase 8: Persistence & Shareable Puzzles** - Save/load game state + generate&export / import ✓ 2026-08-16
-- [ ] **Phase 9: Large Demo Fetch & Source Attribution** - Membrane/glycoprotein fetch + DATA_SOURCES.md
+- [x] **Phase 9: Large Demo Fetch & Source Attribution** - Membrane/glycoprotein fetch + DATA_SOURCES.md
 - [ ] **Phase 10: Polish, Endgame & Help** - Tooltips, controls help, win-screen stats, post-game debrief
 - [x] **Phase 11: Alt-conf Cartoon/Ribbon Hider (v1 Follow-up)** - Re-research + implement the alt-conf segment replication approach (replaces terminal extension for connected cartoon blend)
 
@@ -195,10 +195,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — TDD pure-layer foundation: extend DEMO_MANIFEST to 9 entries (uniform source schema), TIER_LABELS, 4wb3 'mixed'→'hard', randomize fetched-exclusion, pure strip_resn_from_pdb helper (Wave 1)
-- [ ] 09-02-PLAN.md — demos.py split API (download_large_demo/finalize_large_demo/load_cached_demo/cache helpers) + load_demo source-branching + headless smoke (Wave 2, depends on 01)
-- [ ] 09-03-PLAN.md — Qt layer: modeless cancelable QProgressDialog + demo sub-menu tier display (DIFF-05) + human-verify (Wave 3, depends on 02)
-- [ ] 09-04-PLAN.md — DATA_SOURCES.md (DEMO-04) + oxy.ac.uk/DOI corrections + human-verify license/citation accuracy (Wave 1, parallel with 01)
+- [x] 09-01-PLAN.md — TDD pure-layer foundation: extend DEMO_MANIFEST to 9 entries (uniform source schema), TIER_LABELS, 4wb3 'mixed'→'hard', randomize fetched-exclusion, pure strip_resn_from_pdb helper (Wave 1)
+- [x] 09-02-PLAN.md — demos.py split API (download_large_demo/finalize_large_demo/load_cached_demo/cache helpers) + load_demo source-branching + headless smoke (Wave 2, depends on 01)
+- [x] 09-03-PLAN.md — Qt layer: modeless cancelable QProgressDialog + demo sub-menu tier display (DIFF-05) + human-verify (Wave 3, depends on 02) — 2 runtime fixes applied during checkpoint (MemProtMD .dry extension → format='pdb'; SASBDB SSL HARICA → fallback-no-verify); Phase 11 alt-conf bug on membrane proteins discovered + documented (out of scope)
+- [x] 09-04-PLAN.md — DATA_SOURCES.md (DEMO-04) + oxy.ac.uk/DOI corrections + human-verify license/citation accuracy (Wave 1, parallel with 01)
 
 ### Phase 10: Polish, Endgame & Help
 **Goal**: The game is polished with in-game explanations, PyMOL controls help, and a rich endgame experience (win-screen stats + post-game debrief) that delivers the teachable moment. The README is finalized to reflect the shipped product.
@@ -268,7 +268,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 6. Hint & Reveal | 3/3 | ✓ Complete | 2026-08-10 |
 | 7. Found-Hider Management, Restart & Cleanup | 3/3 | ✓ Complete | 2026-08-12 |
 | 8. Persistence & Shareable Puzzles | 5/5 | ✓ Complete | 2026-08-16 |
-| 9. Large Demo Fetch & Source Attribution | 0/4 | Not started (4 plans in 3 waves) | - |
+| 9. Large Demo Fetch & Source Attribution | 4/4 | ✓ Complete (Phase 11 alt-conf bug on membrane proteins documented for follow-up) | 2026-08-16 |
 | 10. Polish, Endgame & Help | 0/TBD | Not started | - |
 | 11. Alt-conf Cartoon/Ribbon Hider (v1 Follow-up) | 8/8 | ✓ Complete | 2026-08-16 |
 

@@ -66,9 +66,9 @@ Requirements for initial release. Each maps to roadmap phases.
   - Protein Easy: 1znf; Hard: 1xdn
   - Nucleic acid Easy: RNA 5E54, DNA 1K8P; Hard: 2QBZ
   - Mixed: 4WB3
-- [ ] **DEMO-02**: Fetch the large membrane-protein demo PDBs from MemProtMD on demand (1GZM helix, 3GP6 sheets) with full membrane (dppc-atomistic); strip water and salt, then compress before caching
-- [ ] **DEMO-03**: Fetch the glycoprotein-with-glycan demo from SASBDB on demand (an Alpha-1-glycoprotein model); cite the source and IDs in documentation
-- [ ] **DEMO-04**: Produce a `DATA_SOURCES.md` documenting all PDB IDs + DOIs + SASBDB IDs + MemProtMD attribution; verify MemProtMD per-entry license before bundling
+- [x] **DEMO-02**: Fetch the large membrane-protein demo PDBs from MemProtMD on demand (1GZM helix, 3GP6 sheets) with full membrane (dppc-atomistic); strip water and salt, then compress before caching
+- [x] **DEMO-03**: Fetch the glycoprotein-with-glycan demo from SASBDB on demand (an Alpha-1-glycoprotein model); cite the source and IDs in documentation
+- [x] **DEMO-04**: Produce a `DATA_SOURCES.md` documenting all PDB IDs + DOIs + SASBDB IDs + MemProtMD attribution; verify MemProtMD per-entry license before bundling
 
 ### Accessibility & Clarity
 
@@ -81,7 +81,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **DIFF-02**: Win-screen stats — show time taken, hints used, and reveals used on the winning message
 - [ ] **DIFF-03**: Post-game debrief — after win, highlight all hiders and explain why each was hard to spot (the teachable moment)
 - [x] **DIFF-04**: Color picker for found-hider highlight — player chooses how found hiders are marked (accessibility / color-blind support)
-- [ ] **DIFF-05**: Difficulty-tiered demo metadata surfaced in the demo sub-menu (Easy/Hard/Challenge/Very challenging)
+- [x] **DIFF-05**: Difficulty-tiered demo metadata surfaced in the demo sub-menu (Easy/Hard/Challenge/Very challenging)
 
 ## v2 Requirements
 
@@ -167,10 +167,10 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 | GAME-09 | Phase 8 | Complete |
 | GAME-04 | Phase 8 | Complete |
 | BTN-05 | Phase 8 | Complete |
-| DEMO-02 | Phase 9 | Pending |
-| DEMO-03 | Phase 9 | Pending |
-| DEMO-04 | Phase 9 | Pending |
-| DIFF-05 | Phase 9 | Pending |
+| DEMO-02 | Phase 9 | Complete |
+| DEMO-03 | Phase 9 | Complete |
+| DEMO-04 | Phase 9 | Complete |
+| DIFF-05 | Phase 9 | Complete |
 | UX-01 | Phase 10 | Pending |
 | UX-02 | Phase 10 | Pending |
 | DIFF-02 | Phase 10 | Pending |
