@@ -19,7 +19,7 @@ from pymol import cmd
 
 from .setup_state import (
     DEFAULTS, SETUP_FORMAT, GAME_REPS, DEMO_MANIFEST,
-    PDB_POOL, _validate_pdb_code,
+    TIER_LABELS, PDB_POOL, _validate_pdb_code,
     hider_count_cap, randomize_state, validate_state,
 )
 from .demos import (
@@ -122,10 +122,20 @@ class SetupTab(QtWidgets.QWidget):
         # page 2: bundled demo (combo populated from DEMO_MANIFEST)
         p2 = QtWidgets.QWidget(); p2l = QtWidgets.QHBoxLayout(p2)
         self.demo_combo = QtWidgets.QComboBox()
+        # Phase 9 DIFF-05/SC4: surface the 4-tier difficulty label via
+        # TIER_LABELS (Easy/Hard/Challenge/Very challenging). The manifest
+        # stores identifier-safe keys (easy/hard/challenge/very_challenging
+        # -- no spaces, grep-able); TIER_LABELS maps each to the exact display
+        # string the success criterion specifies. The .title() fallback
+        # handles any unmapped value defensively. The 09-01 manifest is
+        # tier-ordered (easy -> hard -> challenge -> very_challenging) so the
+        # combo shows a natural difficulty progression. 9 items < the 15-item
+        # QTreeWidget threshold (Phase 2 research) -- keep the flat combo.
         for did, meta in DEMO_MANIFEST.items():
+            tier = TIER_LABELS.get(meta['difficulty'], meta['difficulty'].title())
             self.demo_combo.addItem(
-                "{} — {} ({})".format(meta['category'], did, meta['difficulty']),
-                did)
+                "{category} — {id} ({tier})".format(
+                    category=meta['category'], id=did, tier=tier), did)
         p2l.addWidget(self.demo_combo)
         self.target_stack.addWidget(p0)
         self.target_stack.addWidget(p1)
