@@ -22,6 +22,7 @@ from biochemeleon.setup_state import (
     _validate_pdb_code,
     hider_count_cap, randomize_state, validate_state,
     TIER_LABELS, STRIP_RESN_MEMPROTMD, strip_resn_from_pdb,
+    format_remaining,
 )
 
 
@@ -676,6 +677,66 @@ class TestStripResnFromPdb(unittest.TestCase):
         text = "HETATM    1  O   HOH     1\n"
         result = strip_resn_from_pdb(text, STRIP_RESN_MEMPROTMD)
         self.assertIn("HOH", result)
+
+
+class TestFormatRemaining(unittest.TestCase):
+    """Phase 4.1 GAME-03: pure remaining-hiders label formatter.
+
+    Hard mode shows the total only (unchanged from Phase 4, SC2). Easy
+    mode appends a per-rep breakdown in GAME_REPS order, keeping only
+    reps whose count is greater than zero, separated by two spaces
+    before the opening paren (SC1). A None or empty counts dict, or
+    an all-zero win state, collapses to the total-only form so the
+    label never shows an empty parenthetical.
+    """
+
+    def test_format_remaining_hard_mode(self):
+        # Hard mode: total only, no parenthetical (SC2, Phase 4 unchanged).
+        self.assertEqual(
+            format_remaining(7, {'spheres': 3, 'sticks': 3, 'cartoon': 2}, False),
+            "Remaining: 7")
+
+    def test_format_remaining_easy_mode_mixed(self):
+        # Easy mode: per-rep breakdown in GAME_REPS order (sticks before
+        # spheres before cartoon), two spaces before the paren (SC1).
+        self.assertEqual(
+            format_remaining(7, {'spheres': 2, 'sticks': 3, 'cartoon': 2}, True),
+            "Remaining: 7  (sticks: 3, spheres: 2, cartoon: 2)")
+
+    def test_format_remaining_easy_mode_filters_zero(self):
+        # Easy mode: reps whose count is zero are omitted from the paren.
+        self.assertEqual(
+            format_remaining(4, {'spheres': 2, 'sticks': 0, 'cartoon': 2}, True),
+            "Remaining: 4  (spheres: 2, cartoon: 2)")
+
+    def test_format_remaining_easy_mode_all_zero(self):
+        # Win state: every count is zero -> total-only, no empty paren.
+        self.assertEqual(
+            format_remaining(0, {'spheres': 0, 'sticks': 0}, True),
+            "Remaining: 0")
+
+    def test_format_remaining_none_counts(self):
+        # None counts -> safe total-only default.
+        self.assertEqual(format_remaining(7, None, True), "Remaining: 7")
+
+    def test_format_remaining_empty_dict(self):
+        # Empty counts dict -> safe total-only default.
+        self.assertEqual(format_remaining(7, {}, True), "Remaining: 7")
+
+    def test_format_remaining_two_space_separator(self):
+        # Exactly two spaces separate the total and the opening paren;
+        # no extra space before, and the substring is present.
+        out = format_remaining(7, {'spheres': 2}, True)
+        self.assertIn("  (", out)
+        self.assertEqual(out, "Remaining: 7  (spheres: 2)")
+
+    def test_format_remaining_game_reps_order(self):
+        # Insertion order is anti-GAME_REPS (cartoon before spheres);
+        # output must follow GAME_REPS order (spheres before cartoon),
+        # not the dict's insertion order.
+        self.assertEqual(
+            format_remaining(3, {'cartoon': 2, 'spheres': 1}, True),
+            "Remaining: 3  (spheres: 1, cartoon: 2)")
 
 
 if __name__ == '__main__':
