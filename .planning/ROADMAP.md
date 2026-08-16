@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Line/Stick & Cartoon Generators** - The harder blend-in generators (cartoon = L-complexity swing)
 - [x] **Phase 6: Hint & Reveal** - Get-help / give-up mechanics with usage tracking
 - [x] **Phase 7: Found-Hider Management, Restart & Cleanup** - Manage found hiders, reset, and clean the model
-- [ ] **Phase 8: Persistence & Shareable Puzzles** - Save/load game state + generate&export / import
+- [x] **Phase 8: Persistence & Shareable Puzzles** - Save/load game state + generate&export / import ✓ 2026-08-16
 - [ ] **Phase 9: Large Demo Fetch & Source Attribution** - Membrane/glycoprotein fetch + DATA_SOURCES.md
 - [ ] **Phase 10: Polish, Endgame & Help** - Tooltips, controls help, win-screen stats, post-game debrief
 - [x] **Phase 11: Alt-conf Cartoon/Ribbon Hider (v1 Follow-up)** - Re-research + implement the alt-conf segment replication approach (replaces terminal extension for connected cartoon blend)
@@ -181,7 +181,7 @@ Plans:
 - [x] 08-02-PLAN.md — TDD build_bcm_dict + parse_bcm_dict pure functions in NEW persistence.py + unit tests in NEW test_persistence.py (Wave 2) ✓ 2026-08-12
 - [x] 08-03-PLAN.md — apply_bcm_dict + write_bcmz/read_bcmz/resolve_target file I/O in persistence.py + GameController.import_state + _is_imported/_imported_bcm in game.py (Wave 3, depends on 01+02) ✓ 2026-08-12
 - [x] 08-04-PLAN.md — GUI wiring: export_btn (gui_setup) + begin_row + start_countdown(elapsed) + _begin_play resume fix (gui_game) + _prepare_and_start refactor + _on_export/_on_import/_on_save/_on_restart_imported + modified _on_restart/_on_cleanup (__init__) (Wave 4, depends on 03) ✓ 2026-08-12
-- [ ] 08-05-PLAN.md — Headless smoke (export/import round-trip, scoped save, reconcile, Restart/Cleanup-on-imported) + human-verify checkpoint (3 success criteria + imported-game lifecycle) (Wave 5, depends on 04)
+- [x] 08-05-PLAN.md — Headless smoke (export/import round-trip, scoped save, reconcile, Restart/Cleanup-on-imported) + human-verify checkpoint (3 success criteria + imported-game lifecycle) (Wave 5, depends on 04) ✓ 2026-08-16
 
 ### Phase 9: Large Demo Fetch & Source Attribution
 **Goal**: The demo set is rounded out with large fetched molecules (membrane proteins, glycoprotein) and every source is fully attributed with verified licenses.
@@ -267,7 +267,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 5. Line/Stick & Cartoon Generators | 5/5 + 05-07 + 05-09 | ✓ Complete (v1 scope; alt-conf deferred to Phase 11) | 2026-08-10 |
 | 6. Hint & Reveal | 3/3 | ✓ Complete | 2026-08-10 |
 | 7. Found-Hider Management, Restart & Cleanup | 3/3 | ✓ Complete | 2026-08-12 |
-| 8. Persistence & Shareable Puzzles | 0/5 | Not started (5 plans in 4 waves) | - |
+| 8. Persistence & Shareable Puzzles | 5/5 | ✓ Complete | 2026-08-16 |
 | 9. Large Demo Fetch & Source Attribution | 0/4 | Not started (4 plans in 3 waves) | - |
 | 10. Polish, Endgame & Help | 0/TBD | Not started | - |
 | 11. Alt-conf Cartoon/Ribbon Hider (v1 Follow-up) | 8/8 | ✓ Complete | 2026-08-16 |
