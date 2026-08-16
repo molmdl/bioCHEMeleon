@@ -65,6 +65,16 @@ class PluginDialog(QtWidgets.QDialog):
         # Active GameController (held across the round so cleanup/restart can
         # reach it later; Phase 4 only needs it to stay referenced).
         self._controller = None
+        # Phase 9: async large-demo fetch state. _pending_large_demo is the
+        # demo_id of an in-flight fetch (None when no fetch is pending);
+        # _pending_large_demo_state is the stashed Setup state dict the
+        # drain's 'done' branch hands to _continue_after_large_demo_fetch.
+        # _on_start checks _pending_large_demo to distinguish "async fetch
+        # in progress" (just return; the drain does tab switch + countdown)
+        # from "real failure" (QMessageBox already shown). Set by
+        # _prepare_and_start; cleared on EVERY terminal drain branch.
+        self._pending_large_demo = None
+        self._pending_large_demo_state = None
 
         # Wire the Start button (BTN-07) -> _on_start (defined below).
         self.setup_tab.start_btn.clicked.connect(self._on_start)
@@ -75,6 +85,18 @@ class PluginDialog(QtWidgets.QDialog):
         self.setup_tab.export_btn.clicked.connect(self._on_export)
         self.game_tab._import_btn.clicked.connect(self._on_import)
         self.game_tab._save_btn.clicked.connect(self._on_save)
+        # Phase 9 BTN-05 async guard: disable Export for uncached fetched
+        # demos so _on_export can never reach _resolve_large_demo's async
+        # continuation (which bakes in Start's tab-switch + countdown --
+        # wrong for Export, which must save a .bcmz and stay on Setup).
+        # Re-evaluated on demo selection (currentIndexChanged) and after a
+        # successful fetch (the drain's 'done' branch calls
+        # _update_export_enabled). The demo_combo already emits
+        # currentIndexChanged to SetupTab._on_target_changed (gui_setup.py);
+        # Qt allows multiple slots, so this is additive (no conflict).
+        self.setup_tab.demo_combo.currentIndexChanged.connect(
+            self._update_export_enabled)
+        self._update_export_enabled()
 
         # Layout
         layout = QtWidgets.QVBoxLayout(self)
@@ -85,28 +107,49 @@ class PluginDialog(QtWidgets.QDialog):
         switch to Game tab -> 3-2-1 countdown.
 
         Thin wrapper over _prepare_and_start (Phase 8 refactor: _on_export
-        reuses the same prepare path without the tab switch + countdown)."""
+        reuses the same prepare path without the tab switch + countdown).
+        Phase 9 re-entrancy: if _prepare_and_start returns (None, None, [])
+        because a large-demo fetch is async in progress (detected via
+        _pending_large_demo is not None), just return -- the drain's 'done'
+        branch does the tab switch + countdown after the fetch + start
+        complete. A real failure (pending is None) also returns -- the
+        QMessageBox was already shown by _prepare_and_start."""
         state = self.setup_tab.collect_state()
         controller, target_obj, _ = self._prepare_and_start(state)
         if controller is None:
-            return  # _prepare_and_start already showed a QMessageBox
+            if self._pending_large_demo is not None:
+                return  # async fetch in progress; drain does tab switch + countdown
+            return  # real failure; QMessageBox already shown
         self.tabs.setCurrentWidget(self.game_tab)
         self.game_tab.start_countdown(self._controller)
 
     def _prepare_and_start(self, state):
-        """Resolve target -> collapse -> build hider_specs -> free valences ->
-        clean prior game -> GameController + start. Returns
+        """Resolve target -> delegate to _continue_after_large_demo_fetch
+        (collapse -> build hider_specs -> start game). Returns
         ``(controller, target_obj, _gen_warnings)`` on success, or
-        ``(None, None, [])`` after a QMessageBox on failure.
+        ``(None, None, [])`` after a QMessageBox on failure (or silently for
+        an async large-demo fetch in progress -- the drain owns the
+        error/cancel UI for the async path).
 
-        Behavior-preserving extraction of _on_start steps 1-4 (Phase 8
-        refactor). _on_start + _on_export both call this; _on_start then
-        switches to the Game tab + starts the countdown, _on_export saves
-        the .bcmz + stays on Setup.
-        """
-        from . import generators, game, demos, mutation
-        import random as _random
-        per_rep = state.get("per_rep", {})  # {rep: count} (Phase 2 collect_state)
+        Behavior-preserving extraction of _on_start steps (Phase 8 refactor;
+        Phase 9 split: the post-resolution body is extracted to
+        _continue_after_large_demo_fetch so BOTH the synchronous path
+        (bundled/loaded/fetch -- calls it directly) and the async path
+        (large demo -- the drain's 'done' branch calls it with the stashed
+        _pending_large_demo_state) share the same continuation). _on_start +
+        _on_export both call this; _on_start then switches to the Game tab +
+        starts the countdown, _on_export saves the .bcmz + stays on Setup.
+
+        Phase 9 fetched-demo branch: if demos.load_demo returns None for a
+        fetched demo (cache miss), stash _pending_large_demo +
+        _pending_large_demo_state, call _resolve_large_demo (modeless
+        QProgressDialog + worker + QTimer drain), and return (None, None,
+        []) SILENTLY -- _resolve_large_demo's drain owns ALL error/cancel
+        UI (QMessageBox.warning on 'error'; silent close on 'canceled').
+        The existing 'Demo failed' QMessageBox is ONLY for the bundled-demo
+        None case (file missing on disk); the fetched-demo branch bypasses
+        it (returns silently before reaching it)."""
+        from . import demos
         # 1. Resolve target object
         mode = state.get("target_mode", "loaded")
         target_obj = None
@@ -141,12 +184,47 @@ class PluginDialog(QtWidgets.QDialog):
             if not target_obj or target_obj not in demos.list_loaded_molecule_objects():
                 target_obj = demos.load_demo(demo_id)
                 if target_obj is None:
+                    # Phase 9: fetched demo cache miss -> async fetch. The
+                    # drain owns ALL error/cancel UI (QMessageBox on
+                    # 'error'; silent on 'canceled'); _prepare_and_start
+                    # returns SILENTLY so no double-dialog on fetch failure.
+                    # The existing 'Demo failed' QMessageBox below is ONLY
+                    # for the bundled-demo None case (file missing on disk).
+                    if demos.DEMO_MANIFEST.get(demo_id, {}).get(
+                            'source', 'bundled') != 'bundled':
+                        self._pending_large_demo = demo_id
+                        self._pending_large_demo_state = state
+                        self._resolve_large_demo(demo_id)
+                        return None, None, []  # async fetch in progress
                     QtWidgets.QMessageBox.warning(self, "Demo failed",
                         "Could not load demo %r." % demo_id)
                     return None, None, []
         else:
             QtWidgets.QMessageBox.warning(self, "No target", "Unknown target mode.")
             return None, None, []
+        # Synchronous path: target resolved (bundled/loaded/fetch). The
+        # post-resolution body (collapse -> hider_specs -> start game) is
+        # extracted to _continue_after_large_demo_fetch so the async
+        # large-demo path (the drain's 'done' branch) can share it.
+        return self._continue_after_large_demo_fetch(target_obj, state)
+
+    def _continue_after_large_demo_fetch(self, target_obj, state):
+        """Finish _prepare_and_start's remaining steps now that the target
+        object is loaded: collapse multi-state, build hider_specs, clean
+        prior game, start the GameController. Called by BOTH the
+        synchronous path (bundled/loaded/fetch -- _prepare_and_start calls
+        it directly with its in-scope state) and the async path (large
+        demo -- the drain's 'done' branch calls it with the stashed
+        self._pending_large_demo_state). Returns (controller, target_obj,
+        warnings) on success, or (None, None, []) after a QMessageBox on
+        failure.
+
+        Behavior-preserving extraction of the post-resolution body (Phase
+        9 split; the body is verbatim from _prepare_and_start lines 150-307
+        -- no logic change, just moved so the async path can share it)."""
+        from . import generators, game, demos, mutation
+        import random as _random
+        per_rep = state.get("per_rep", {})  # {rep: count} (Phase 2 collect_state)
         # 2. Prepare target: collapse multi-state objects BEFORE data
         #    collection. Multi-state objects (e.g. NMR ensembles like 1znf
         #    with 37 models) break backup/verify_intact (mutations only
@@ -162,8 +240,8 @@ class PluginDialog(QtWidgets.QDialog):
         extent = cmd.get_extent(target_obj)
         hider_specs = []
         _gen_warnings = []  # collected under-generation warnings (05-05 Issue 1)
-        # Pre-fetch the data the pure generators need (cmd-coupled, here in
-        # _prepare_and_start so generators.py stays pure):
+        # Pre-fetch the data the pure generators need (cmd-coupled, here so
+        # generators.py stays pure):
         # For line/stick: pool of real neighbor backbone-anchor atom ids (to
         # bond hiders to). Uses 'name CA or name P' so BOTH protein (CA =
         # C-alpha) and nucleic acid (P = phosphate) backbones are covered —
@@ -275,9 +353,9 @@ class PluginDialog(QtWidgets.QDialog):
         # from the clean backup to a NEW chain-H fragment (insert_cartoon_segment_hider)
         # — they do NOT attach at a terminus, so the N-terminal valence does NOT
         # need freeing (the legacy terminal-extension path that needed it is no
-        # longer used by _prepare_and_start). ACE caps + H atoms stay in the
-        # object; backup.snapshot (inside gc.start) captures them and
-        # backup.restore (cleanup) restores them.
+        # longer used). ACE caps + H atoms stay in the object; backup.snapshot
+        # (inside gc.start) captures them and backup.restore (cleanup)
+        # restores them.
         # 4. Start the game (snapshot -> insert -> register; Phase 3 proven)
         # Bug 3: if a previous game is still active (mid-game, or won but not
         # yet cleaned up), clean it up first so no stale hiders accumulate in
@@ -285,11 +363,11 @@ class PluginDialog(QtWidgets.QDialog):
         # would make every old-hider click a "Miss!" and the atom count would
         #     grow each round. cleanup() is idempotent (no-op if _started=False).
         # Wizard lifecycle fix (Phase 7): deactivate the old PickWizard before
-        # cleanup. Without this, _prepare_and_start creates a new wizard in
-        # _begin_play without deactivating the old one, corrupting
-        # mouse_selection_mode (stays at 0) + losing the prior-wizard
-        # reference. Fixes the bug for BOTH Start-mid-game AND Restart
-        # (Restart calls _on_start -> _prepare_and_start).
+        # cleanup. Without this, a new wizard is created in _begin_play
+        # without deactivating the old one, corrupting mouse_selection_mode
+        # (stays at 0) + losing the prior-wizard reference. Fixes the bug for
+        # BOTH Start-mid-game AND Restart (Restart calls _on_start ->
+        # _prepare_and_start -> here).
         if self.game_tab._wizard is not None:
             self.game_tab._wizard.deactivate()
             self.game_tab._wizard = None
@@ -305,6 +383,140 @@ class PluginDialog(QtWidgets.QDialog):
                 str(exc))
             return None, None, []
         return self._controller, target_obj, _gen_warnings
+
+    def _resolve_large_demo(self, demo_id):
+        """Orchestrate a modeless cancelable progress dialog for a large
+        (fetched) demo download + finalize. Called from _prepare_and_start
+        when mode=='demo' and the manifest entry's source != 'bundled' and
+        the cache is a miss. Returns None to mean "async fetch in progress"
+        (NOT "failed" -- failure is async, surfaced later by the drain).
+
+        SC1 design: the QProgressDialog is MODELESS (shown via the non-modal
+        show call, NEVER the modal blocking form) so the 3D viewer stays
+        interactive (rotatable) during the download. A worker thread does
+        the urllib download (Pitfall 6: worker is stdlib-only, makes NO
+        PyMOL cmd API calls); a recursive QTimer.singleShot drain on the
+        main thread polls a queue for progress/done/error/canceled events,
+        updates the dialog, and on 'done' calls finalize_large_demo (cmd.*
+        on the main thread) then the continuation (tab switch + countdown).
+
+        ERROR-PATH OWNERSHIP: the drain owns ALL error/cancel UI
+        (QMessageBox.warning on 'error'; silent close on 'canceled' and
+        on finalize-None). _prepare_and_start already returned silently,
+        so no double-dialog. The drain clears both pending flags on EVERY
+        terminal branch (done/error/canceled/finalize-None/worker-dead).
+
+        Source: 09-RESEARCH-pipeline.md Pattern 1 (lines 75-154); Qt 5.15
+        official docs (modeless QProgressDialog + QTimer + canceled signal).
+        """
+        import threading, queue
+        from . import demos
+        # 1. Cache hit? (defensive re-check -- the primary cache-hit path is
+        # load_demo returning non-None in _prepare_and_start).
+        obj = demos.load_cached_demo(demo_id)
+        if obj is not None:
+            return obj  # cache hit -- already loaded, synchronous
+
+        # 2. Cache miss -- show the modeless cancelable progress dialog.
+        progress = QtWidgets.QProgressDialog(
+            "Downloading %s…" % demo_id, "Cancel", 0, 100, self.window())
+        progress.setWindowModality(QtCore.Qt.NonModal)   # MODELESS (non-modal show)
+        progress.setAutoClose(False)   # we close manually (autoClose default
+        progress.setAutoReset(False)  #   True would hide mid-pipeline)
+        progress.setMinimumDuration(500)  # show after 500ms (avoid flicker)
+        progress.setValue(0)
+        progress.show()                 # <-- non-modal show; NEVER the modal form
+
+        q = queue.Queue()
+        cancel = threading.Event()
+        progress.canceled.connect(cancel.set)   # Cancel button -> set the Event
+
+        # 3. Spawn the urllib worker (Pitfall 6: worker is stdlib-only).
+        tmp_path = demos.temp_download_path(demo_id)
+        worker = threading.Thread(
+            target=demos.download_large_demo,
+            args=(demo_id, tmp_path, q, cancel), daemon=True)
+        worker.start()
+
+        # 4. Main-thread drain via recursive QTimer (keeps the Qt event loop
+        #    running so the 3D viewer stays smooth between drains).
+        def drain():
+            # (a) drain any queued progress events (non-blocking).
+            while True:
+                try:
+                    ev = q.get_nowait()
+                except queue.Empty:
+                    break
+                kind = ev[0]
+                if kind == 'progress':
+                    progress.setRange(0, 100)
+                    progress.setValue(ev[1])
+                    progress.setLabelText(
+                        "Downloading %s…  (%d%%)" % (demo_id, ev[1]))
+                elif kind == 'done':
+                    # Download finished -- finalize on the MAIN thread (cmd.*
+                    # here; Pitfall 6: NO cmd.* in the worker).
+                    progress.setLabelText("Loading…")
+                    progress.setRange(0, 0)  # indeterminate busy indicator
+                    QtWidgets.QApplication.processEvents()  # paint before cmd.*
+                    obj = demos.finalize_large_demo(demo_id, tmp_path)
+                    demos.cleanup_temp(tmp_path)
+                    progress.close()
+                    if obj is None:
+                        # Finalize failed (cmd.load failed on the downloaded
+                        # file). The drain owns the error UI -- show a
+                        # QMessageBox and clear the pending flags.
+                        QtWidgets.QMessageBox.warning(
+                            self.window(), "Fetch failed",
+                            "Could not load the downloaded file for %s." %
+                            demo_id)
+                        self._pending_large_demo = None
+                        self._pending_large_demo_state = None
+                        return
+                    # Finalize succeeded -- call the continuation (sets
+                    # self._controller from its return), then do the tab
+                    # switch + countdown that _on_start defers for the async
+                    # path (these live in _on_start, not _prepare_and_start,
+                    # so the drain must add them explicitly).
+                    self._continue_after_large_demo_fetch(
+                        obj, self._pending_large_demo_state)
+                    self.tabs.setCurrentWidget(self.game_tab)
+                    self.game_tab.start_countdown(self._controller)
+                    # Clear both pending flags + re-enable Export (the demo
+                    # is now cached, so the BTN-05 guard can release).
+                    self._pending_large_demo = None
+                    self._pending_large_demo_state = None
+                    self._update_export_enabled()
+                    return
+                elif kind == 'error':
+                    progress.close()
+                    demos.cleanup_temp(tmp_path)
+                    QtWidgets.QMessageBox.warning(
+                        self.window(), "Fetch failed",
+                        "Could not download %s:\n%s" % (demo_id, ev[1]))
+                    self._pending_large_demo = None
+                    self._pending_large_demo_state = None
+                    return
+                elif kind == 'canceled':
+                    progress.close()
+                    demos.cleanup_temp(tmp_path)
+                    self._pending_large_demo = None
+                    self._pending_large_demo_state = None
+                    return
+            # (b) if the user clicked Cancel (no 'canceled' event yet but
+            #     the flag is set) and the worker is dead, close + cleanup.
+            if cancel.is_set() and not worker.is_alive():
+                progress.close()
+                demos.cleanup_temp(tmp_path)
+                self._pending_large_demo = None
+                self._pending_large_demo_state = None
+                return
+            # (c) keep polling (recursive singleShot lets the Qt event loop
+            #     run between drains so the 3D viewer stays smooth).
+            QtCore.QTimer.singleShot(100, drain)
+
+        QtCore.QTimer.singleShot(100, drain)
+        return None  # async fetch in progress (NOT failed)
 
     def _on_export(self):
         """BTN-05: generate hiders + save initial game state WITHOUT playing.
@@ -348,6 +560,29 @@ class PluginDialog(QtWidgets.QDialog):
             "Saved puzzle to:\n%s\n\nYour model still has the generated "
             "hiders. Press Cleanup to restore your scene." % path)
         # Stay on Setup tab; controller stays _started=True so Cleanup works.
+
+    def _update_export_enabled(self, *_args):
+        """BTN-05 async guard: disable Export for uncached fetched demos so
+        _on_export can never reach _resolve_large_demo's async continuation
+        (which bakes in Start's tab-switch + countdown -- wrong for Export,
+        which must save a .bcmz and stay on Setup). Bundled demos and
+        already-cached fetched demos keep Export enabled.
+
+        Re-evaluated on demo selection (currentIndexChanged, wired in
+        __init__) and after a successful fetch (the drain's 'done' branch
+        calls this so the button re-enables once the cache is populated --
+        no need for the user to re-select the demo). _on_export itself
+        needs NO change -- the disable IS the guard. The *_args swallows
+        the currentIndexChanged signal's int index argument."""
+        from . import demos
+        demo_id = self.setup_tab.demo_combo.currentData()
+        if not demo_id:
+            self.setup_tab.export_btn.setEnabled(True)
+            return
+        is_fetched = demos.DEMO_MANIFEST.get(
+            demo_id, {}).get('source', 'bundled') != 'bundled'
+        cached = demos.is_cached(demo_id)
+        self.setup_tab.export_btn.setEnabled((not is_fetched) or cached)
 
     def _on_save(self):
         """GAME-09: save the current game state as a .bcmz checkpoint.
