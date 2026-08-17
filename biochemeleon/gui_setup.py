@@ -27,6 +27,23 @@ from .demos import (
 )
 
 
+# UX-01 (Phase 10, plan 10-02): short, student-friendly explanations for
+# each of the 5 in-scope representations (GAME_REPS). Shown on the per-rep
+# checkbox tooltip (hover) and repeated in the Help panel (plan 10-03).
+# Text is the verified per-rep description from
+# .planning/phases/10-polish-endgame-help/10-RESEARCH-help.md
+# ("Representation Explanations" table). Kept in gui_setup.py (not
+# setup_state.py) so files_modified stays strictly gui_setup.py for
+# parallel-safe Wave 1.
+REP_EXPLANATIONS = {
+    'lines':   "Thin lines connecting bonded atoms. A lightweight overview of the whole molecule — fast and simple.",
+    'sticks':  "Each bond drawn as a thin cylinder. Shows the bonding detail more clearly than lines.",
+    'spheres': "Each atom drawn as a sphere (roughly its Van der Waals radius). Gives a space-filling view of the molecule's surface.",
+    'cartoon': "A cartoon drawn through the backbone: helices as ribbons/coils, sheets as arrows, loops as tubes. The classic way to see secondary structure.",
+    'ribbon':  "A flat ribbon drawn through the backbone. Simpler than cartoon — shows the overall fold without secondary-structure detail.",
+}
+
+
 class PyMOLObjectCombo(QtWidgets.QComboBox):
     """QComboBox that refreshes its list of loaded molecular objects every
     time the popup is shown. Editable so the user can also type a name.
@@ -73,12 +90,17 @@ class SetupTab(QtWidgets.QWidget):
         self.mode_combo.addItem("Loaded object", "loaded")
         self.mode_combo.addItem("Fetch from PDB", "fetch")
         self.mode_combo.addItem("Bundled demo", "demo")
+        self.mode_combo.setToolTip(
+            "Choose where the target molecule comes from: a loaded object, "
+            "a PDB code fetched online, or a bundled demo.")
         tgt_form.addRow("Source:", self.mode_combo)
 
         self.target_stack = QtWidgets.QStackedWidget()
         # page 0: loaded object (combo + refresh button)
         p0 = QtWidgets.QWidget(); p0l = QtWidgets.QHBoxLayout(p0)
         self.obj_combo = PyMOLObjectCombo()
+        self.obj_combo.setToolTip(
+            "Pick a molecule already loaded in PyMOL, or type its object name.")
         self.obj_refresh_btn = QtWidgets.QPushButton()
         icon = self.style().standardIcon(QtWidgets.QStyle.SP_BrowserReload)
         self.obj_refresh_btn.setIcon(icon)
@@ -91,7 +113,11 @@ class SetupTab(QtWidgets.QWidget):
         fetch_row = QtWidgets.QHBoxLayout()
         self.pdb_edit = QtWidgets.QLineEdit()
         self.pdb_edit.setPlaceholderText("e.g. 1znf")
+        self.pdb_edit.setToolTip(
+            "Type a 4-character PDB code (e.g. 1ubq) to download from the "
+            "RCSB. Needs an internet connection.")
         self.fetch_btn = QtWidgets.QPushButton("Fetch")
+        self.fetch_btn.setToolTip("Download the typed PDB code from the RCSB website.")
         fetch_row.addWidget(self.pdb_edit); fetch_row.addWidget(self.fetch_btn)
         p1l.addLayout(fetch_row)
         # Issue 1 fix: QListWidget pool editor (replaces the old free-text editor).
@@ -102,6 +128,9 @@ class SetupTab(QtWidgets.QWidget):
         pool_bl = QtWidgets.QVBoxLayout(pool_box)
         self.pool_list = QtWidgets.QListWidget()
         self.pool_list.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+        self.pool_list.setToolTip(
+            "Your pool of PDB codes for Randomize's fetch mode. "
+            "Empty list = use the bundled pool.")
         pool_bl.addWidget(self.pool_list)
         # Button row: Add / Edit / Remove / Use bundled pool / Choose random
         # (no reorder — out of scope). 'Choose random' is visually associated
@@ -109,10 +138,19 @@ class SetupTab(QtWidgets.QWidget):
         # entry into the fetch field (plan 02-07), not a main Setup action.
         pool_btn_row = QtWidgets.QHBoxLayout()
         self.pool_add_btn = QtWidgets.QPushButton("+ Add")
+        self.pool_add_btn.setToolTip(
+            "Add a new PDB code to the pool (must be 4 lowercase letters/digits).")
         self.pool_edit_btn = QtWidgets.QPushButton("\u270e Edit")
+        self.pool_edit_btn.setToolTip("Edit the selected PDB code in the pool.")
         self.pool_remove_btn = QtWidgets.QPushButton("\u2212 Remove")
+        self.pool_remove_btn.setToolTip(
+            "Remove the selected PDB code(s) from the pool.")
         self.pool_default_btn = QtWidgets.QPushButton("Use bundled pool")
+        self.pool_default_btn.setToolTip(
+            "Reset the pool to the 33 bundled, pre-verified PDB codes.")
         self.pool_choose_btn = QtWidgets.QPushButton("Choose random")
+        self.pool_choose_btn.setToolTip(
+            "Pick a random code from the pool and put it in the fetch field.")
         for b in (self.pool_add_btn, self.pool_edit_btn,
                   self.pool_remove_btn, self.pool_default_btn,
                   self.pool_choose_btn):
@@ -136,6 +174,9 @@ class SetupTab(QtWidgets.QWidget):
             self.demo_combo.addItem(
                 "{category} — {id} ({tier})".format(
                     category=meta['category'], id=did, tier=tier), did)
+        self.demo_combo.setToolTip(
+            "Pick a bundled demo molecule. Tier (Easy \u2192 Very challenging) "
+            "is shown in the name.")
         p2l.addWidget(self.demo_combo)
         self.target_stack.addWidget(p0)
         self.target_stack.addWidget(p1)
@@ -146,6 +187,9 @@ class SetupTab(QtWidgets.QWidget):
         self.lock_source_cb = QtWidgets.QCheckBox(
             "Lock source (don't change target on Randomize)")
         self.lock_source_cb.setChecked(DEFAULTS["lock_source"])
+        self.lock_source_cb.setToolTip(
+            "When checked, Randomize keeps the current target and only "
+            "re-rolls the hider composition.")
         tgt_form.addRow(self.lock_source_cb)
         outer.addWidget(tgt)
 
@@ -155,9 +199,16 @@ class SetupTab(QtWidgets.QWidget):
         self.hider_spin = QtWidgets.QSpinBox()
         self.hider_spin.setRange(1, 50)
         self.hider_spin.setValue(DEFAULTS["hider_count"])
+        self.hider_spin.setToolTip(
+            "How many hider atoms to insert. Capped to a sane max for the "
+            "chosen molecule.")
         hform.addRow("Hider count:", self.hider_spin)
         self.lock_scene_cb = QtWidgets.QCheckBox(
             "Lock current scene (use the object's current representations)")
+        self.lock_scene_cb.setToolTip(
+            "Use the molecule's currently-shown representations instead of "
+            "picking reps manually (locks the per-rep checkboxes to match "
+            "the scene).")
         hform.addRow(self.lock_scene_cb)
         # per-rep rows: one QHBoxLayout per rep (checkbox + spinbox + label)
         self.rep_group = QtWidgets.QGroupBox(
@@ -166,10 +217,22 @@ class SetupTab(QtWidgets.QWidget):
         for rep in GAME_REPS:
             row = QtWidgets.QHBoxLayout()
             cb = QtWidgets.QCheckBox(rep)
+            # UX-01: per-rep checkbox carries BOTH the generic "check to put
+            # hiders in this rep" text AND the short rep explanation (the
+            # "what each representation means" hover). Format per plan 10-02:
+            # "Check to put hiders in the <rep> representation. <explanation>
+            # Leave unchecked to let the game decide (random)."
+            cb.setToolTip(
+                "Check to put hiders in the %s representation. %s "
+                "Leave unchecked to let the game decide (random)."
+                % (rep, REP_EXPLANATIONS[rep]))
             spin = QtWidgets.QSpinBox()
             spin.setRange(0, 999)
             spin.setValue(0)
             spin.setEnabled(False)              # disabled until checkbox toggled
+            spin.setToolTip(
+                "Number of hiders to hide in this representation "
+                "(counts toward the total hider count).")
             label = QtWidgets.QLabel("random")  # shown when checkbox unchecked
             row.addWidget(cb)
             row.addWidget(spin)
@@ -188,6 +251,9 @@ class SetupTab(QtWidgets.QWidget):
         self.diff_easy_cb = QtWidgets.QCheckBox(
             "Easy: show remaining hiders per representation "
             "(uncheck for Hard: total only)")
+        self.diff_easy_cb.setToolTip(
+            "Easy: show how many hiders remain per representation. "
+            "Hard: show only the total remaining.")
         dform.addRow(self.diff_easy_cb)
         outer.addWidget(diff)
 
@@ -195,9 +261,16 @@ class SetupTab(QtWidgets.QWidget):
         btns = QtWidgets.QGroupBox("Setup actions")
         brow = QtWidgets.QHBoxLayout(btns)
         self.reset_btn = QtWidgets.QPushButton("Reset")
+        self.reset_btn.setToolTip("Reset every Setup field to the defaults.")
         self.random_btn = QtWidgets.QPushButton("Randomize")
+        self.random_btn.setToolTip(
+            "Randomize the target, hider count, and representations.")
         self.save_btn = QtWidgets.QPushButton("Save Setup…")
+        self.save_btn.setToolTip(
+            "Save your current Setup to a .bcm.setup.json file to reuse later.")
         self.load_btn = QtWidgets.QPushButton("Load Setup…")
+        self.load_btn.setToolTip(
+            "Load a previously-saved Setup from a .bcm.setup.json file.")
         # Phase 8: Generate & export button (BTN-05) -- generate hiders and
         # save the initial game state to a .bcmz file for sharing or later
         # loading, WITHOUT starting play. Wired in __init__.py (same pattern
@@ -217,6 +290,9 @@ class SetupTab(QtWidgets.QWidget):
             "original state. (Does not start a new round — use Start for that.)")
         self.start_btn = QtWidgets.QPushButton("Start")
         self.start_btn.setStyleSheet("font-weight: bold;")  # primary action
+        self.start_btn.setToolTip(
+            "Generate the hiders and start the game (switches to the Game "
+            "tab after a 3-2-1 countdown).")
         for b in (self.reset_btn, self.random_btn, self.save_btn,
                  self.load_btn, self.export_btn, self.cleanup_btn,
                  self.start_btn):
