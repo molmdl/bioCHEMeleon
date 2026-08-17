@@ -23,8 +23,15 @@ class GameTab(QtWidgets.QWidget):
         # --- Widgets ---
         self._info_log = QtWidgets.QTextEdit()
         self._info_log.setReadOnly(True)
+        self._info_log.setToolTip(
+            "Rolling log of game events: hits, misses, hints, reveals.")
         self._timer_label = QtWidgets.QLabel("0:00")
+        self._timer_label.setToolTip(
+            "Elapsed time since the round began (counts up).")
         self._remaining_label = QtWidgets.QLabel("Remaining: -")
+        self._remaining_label.setToolTip(
+            "How many hiders are still hidden. Easy mode shows a "
+            "per-representation breakdown.")
         # --- Layout ---
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(QtWidgets.QLabel("Info log:"))
@@ -36,9 +43,21 @@ class GameTab(QtWidgets.QWidget):
         layout.addLayout(row)
         # --- Hint / Reveal buttons + reveal counter (Phase 6) ---
         self._hint_btn = QtWidgets.QPushButton("Hint")
+        self._hint_btn.setToolTip(
+            "Reveal a clue: temporarily highlights atoms near one hider "
+            "to point you toward it (counts as a hint used).")
         self._reveal_one_btn = QtWidgets.QPushButton("Reveal one")
+        self._reveal_one_btn.setToolTip(
+            "Give up on one random hider — it gets revealed and marked "
+            "found (counts as a reveal used).")
         self._reveal_all_btn = QtWidgets.QPushButton("Reveal all")
+        self._reveal_all_btn.setToolTip(
+            "Give up and reveal every remaining hider at once. "
+            "This ends the game.")
         self._reveal_label = QtWidgets.QLabel("Reveals: 0")
+        self._reveal_label.setToolTip(
+            "How many hiders you've revealed (via Reveal one / Reveal "
+            "all). Shown on the win screen too.")
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.addWidget(self._hint_btn)
         btn_row.addWidget(self._reveal_one_btn)
@@ -49,6 +68,9 @@ class GameTab(QtWidgets.QWidget):
         self._found_mgmt_combo.addItem("Hide found")
         self._found_mgmt_combo.addItem("Show found")
         self._found_mgmt_combo.addItem("Recolor found")
+        self._found_mgmt_combo.setToolTip(
+            "After finding hiders, choose how to display them: Hide, "
+            "Show, or Recolor the found hiders.")
         btn_row.addWidget(self._found_mgmt_combo)
         self._color_btn = QtWidgets.QPushButton("Color…")
         self._color_btn.setToolTip("Choose highlight color for found hiders")
