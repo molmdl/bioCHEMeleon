@@ -449,6 +449,12 @@ def format_remaining(total, counts_by_rep, easy_mode):
 
 # ---- Post-game debrief formatter (Phase 10 DIFF-03) ----
 
+#: Graceful fallback string for the debrief when there is nothing to
+#: explain (empty/None/all-zero counts_by_rep). Shared by both the
+#: early-empty branch and the no-bullets branch so the literal lives in
+#: one place (single source of truth).
+_DEBRIEF_FALLBACK = "All hiders are highlighted in the viewer."
+
 #: Per-rep "why hard to spot" explanations for the post-game debrief.
 #: Body text only (NO "<rep>:" prefix, NO "<b>" tags) — the formatter
 #: adds the "<b>%s: %d hider(s)</b>" header. Verbatim from
@@ -519,7 +525,7 @@ def format_debrief_text(counts_by_rep):
         a corrupt input).
     """
     if not counts_by_rep:
-        return "All hiders are highlighted in the viewer."
+        return _DEBRIEF_FALLBACK
     total = 0
     bullets = []
     for rep in GAME_REPS:
@@ -532,7 +538,7 @@ def format_debrief_text(counts_by_rep):
                 "<li><b>%s: %d hider(s)</b> — %s</li>" % (
                     rep, count, DEBRIEF_EXPLANATIONS[rep]))
     if not bullets:
-        return "All hiders are highlighted in the viewer."
+        return _DEBRIEF_FALLBACK
     return ("All %d hiders are now highlighted in the viewer. "
             "Here's why each kind was hard to spot:<ul>%s</ul>" % (
                 total, "".join(bullets)))
