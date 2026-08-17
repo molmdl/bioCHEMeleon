@@ -23,6 +23,7 @@ from biochemeleon.setup_state import (
     hider_count_cap, randomize_state, validate_state,
     TIER_LABELS, STRIP_RESN_MEMPROTMD, strip_resn_from_pdb,
     format_remaining,
+    format_debrief_text,
 )
 
 
@@ -737,6 +738,72 @@ class TestFormatRemaining(unittest.TestCase):
         self.assertEqual(
             format_remaining(3, {'cartoon': 2, 'spheres': 1}, True),
             "Remaining: 3  (spheres: 1, cartoon: 2)")
+
+
+class TestFormatDebrief(unittest.TestCase):
+    """Phase 10 DIFF-03: pure post-game debrief rich-text formatter.
+
+    Mirrors the format_remaining precedent (same module, same pure-layer
+    pattern). format_debrief_text(counts_by_rep) returns an HTML rich-text
+    string usable in QMessageBox.setInformativeText: a frame sentence plus
+    a <ul> of per-rep bullets (one per rep with count > 0, in GAME_REPS
+    order). An empty dict, a None input, or an all-zero dict collapses to
+    the graceful fallback string so the dialog never shows an empty <ul>.
+    """
+
+    def test_format_debrief_empty_dict(self):
+        # Empty dict -> graceful fallback (no <ul>, no bullets).
+        self.assertEqual(
+            format_debrief_text({}),
+            "All hiders are highlighted in the viewer.")
+
+    def test_format_debrief_all_zero(self):
+        # A zero-filled counts_by_rep dict must collapse to the SAME
+        # fallback string, NOT emit an empty <ul>.
+        self.assertEqual(
+            format_debrief_text({'lines': 0, 'sticks': 0, 'spheres': 0,
+                                 'cartoon': 0, 'ribbon': 0}),
+            "All hiders are highlighted in the viewer.")
+
+    def test_format_debrief_single_rep(self):
+        out = format_debrief_text({'lines': 0, 'sticks': 0, 'spheres': 3,
+                                   'cartoon': 0, 'ribbon': 0})
+        # Frame sentence (exact wording from the research).
+        self.assertTrue(
+            out.startswith("All 3 hiders are now highlighted in the "
+                           "viewer. Here's why each kind was hard to spot:"),
+            msg="frame sentence prefix mismatch: %r" % out)
+        # Exactly ONE <li> bullet (spheres is the only rep with count > 0).
+        self.assertEqual(out.count("<li>"), 1)
+        # Bullet carries the rep + count bold header.
+        self.assertIn("<b>spheres: 3 hider(s)</b>", out)
+        # Bullet carries the opening of the sphere explanation.
+        self.assertIn("A sphere hider is a single pseudoatom", out)
+        # Bullets are wrapped in <ul>...</ul>.
+        self.assertIn("<ul>", out)
+        self.assertIn("</ul>", out)
+
+    def test_format_debrief_game_reps_order(self):
+        # Insertion order is anti-GAME_REPS (cartoon before spheres);
+        # output bullets must follow GAME_REPS order (spheres before
+        # cartoon), not the dict's insertion order.
+        out = format_debrief_text({'cartoon': 2, 'spheres': 1})
+        # Split on '<li>' and verify spheres appears before cartoon in
+        # the joined bullet order (mirrors test_format_remaining_game_reps_order).
+        bullets = out.split("<li>")
+        # bullets[0] is the frame sentence; bullets[1:] are the bullets.
+        joined = "<li>".join(bullets[1:])
+        self.assertLess(joined.index("spheres"), joined.index("cartoon"),
+                        msg="spheres bullet must precede cartoon: %r" % out)
+
+    def test_format_debrief_rep_none_defensive(self):
+        # A None key in the input dict must NOT crash (defensive skip).
+        # The real counts_by_rep never emits a None key, but the formatter
+        # must guard a corrupt input. Assert exactly ONE bullet for spheres
+        # and no 'None' substring in the output.
+        out = format_debrief_text({'spheres': 2, None: 1})
+        self.assertEqual(out.count("<li>"), 1)
+        self.assertNotIn("None", out)
 
 
 if __name__ == '__main__':

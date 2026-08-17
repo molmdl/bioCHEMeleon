@@ -445,3 +445,100 @@ def format_remaining(total, counts_by_rep, easy_mode):
     if not parts:
         return "Remaining: %d" % total
     return "Remaining: %d  (%s)" % (total, ", ".join(parts))
+
+
+# ---- Post-game debrief formatter (Phase 10 DIFF-03) ----
+
+#: Graceful fallback string for the debrief when there is nothing to
+#: explain (empty/None/all-zero counts_by_rep). Shared by both the
+#: early-empty branch and the no-bullets branch so the literal lives in
+#: one place (single source of truth).
+_DEBRIEF_FALLBACK = "All hiders are highlighted in the viewer."
+
+#: Per-rep "why hard to spot" explanations for the post-game debrief.
+#: Body text only (NO "<rep>:" prefix, NO "<b>" tags) — the formatter
+#: adds the "<b>%s: %d hider(s)</b>" header. Verbatim from
+#: 10-RESEARCH-endgame.md "Per-Rep Why Hard to Spot Explanations" (each
+#: grounded in the actual mutation.py insertion mechanism — spheres =
+#: matching elem/color/radius ball; lines/sticks = bonded pseudoatom
+#: with copied elem/color; cartoon/ribbon = copied real backbone
+#: segment on a new chain with a displaced middle).
+DEBRIEF_EXPLANATIONS = {
+    'spheres':
+        "A sphere hider is a single pseudoatom placed among the real atoms, "
+        "with a matching element, color, and radius. In the sphere cloud "
+        "every atom is a uniformly-sized ball, so a foreign ball looks "
+        "identical to a real one — you find it by noticing an atom that "
+        "has no chemical reason to be there, not by any visual difference.",
+    'lines':
+        "A line hider is a pseudoatom bonded to a real atom, rendered as a "
+        "thin line. The lines view is a wireframe of bonds, so an extra atom "
+        "with one bond looks like a real edge atom (a terminal H or a "
+        "side-chain tip) — you find it by tracing bonds to an atom that "
+        "doesn't belong to the chemistry.",
+    'sticks':
+        "A stick hider is a pseudoatom bonded to a real atom, rendered as a "
+        "thick stick. The sticks view is a thick-bond wireframe, so an extra "
+        "bond looks like a real chemical bond — you find it by tracing the "
+        "bond network to an atom that doesn't fit the molecular structure.",
+    'cartoon':
+        "A cartoon hider is a COPIED real backbone segment placed on a new "
+        "chain, rendered as cartoon. The cartoon tube is drawn through "
+        "consecutive C-alpha atoms, so a copied real backbone segment is "
+        "valid backbone geometry and the tube renders as part of the "
+        "existing cartoon. The segment's middle residues are slightly "
+        "displaced to create a small bump, but the endpoints coincide with "
+        "the real trace — you find it by spotting a kink that doesn't "
+        "match the known fold.",
+    'ribbon':
+        "A ribbon hider is a copied real backbone segment on a new chain, "
+        "rendered as ribbon. The ribbon is drawn through consecutive "
+        "backbone atoms, so a copied real segment is valid backbone and "
+        "renders as part of the existing ribbon. Like the cartoon hider, "
+        "the middle is displaced to create a small bump — you find it by "
+        "spotting a kink in the ribbon.",
+}
+
+
+def format_debrief_text(counts_by_rep):
+    """Build the post-game debrief rich-text (DIFF-03) from a per-rep count
+    dict. Pure helper: stdlib only, no Qt, no molecular viewer coupling, so
+    it is unit-testable in WSL. The GameTab's debrief QMessageBox calls this
+    with ``registry.counts_by_rep()`` and writes the returned string straight
+    onto ``QMessageBox.setInformativeText``.
+
+    Args:
+        counts_by_rep (dict|None): ``{rep: count}`` from
+            ``registry.counts_by_rep()`` (zero-filled GAME_REPS, skips
+            rep=None). None or empty -> graceful fallback string.
+
+    Returns:
+        str: an HTML rich-text string usable in ``setInformativeText``.
+        Starts with a frame sentence, then a ``<ul>`` of bullets for every
+        rep with ``count > 0`` in GAME_REPS order, each bullet
+        ``"<li><b>%s: %d hider(s)</b> — %s</li>" % (rep, count,
+        DEBRIEF_EXPLANATIONS[rep])``. An empty dict, a None input, or an
+        all-zero dict yields the fallback string
+        ``"All hiders are highlighted in the viewer."`` (no empty ``<ul>``).
+        A None key in the input dict is skipped defensively (the real
+        counts_by_rep never emits one; the guard prevents a TypeError on
+        a corrupt input).
+    """
+    if not counts_by_rep:
+        return _DEBRIEF_FALLBACK
+    total = 0
+    bullets = []
+    for rep in GAME_REPS:
+        if not rep:  # defensive: skip a None key (counts_by_rep never emits one)
+            continue
+        count = counts_by_rep.get(rep, 0)
+        if count > 0:
+            total += count
+            bullets.append(
+                "<li><b>%s: %d hider(s)</b> — %s</li>" % (
+                    rep, count, DEBRIEF_EXPLANATIONS[rep]))
+    if not bullets:
+        return _DEBRIEF_FALLBACK
+    return ("All %d hiders are now highlighted in the viewer. "
+            "Here's why each kind was hard to spot:<ul>%s</ul>" % (
+                total, "".join(bullets)))
