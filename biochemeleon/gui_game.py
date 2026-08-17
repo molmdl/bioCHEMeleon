@@ -12,7 +12,7 @@ import time
 
 from pymol.Qt import QtCore, QtWidgets
 
-from .setup_state import format_remaining
+from .setup_state import format_remaining, format_debrief_text
 
 
 class GameTab(QtWidgets.QWidget):
@@ -321,17 +321,72 @@ class GameTab(QtWidgets.QWidget):
             % (mins, secs, hints, reveals))
         msg.setWindowFlags(msg.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
         msg.exec_()
-        # After the user dismisses the dialog:
+        # Phase 10 DIFF-03: after the win dialog dismisses, show all hiders
+        # in the viewer for the debrief, then schedule the debrief dialog
+        # after a 100ms redraw delay (mirrors the _on_win pattern at the
+        # top of this method: cmd.refresh() forces a redraw now; the
+        # singleShot lets it land before the modal debrief dialog blocks
+        # the Qt event loop). The cleanup gate MOVES to _finish_debrief
+        # (deferred until after the debrief dismisses) so the hiders stay
+        # visible during the debrief.
+        self._show_all_hiders_for_debrief()
+        from pymol import cmd
+        cmd.refresh()
+        QtCore.QTimer.singleShot(100, self._finish_debrief)
+
+    def _show_all_hiders_for_debrief(self):
+        """Phase 10 DIFF-03: show every registered hider in ITS rep for the
+        post-win debrief. Fragment-aware: cartoon/ribbon 4-tuple hiders
+        (endpoint_resvs set) are shown by their NEW resi range on chain H
+        (segi GAME and resi rv1-rv2), so the whole fragment re-renders.
+        Single-atom hiders (sphere/line/stick, or legacy 3-tuple cartoon)
+        are shown by anchor id. rep=None (imported game with an unreconciled
+        .bcm sidecar) is skipped — the hider stays in whatever rep it is
+        currently in.
+
+        Mirrors the _mark_found fragment-awareness pattern (game.py:
+        _mark_found colors the middle rv1+1-rv2-1; here we SHOW the full
+        rv1-rv2 range so the whole blend is visible for the debrief).
+        """
+        from pymol import cmd
+        obj = self._controller.target_obj
+        for rec in self._controller.registry.all():
+            if rec.rep is None:
+                continue  # defensive: imported game with corrupt/missing .bcm rep
+            if rec.endpoint_resvs is not None:  # Phase 11 cartoon/ribbon fragment
+                rv1, rv2 = rec.endpoint_resvs
+                cmd.show(rec.rep, "%s and segi GAME and resi %d-%d" % (obj, rv1, rv2))
+            else:  # single-atom (sphere/line/stick, legacy 3-tuple cartoon)
+                cmd.show(rec.rep, "%s and id %d" % (obj, rec.id))
+
+    def _finish_debrief(self):
+        """Phase 10 DIFF-03: show the post-game debrief dialog with per-rep
+        explanations, then run cleanup (non-imported) or leave hiders
+        (imported). The cleanup gate MOVES here from _finish_win so the
+        hiders stay visible during the debrief.
+
+        Builds counts_by_rep from the registry, formats via the pure
+        format_debrief_text helper (Plan 10-01), shows a second modal
+        QMessageBox (child dialog — exec_ is ALLOWED by AGENTS.md; the
+        main PluginDialog stays modeless). After dismiss, the SAME
+        _is_imported gate as the old _finish_win tail decides cleanup.
+        """
+        counts = self._controller.registry.counts_by_rep()
+        text = format_debrief_text(counts)
+        msg = QtWidgets.QMessageBox(self.window())
+        msg.setIcon(QtWidgets.QMessageBox.Information)
+        msg.setWindowTitle("Debrief")
+        msg.setText("Debrief — where they were hiding")
+        msg.setInformativeText(text)
+        msg.setWindowFlags(msg.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
+        msg.exec_()
+        # After the user dismisses the debrief dialog:
         # - NON-IMPORTED game: cleanup() restores from the pre-game backup
         #   (removes hiders, restores hint-colored real atoms, discards
-        #   backup) -> clean molecule ready for a new game.
-        # - IMPORTED game: do NOT call cleanup() here -- it would discard
-        #   the post-import backup, breaking subsequent Cleanup/Restart
-        #   (which need the backup to restore the imported initial state;
-        #   backup.restore with a discarded/None backup deletes the target
-        #   then fails to recreate it -> empty scene). The user clicks
-        #   Cleanup explicitly (imported two-step: restore + cleanup_hiders)
-        #   or Restart (restore + re-reconcile from _imported_bcm). The
-        #   hiders stay (all found+green) until the user acts.
+        #   backup) -> clean molecule ready for a new game. The debrief
+        #   highlight was temporary; backup.restore reverts it.
+        # - IMPORTED game: do NOT call cleanup() here (same gate as the old
+        #   _finish_win tail). The user clicks Cleanup explicitly (imported
+        #   two-step: restore + cleanup_hiders) when done examining.
         if not getattr(self._controller, '_is_imported', False):
             self._controller.cleanup()
