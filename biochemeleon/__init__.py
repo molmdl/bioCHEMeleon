@@ -5,6 +5,123 @@
 dialog = None
 
 
+# Phase 10 (UX-01 + UX-02): rich-text reference shown in the modal Help dialog
+# (_show_help). 6 sections: what is bioCHEMeleon, Setup tab, Game tab, the 5
+# representations, the VERIFIED PyMOL controls (controlling.py:320-348 — the
+# plain scroll wheel adjusts the CLIPPING SLAB, NOT zoom; zoom = Right-drag or
+# Ctrl+wheel), and the switch-reps strategy. QTextEdit renders this fragment
+# (no <html>/<body> wrapper needed). `&` is escaped as &amp; for the parser.
+HELP_HTML = """<h2>bioCHEMeleon — Help</h2>
+
+<h2>What is bioCHEMeleon?</h2>
+<p>A hide-and-seek game on molecular structures. Foreign 'hider' atoms are
+inserted into a molecule's own object, styled to blend in — find them all by
+clicking atoms in the 3D viewer.</p>
+
+<h2>Setup tab</h2>
+<ul>
+  <li><b>Source</b> — choose where the target molecule comes from: a loaded
+  object, a PDB code fetched online, or a bundled demo.</li>
+  <li><b>Hider count</b> — how many hider atoms to insert (capped to a sane
+  max for the chosen molecule).</li>
+  <li><b>Lock current scene</b> — use the molecule's currently-shown
+  representations instead of picking reps manually.</li>
+  <li><b>Per-rep hider counts</b> — check a representation and set how many
+  hiders to hide in it. Leave unchecked to let the game decide (random).</li>
+  <li><b>Difficulty</b> — Easy: show how many hiders remain per
+  representation. Hard: show only the total remaining.</li>
+  <li><b>Setup actions</b> — Reset to defaults, Randomize the params, Save
+  /Load your Setup, Generate &amp; export a puzzle, Cleanup the model,
+  or Start the game.</li>
+</ul>
+
+<h2>Game tab</h2>
+<ul>
+  <li><b>Info log</b> — rolling log of game events: hits, misses, hints,
+  reveals.</li>
+  <li><b>Timer</b> — elapsed time since the round began (counts up).</li>
+  <li><b>Remaining</b> — how many hiders are still hidden. Easy mode shows
+  a per-representation breakdown.</li>
+  <li><b>Hint</b> — reveal a clue: temporarily highlights atoms near one
+  hider to point you toward it (counts as a hint used).</li>
+  <li><b>Reveal one / Reveal all</b> — give up on one random hider, or every
+  remaining hider at once. Reveal all ends the game.</li>
+  <li><b>Found-hider management</b> — after finding hiders, choose how to
+  display them: Hide, Show, or Recolor the found hiders.</li>
+  <li><b>Color</b> — choose the highlight color for found hiders.</li>
+  <li><b>Restart</b> — start a fresh round with new hiders.</li>
+  <li><b>Import puzzle / Save checkpoint</b> — load a puzzle prepared by
+  'Generate &amp; export', or save the current game state to resume
+  later.</li>
+</ul>
+
+<h2>Representations explained</h2>
+<ul>
+  <li><b>lines</b> — thin lines connecting bonded atoms. A lightweight
+  overview of the whole molecule — fast and simple.</li>
+  <li><b>sticks</b> — each bond drawn as a thin cylinder. Shows the
+  bonding detail more clearly than lines.</li>
+  <li><b>spheres</b> — each atom drawn as a sphere (roughly its Van der
+  Waals radius). Gives a space-filling view of the molecule's
+  surface.</li>
+  <li><b>cartoon</b> — a cartoon drawn through the backbone: helices as
+  ribbons/coils, sheets as arrows, loops as tubes. The classic way to
+  see secondary structure.</li>
+  <li><b>ribbon</b> — a flat ribbon drawn through the backbone. Simpler
+  than cartoon — shows the overall fold without secondary-structure
+  detail.</li>
+</ul>
+
+<h2>PyMOL controls (default 3-Button Viewing mode)</h2>
+<p><b>Moving around the molecule:</b></p>
+<ul>
+  <li><b>Rotate</b> — Left-drag</li>
+  <li><b>Move / pan</b> — Middle-drag</li>
+  <li><b>Zoom</b> — Right-drag (or Shift + Left-drag to box-zoom a
+  region)</li>
+  <li><b>Zoom with the wheel</b> — hold Ctrl + scroll. The <b>plain
+  scroll wheel adjusts the clipping plane, not zoom</b> — a common
+  PyMOL surprise.</li>
+  <li><b>Center on an atom</b> — Middle-click that atom</li>
+  <li><b>Reset the view</b> — middle-click empty space, or use PyMOL's
+  <code>reset</code> command</li>
+</ul>
+<p><b>Clicking to find hiders (during a game):</b></p>
+<ul>
+  <li><b>Click an atom</b> (single Left-click) to check if it's a hider.
+  A found hider turns green; a miss is logged in the info log.</li>
+  <li><b>Left-DRAG still rotates</b> the molecule — so you can spin to
+  look around while you hunt. A quick click picks; a drag rotates.</li>
+  <li>To stop the game without winning, open PyMOL's wizard panel
+  (bottom-left in the external GUI) and pick <b>"Done (quit game)"</b>,
+  or click Restart / Cleanup in the plugin.</li>
+</ul>
+<p><b>Command-line shortcuts (type in PyMOL's command line):</b>
+<code>reset</code>, <code>zoom</code>, <code>orient</code>.</p>
+
+<h2>Tips — switch representations to spot hiders</h2>
+<p>Hiders are styled to blend into ONE representation. A hider placed in
+the cartoon rep, for example, is hard to see while cartoon is on — but
+if you hide cartoon and show spheres, that same hider (which is really
+just an extra atom inserted into the molecule) will often stick out as
+a sphere that doesn't belong.</p>
+<p>Try this when you're stuck:</p>
+<ol>
+  <li>In PyMOL, hide the rep you think the hider is in (e.g.
+  <code>hide cartoon</code>).</li>
+  <li>Show a different rep (e.g. <code>show spheres</code> or
+  <code>show sticks</code>).</li>
+  <li>Look for an atom that appears in the new rep but seems out of
+  place — that's a likely hider.</li>
+  <li>Click it to check. You can switch reps back when done.</li>
+</ol>
+<p>This is fair play: you're using PyMOL's own view tools to study the
+structure, exactly as a structural biologist would. It is NOT cheating
+— the hiders are in the same object as the real atoms, so toggling reps
+affects both equally; you still have to spot the impostor.</p>
+"""
+
+
 def __init_plugin__(app=None):
     """PyMOL plugin entry point. Registers the Plugins-menu item.
 
@@ -101,6 +218,22 @@ class PluginDialog(QtWidgets.QDialog):
         # Layout
         layout = QtWidgets.QVBoxLayout(self)
         layout.addWidget(self.tabs)
+        # Phase 10: Help button row below the QTabWidget (right-aligned,
+        # reachable from both Setup and Game tabs). A single modal child
+        # QDialog (opened via the modal exec call) is ALLOWED by AGENTS.md
+        # (the main PluginDialog stays modeless — dialog.show(), NEVER the
+        # modal exec form). The exec_ grep gate rises from 1 (the existing
+        # _finish_win QMessageBox in gui_game.py) to 2 — BOTH on child
+        # dialogs.
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.addStretch(1)
+        self.help_btn = QtWidgets.QPushButton("Help")
+        self.help_btn.setToolTip(
+            "Open the help panel: what each control does, what "
+            "representations mean, and how to use the PyMOL viewer.")
+        self.help_btn.clicked.connect(self._show_help)
+        btn_row.addWidget(self.help_btn)
+        layout.addLayout(btn_row)
 
     def _on_start(self):
         """BTN-07: resolve target -> build hider_specs -> start game ->
@@ -787,3 +920,29 @@ class PluginDialog(QtWidgets.QDialog):
         self.game_tab._remaining_label.setText("Remaining: -")
         self.game_tab._reveal_label.setText("Reveals: 0")
         self._controller = None
+
+    def _show_help(self):
+        """Phase 10 UX-01/UX-02: open a modal Help dialog with the 6-section
+        rich-text reference. A modal child QDialog (opened via the modal exec
+        call) is ALLOWED by AGENTS.md — the main PluginDialog stays modeless
+        (dialog.show(), NEVER the modal exec form). Precedent:
+        QMessageBox.question (gui_game.py), QInputDialog.getText
+        (gui_setup.py), QFileDialog.getSaveFileName (gui_setup.py) are all
+        modal children.
+
+        The QTextEdit is read-only + scrolls + supports copy-paste (a user
+        can copy a control description). setMinimumSize keeps the dialog
+        comfortably readable; the user dismisses with the OK button or Esc.
+        """
+        help_dlg = QtWidgets.QDialog(self)
+        help_dlg.setWindowTitle("bioCHEMeleon — Help")
+        help_dlg.setMinimumSize(520, 600)
+        layout = QtWidgets.QVBoxLayout(help_dlg)
+        text = QtWidgets.QTextEdit()
+        text.setReadOnly(True)
+        text.setHtml(HELP_HTML)
+        layout.addWidget(text)
+        ok = QtWidgets.QPushButton("OK")
+        ok.clicked.connect(help_dlg.accept)
+        layout.addWidget(ok)
+        help_dlg.exec_()
