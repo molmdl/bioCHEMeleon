@@ -302,12 +302,23 @@ class GameTab(QtWidgets.QWidget):
             self._controller._wizard = None
         mins = int(elapsed) // 60
         secs = int(elapsed) % 60
+        # DIFF-02: win-screen stats. Headline carries the hider count; the
+        # rich-text stats block below shows time + hints + reveals. Always
+        # shows all three stats including 0/0 (a flex -- won without help).
+        # Uses len(registry.all()) (NOT counts_by_rep sum) so degraded
+        # rep=None records are still counted in the headline total.
+        n_hiders = len(self._controller.registry.all())  # all are 'found' on win
+        hints = self._controller._hint_count              # reset per round (game.py)
+        reveals = self._controller._reveal_count          # reset per round (game.py)
         # Use the top-level PluginDialog as parent + stay-on-top so the
         # dialog appears above the PyMOL OpenGL window (not hidden behind it).
         msg = QtWidgets.QMessageBox(self.window())
         msg.setIcon(QtWidgets.QMessageBox.Information)
         msg.setWindowTitle("You win!")
-        msg.setText("You found all hiders in %d:%02d!" % (mins, secs))
+        msg.setText("You found all %d hiders in %d:%02d!" % (n_hiders, mins, secs))
+        msg.setInformativeText(
+            "<b>Time:</b> %d:%02d<br><b>Hints used:</b> %d<br><b>Reveals used:</b> %d"
+            % (mins, secs, hints, reveals))
         msg.setWindowFlags(msg.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
         msg.exec_()
         # After the user dismisses the dialog:
