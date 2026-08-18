@@ -22,7 +22,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Found-Hider Management, Restart & Cleanup** - Manage found hiders, reset, and clean the model
 - [x] **Phase 8: Persistence & Shareable Puzzles** - Save/load game state + generate&export / import ✓ 2026-08-16
 - [x] **Phase 9: Large Demo Fetch & Source Attribution** - Membrane/glycoprotein fetch + DATA_SOURCES.md
-- [ ] **Phase 10: Polish, Endgame & Help** - Tooltips, controls help, win-screen stats, post-game debrief
+- [x] **Phase 10: Polish, Endgame & Help** - Tooltips, controls help, win-screen stats, post-game debrief ✓ 2026-08-18
 - [x] **Phase 11: Alt-conf Cartoon/Ribbon Hider (v1 Follow-up)** - Re-research + implement the alt-conf segment replication approach (replaces terminal extension for connected cartoon blend)
 
 ## Phase Details
@@ -301,7 +301,7 @@ Note: With `parallelization: true`, Phase 3 may run in parallel with Phase 2 (bo
 | 7. Found-Hider Management, Restart & Cleanup | 3/3 | ✓ Complete | 2026-08-12 |
 | 8. Persistence & Shareable Puzzles | 5/5 | ✓ Complete | 2026-08-16 |
 | 9. Large Demo Fetch & Source Attribution | 4/4 | ✓ Complete (Phase 11 alt-conf bug on membrane proteins documented for follow-up) | 2026-08-16 |
-| 10. Polish, Endgame & Help | 0/11 | Not started | - |
+| 10. Polish, Endgame & Help | 11/11 | ✓ Complete | 2026-08-18 |
 | 11. Alt-conf Cartoon/Ribbon Hider (v1 Follow-up) | 8/8 | ✓ Complete | 2026-08-16 |
 
 ## Research Flags
