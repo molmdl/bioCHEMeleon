@@ -72,14 +72,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Accessibility & Clarity
 
-- [ ] **UX-01**: In-game explanation — what each button does and what each representation means (tooltips / help panel)
-- [ ] **UX-02**: Controls help — how to click, navigate, zoom, rotate in PyMOL (for users new to PyMOL)
+- [x] **UX-01**: In-game explanation — what each button does and what each representation means (tooltips / help panel)
+- [x] **UX-02**: Controls help — how to click, navigate, zoom, rotate in PyMOL (for users new to PyMOL)
 
 ### Differentiators (v1)
 
 - [x] **DIFF-01**: Reveal counter — track how many reveals were used across the game
-- [ ] **DIFF-02**: Win-screen stats — show time taken, hints used, and reveals used on the winning message
-- [ ] **DIFF-03**: Post-game debrief — after win, highlight all hiders and explain why each was hard to spot (the teachable moment)
+- [x] **DIFF-02**: Win-screen stats — show time taken, hints used, and reveals used on the winning message
+- [x] **DIFF-03**: Post-game debrief — after win, highlight all hiders and explain why each was hard to spot (the teachable moment)
 - [x] **DIFF-04**: Color picker for found-hider highlight — player chooses how found hiders are marked (accessibility / color-blind support)
 - [x] **DIFF-05**: Difficulty-tiered demo metadata surfaced in the demo sub-menu (Easy/Hard/Challenge/Very challenging)
 
@@ -171,10 +171,10 @@ Which phases cover which requirements. Updated during roadmap creation (2026-08-
 | DEMO-03 | Phase 9 | Complete |
 | DEMO-04 | Phase 9 | Complete |
 | DIFF-05 | Phase 9 | Complete |
-| UX-01 | Phase 10 | Pending |
-| UX-02 | Phase 10 | Pending |
-| DIFF-02 | Phase 10 | Pending |
-| DIFF-03 | Phase 10 | Pending |
+| UX-01 | Phase 10 | Complete |
+| UX-02 | Phase 10 | Complete |
+| DIFF-02 | Phase 10 | Complete |
+| DIFF-03 | Phase 10 | Complete |
 
 **Coverage:**
 - v1 requirements: 46 total (previously miscounted as 41 — the DIFF section's 5 requirements were not included in the prior count; 41 + 5 = 46)
