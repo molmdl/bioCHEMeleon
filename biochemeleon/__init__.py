@@ -13,6 +13,9 @@ dialog = None
 # (no <html>/<body> wrapper needed). `&` is escaped as &amp; for the parser.
 HELP_HTML = """<h2>bioCHEMeleon — Help</h2>
 
+<p><i>This panel pauses the 3D viewer while open. Close it (OK button or
+Esc) to go back to moving the molecule.</i></p>
+
 <h2>What is bioCHEMeleon?</h2>
 <p>A hide-and-seek game on molecular structures. Foreign 'hider' atoms are
 inserted into a molecule's own object, styled to blend in — find them all by
@@ -76,7 +79,8 @@ clicking atoms in the 3D viewer.</p>
 <p><b>Moving around the molecule:</b></p>
 <ul>
   <li><b>Rotate</b> — Left-drag</li>
-  <li><b>Move / pan</b> — Middle-drag</li>
+  <li><b>Move / pan</b> — Middle-drag, or hold Ctrl + Left-drag (a
+  handy alternative on mice without a middle button)</li>
   <li><b>Zoom</b> — Right-drag (or Shift + Left-drag to box-zoom a
   region)</li>
   <li><b>Zoom with the wheel</b> — hold Ctrl + scroll. The <b>plain
