@@ -335,6 +335,53 @@ class TestPickSegments(unittest.TestCase):
             self.assertLess(segs[i][2], segs[i + 1][1],
                             "segments must remain disjoint even when count caps")
 
+    def test_two_segments_spread_across_long_chain(self):
+        """76-residue chain (1ubq-like), count=2 -> large interior gap (quick-005).
+
+        The OLD greedy advance (i += segment_size) placed the two segments
+        back-to-back near the N-term (resi 2-4 and 5-7, gap == 0). Even spacing
+        spreads them across the chain so the two hiders are far apart and
+        individually harder to find. With 76 residues the even-spaced interior
+        gap is ~23; assert >= 15 (robust lower bound, well above the old 0).
+        """
+        cas = {'A': [(i, i + 1000) for i in range(1, 77)]}  # 76 residues
+        result = pick_segments(cas, count=2, segment_size=3)
+        self.assertEqual(len(result), 2)
+        segs = sorted(result, key=lambda t: t[1])
+        # Disjoint (no shared resi)
+        self.assertLess(segs[0][2], segs[1][1], "two segments must be disjoint")
+        # Spread: a large interior gap (NOT back-to-back). Old bug: gap == 0.
+        gap = segs[1][1] - segs[0][2] - 1  # residues strictly between segments
+        self.assertGreaterEqual(gap, 15,
+            "76-residue chain count=2 must spread (gap >= 15), not "
+            "back-to-back (old greedy placed resi 2-4 and 5-7, gap 0)")
+        # First segment is mid-chain (not the pure N-term window)
+        self.assertNotEqual((segs[0][1], segs[0][2]), (1, 3),
+                            "first segment must not be the pure N-term window")
+
+    def test_three_segments_one_per_third(self):
+        """60-residue chain, count=3 -> one segment start in each third (quick-005).
+
+        The OLD greedy advance clustered all three near the N-term (resi
+        2-4, 5-7, 8-10 -- all in the first third 1-20). Even spacing places
+        one segment start in each third of the chain (1-20, 21-40, 41-60).
+        """
+        cas = {'A': [(i, i) for i in range(1, 61)]}  # 60 residues
+        result = pick_segments(cas, count=3, segment_size=3)
+        self.assertEqual(len(result), 3)
+        segs = sorted(result, key=lambda t: t[1])
+        # All disjoint
+        for i in range(len(segs) - 1):
+            self.assertLess(segs[i][2], segs[i + 1][1], "segments must be disjoint")
+        starts = [seg[1] for seg in segs]
+        # One start in each third of the 60-residue chain
+        self.assertGreaterEqual(starts[0], 1)
+        self.assertLessEqual(starts[0], 20, "first start in first third (1-20)")
+        self.assertGreaterEqual(starts[1], 21, "second start in second third (21-40)")
+        self.assertLessEqual(starts[1], 40)
+        self.assertGreaterEqual(starts[2], 41, "third start in last third (41-60)")
+        self.assertLessEqual(starts[2], 60)
+
 
 class TestGenerateMiddleDisplacement(unittest.TestCase):
     """Test generate_middle_displacement(n, seed, magnitude).
