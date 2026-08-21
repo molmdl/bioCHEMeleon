@@ -27,7 +27,7 @@ GAME_REPS = ['lines', 'sticks', 'spheres', 'cartoon', 'ribbon']
 #:   {category, type, difficulty, source, source_id, fetch_url,
 #:    cache_name, citation, strip}
 #: 'source' drives the loader branch ('bundled' -> data/demos/, fetched
-#: -> ~/.biochemeleon/cache/); 'cache_name' is the on-disk filename.
+#: -> <cwd>/tmp/phase9-demos/cache/); 'cache_name' is the on-disk filename.
 #: Citations live in repo-root DATA_SOURCES.md (DEMO-04, Phase 9).
 #: Tier-ordered (easy -> hard -> challenge -> very_challenging) so the
 #: demo combo shows a natural difficulty progression (DIFF-05).
