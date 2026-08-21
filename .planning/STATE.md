@@ -50,5 +50,6 @@ All v1 blockers resolved. Key runtime discoveries encoded in AGENTS.md domain ru
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 003 | Relocate Phase 9 fetched-demo cache to cwd (cmd.fetch parity) | 2026-08-22 | 5041541 | [003-relocate-phase9-demo-cache-to-cwd](./quick/003-relocate-phase9-demo-cache-to-cwd/) |
+| 004 | Flatten Phase 9 demo cache to single `<cwd>/cache/` layer | 2026-08-22 | 3d8cf9b | [004-flatten-phase9-demo-cache-to-cache-dir](./quick/004-flatten-phase9-demo-cache-to-cache-dir/) |
 
-*Updated: 2026-08-22 after quick task 003 completion*
+*Updated: 2026-08-22 after quick task 004 completion*
