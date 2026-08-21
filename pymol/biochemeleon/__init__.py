@@ -360,8 +360,18 @@ class PluginDialog(QtWidgets.QDialog):
         9 split; the body is verbatim from _prepare_and_start lines 150-307
         -- no logic change, just moved so the async path can share it)."""
         from . import generators, game, demos, mutation
+        from .setup_state import GAME_REPS
         import random as _random
         per_rep = state.get("per_rep", {})  # {rep: count} (Phase 2 collect_state)
+        # quick-008: if per_rep is empty (user set total hider_count without
+        # per-rep counts), distribute across a random subset of GAME_REPS
+        # instead of the old all-spheres fallback. randomize_per_rep
+        # guarantees >=1 rep with count>0 for hider_count>0; the per-rep loop
+        # below then generates mixed-rep hiders (parity with the Randomize
+        # button, setup_state.randomize_state). Explicit per_rep is untouched.
+        if not per_rep:
+            _hider_count = int(state.get("hider_count", 0))
+            per_rep = generators.randomize_per_rep(_hider_count, GAME_REPS)
         # 2. Prepare target: collapse multi-state objects BEFORE data
         #    collection. Multi-state objects (e.g. NMR ensembles like 1znf
         #    with 37 models) break backup/verify_intact (mutations only
@@ -474,12 +484,6 @@ class PluginDialog(QtWidgets.QDialog):
                         (count, rep, "" if count == 1 else "s",
                          _take, "" if _take == 1 else "s",
                          _take, "" if _take == 1 else "s"))
-        # Fallback: if per_rep is empty (random mode unset), default to
-        # spheres (Phase 4 behavior) using the total hider_count.
-        if not hider_specs:
-            count = int(state.get("hider_count", 0))
-            positions = generators.generate_sphere_positions(extent, count)
-            hider_specs = [(pos, "spheres") for pos in positions]
         # 05-05 Issue 1: show under-generation warnings (cartoon/ribbon capped
         # at one-per-chain). Non-blocking -- the game still starts with the
         # hiders that WERE generated.
