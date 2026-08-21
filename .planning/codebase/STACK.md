@@ -60,7 +60,7 @@
 **Environment:**
 - No `.env` files (`.gitignore` excludes `*.env`). No env vars required at runtime — conda env activation handles PATH.
 - PyMOL plugin discovery: installed via PyMOL GUI *Plugin → Plugin Manager → Install New Plugin* (accepts a package dir with `__init__.py`). Lands in `%APPDATA%/pymol/startup/` (Windows) or `~/.pymol/startup/` (Linux). For dev, run from the repo via the Windows path.
-- Fetched-demo cache: `<cwd>/tmp/phase9-demos/cache/` (consistent with `cmd.fetch`, which downloads PDBs into the cwd; created on first finalize via `os.makedirs`). Persists across PyMOL sessions as long as the user launches PyMOL from the same dir (the same limitation `cmd.fetch` has — acceptable for v1). The cwd-based layout matches the Phase 9 smoke test's staging paths (smoke lines 103 + 237) AND `cmd.fetch`'s convention (Pitfall E / Open Risk 4 reframe).
+- Fetched-demo cache: `<cwd>/cache/` (flat single-layer layout; consistent with `cmd.fetch`, which downloads PDBs into the cwd; created on first finalize via `os.makedirs`). Persists across PyMOL sessions as long as the user launches PyMOL from the same dir (the same limitation `cmd.fetch` has — acceptable for v1). The cwd-based layout matches the Phase 9 smoke test's staging paths (smoke lines 103 + 237, now staging under `<cwd>/cache/`) AND `cmd.fetch`'s convention (Pitfall E / Open Risk 4 reframe).
 
 **Build:**
 - No build step. Python package is interpreted directly by PyMOL's bundled Python.

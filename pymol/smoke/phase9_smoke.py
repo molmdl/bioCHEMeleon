@@ -5,7 +5,7 @@
 # path cannot run Qt). GUI paths (the QProgressDialog + QTimer drain + real
 # network fetch with progress) are deferred to the 09-03 human-verify checkpoint.
 #
-# Uses the STAGED SASBDB sample (tmp/phase9-demos/SASDPG4_fit2_model1.pdb) to
+# Uses the STAGED SASBDB sample (cache/SASDPG4_fit2_model1.pdb) to
 # simulate the worker-download output; no real network. The real fetch + progress
 # dialog is verified at the 09-03 human-verify checkpoint (needs the GUI + real
 # network timing).
@@ -85,10 +85,20 @@ check("SETUP: strip preserves MODEL", 'MODEL' in _dry_setup)
 check("SETUP: strip preserves TER", 'TER' in _dry_setup)
 check("SETUP: strip preserves ENDMDL", 'ENDMDL' in _dry_setup)
 
-# Clean any stale cache from prior runs so the smoke is deterministic.
+# Clean any stale cache+temp artifacts from prior runs so the smoke is
+# deterministic. Wipe ONLY .pdb.gz (cache), .raw and .dry (temp) -- the
+# flat <cwd>/cache/ layout co-locates the staged SASBDB .pdb sample in
+# this same dir (smoke line 103), and it must survive the wipe so
+# section A can read it. (Under quick-003's nested layout the sample
+# lived in the parent dir outside the cache subdir; the flat layout
+# removes that incidental separation, so the wipe must be
+# extension-aware.)
 _cache_dir = demos._cache_dir()
 if os.path.isdir(_cache_dir):
     for _f in os.listdir(_cache_dir):
+        if not (_f.endswith('.pdb.gz') or _f.endswith('.raw')
+               or _f.endswith('.dry')):
+            continue  # leave the staged .pdb sample (and any non-artifact) alone
         _fp = os.path.join(_cache_dir, _f)
         try:
             os.unlink(_fp)
@@ -100,7 +110,7 @@ if os.path.isdir(_cache_dir):
 # the worker download -- no real network in the smoke; the staged file IS the
 # real fetched content per 09-RESEARCH-sasbdb.md:382).
 _staged_sasbdb = os.path.abspath(os.path.join(
-    os.getcwd(), 'tmp', 'phase9-demos', 'SASDPG4_fit2_model1.pdb'))
+    os.getcwd(), 'cache', 'SASDPG4_fit2_model1.pdb'))
 check("A: staged SASBDB sample exists", os.path.exists(_staged_sasbdb))
 _obj_a = demos.finalize_large_demo('sasdpg4', _staged_sasbdb)
 check("A: finalize_large_demo returns 'sasdpg4'", _obj_a == 'sasdpg4')
@@ -234,7 +244,7 @@ _synthetic_memprotmd = (
 )
 
 # Stage the synthetic .raw file (simulating the worker download output).
-_memprotmd_dir = os.path.abspath(os.path.join(os.getcwd(), 'tmp', 'phase9-demos'))
+_memprotmd_dir = os.path.abspath(os.path.join(os.getcwd(), 'cache'))
 try:
     os.makedirs(_memprotmd_dir, exist_ok=True)
 except OSError:

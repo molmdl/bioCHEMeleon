@@ -203,23 +203,26 @@ def load_demo(demo_id):
 def _cache_dir():
     """Return the absolute path to the fetched-demo cache directory.
 
-    Resolves to ``<cwd>/tmp/phase9-demos/cache/`` -- consistent with
-    ``cmd.fetch``, which downloads PDBs into the current working
-    directory. The dir persists across PyMOL sessions as long as the user
-    launches PyMOL from the same dir (the same limitation ``cmd.fetch``
-    has -- acceptable for v1). Created on first finalize by
-    ``finalize_large_demo``'s ``os.makedirs(cache_dir, exist_ok=True)``.
+    Resolves to ``<cwd>/cache/`` -- consistent with ``cmd.fetch``, which
+    downloads PDBs into the current working directory. The dir persists
+    across PyMOL sessions as long as the user launches PyMOL from the
+    same dir (the same limitation ``cmd.fetch`` has -- acceptable for
+    v1). Created on first finalize by ``finalize_large_demo``'s
+    ``os.makedirs(cache_dir, exist_ok=True)``.
 
     History (Pitfall E / Open Risk 4): the cwd-based layout matches the
     Phase 9 smoke test's staging paths (smoke lines 103 + 237 stage under
-    ``os.getcwd()/tmp/phase9-demos``) AND ``cmd.fetch``'s convention, so
-    the dev-repo smoke, an installed plugin, and a user running PyMOL
-    from their project dir all agree on the cache location.
+    ``os.getcwd()/cache``) AND ``cmd.fetch``'s convention, so the
+    dev-repo smoke, an installed plugin, and a user running PyMOL from
+    their project dir all agree on the cache location. The layout is a
+    SINGLE flat dir holding both the transient ``.raw``/``.dry`` (temp
+    download / strip intermediate) and the persistent ``.pdb.gz`` (cache).
 
     Source: 09-RESEARCH-pipeline.md:296-299 (original cache location);
-    quick-003 relocates to <cwd>/tmp/phase9-demos/ for cmd.fetch parity.
+    quick-003 relocated under the cwd for cmd.fetch parity (nested
+    layout); quick-004 flattened to <cwd>/cache/ (single layer).
     """
-    return os.path.join(os.getcwd(), 'tmp', 'phase9-demos', 'cache')
+    return os.path.join(os.getcwd(), 'cache')
 
 
 def cache_path_for(demo_id):
@@ -257,27 +260,31 @@ def is_cached(demo_id):
 def temp_download_path(demo_id):
     """Return a temp path for the raw (pre-strip, pre-cache) download.
 
-    Resolves to ``<cwd>/tmp/phase9-demos/<demo_id>.raw`` -- consistent
-    with ``cmd.fetch`` and with ``_cache_dir()`` (same cwd-based base).
-    Uses a deterministic path rather than ``tempfile.mkstemp`` so it is
-    traceable for debugging (a tempfile would be cleaned by the OS on
-    restart; the .raw file survives an interrupted fetch for inspection).
-    The parent dir is created by ``download_large_demo`` via
+    Resolves to ``<cwd>/cache/<demo_id>.raw`` -- consistent with
+    ``cmd.fetch`` and with ``_cache_dir()`` (same cwd-based base). The
+    ``.raw`` now lives IN THE SAME dir as the ``.pdb.gz`` cache (flat
+    layout), and is cleaned after finalize by ``cleanup_temp`` (the
+    ``.pdb.gz`` persists). Uses a deterministic path rather than
+    ``tempfile.mkstemp`` so it is traceable for debugging (a tempfile
+    would be cleaned by the OS on restart; the .raw file survives an
+    interrupted fetch for inspection). The parent dir is created by
+    ``download_large_demo`` via
     ``os.makedirs(os.path.dirname(dest_path), exist_ok=True)`` before
     the ``open(dest_path, 'wb')`` call, so the download never fails on a
-    missing parent dir (the original Pitfall E failure). The caller (the
-    Qt layer's _resolve_large_demo) converts via to_windows_path before
-    handing the path to finalize_large_demo, and calls cleanup_temp when
-    done.
+    missing parent dir (the original Pitfall E failure -- now creates
+    ``<cwd>/cache/``). The caller (the Qt layer's
+    _resolve_large_demo) converts via to_windows_path before handing
+    the path to finalize_large_demo, and calls cleanup_temp when done.
 
     History (Pitfall E / Open Risk 4): the cwd-based layout matches the
     Phase 9 smoke test's staging paths (smoke lines 103 + 237) AND
     ``cmd.fetch``'s convention (same rationale as ``_cache_dir``).
 
     Source: 09-RESEARCH-pipeline.md:482 (temp-file management); quick-003
-    relocates to <cwd>/tmp/phase9-demos/ for cmd.fetch parity.
+    relocated under the cwd for cmd.fetch parity (nested layout);
+    quick-004 flattened to <cwd>/cache/ (single layer).
     """
-    return os.path.join(os.getcwd(), 'tmp', 'phase9-demos', demo_id + '.raw')
+    return os.path.join(os.getcwd(), 'cache', demo_id + '.raw')
 
 
 def cleanup_temp(path):
@@ -386,10 +393,9 @@ def download_large_demo(demo_id, dest_path, progress_queue, cancel_event):
     url = meta['fetch_url']
     try:
         # Ensure the temp parent dir exists before opening the dest file
-        # (Pitfall E fix: on a fresh launch the <cwd>/tmp/phase9-demos/
-        # dir does not exist yet; without this, open(dest_path, 'wb')
-        # raises FileNotFoundError -- the original installed-plugin
-        # failure).
+        # (Pitfall E fix: on a fresh launch the <cwd>/cache/ dir does not
+        # exist yet; without this, open(dest_path, 'wb') raises
+        # FileNotFoundError -- the original installed-plugin failure).
         _parent = os.path.dirname(dest_path)
         if _parent:
             os.makedirs(_parent, exist_ok=True)

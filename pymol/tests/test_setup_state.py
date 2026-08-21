@@ -138,7 +138,7 @@ class TestDemoManifest(unittest.TestCase):
 
     def test_bundled_cache_name_pattern(self):
         # Bundled demos cache as plain <did>.pdb in data/demos/; fetched
-        # demos cache as compressed <name>.pdb.gz in <cwd>/tmp/phase9-demos/cache/.
+        # demos cache as compressed <name>.pdb.gz in <cwd>/cache/.
         bundled = {'1znf', '1xdn', '5e54', '1k8p', '2qbz', '4wb3'}
         for did in bundled:
             self.assertEqual(DEMO_MANIFEST[did]['cache_name'], "%s.pdb" % did,

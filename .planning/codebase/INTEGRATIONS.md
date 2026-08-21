@@ -41,7 +41,7 @@ bioCHEMeleon is a **PyMOL 2.5.0 desktop plugin**, NOT a standalone app. There is
      - `1gzm`: `https://memprotmd.bioch.ox.ac.uk/data/memprotmd/simulations/1gzm_default_dppc/files/structures/at.pdb`
      - `3gp6`: `https://memprotmd.bioch.ox.ac.uk/data/memprotmd/simulations/3gp6_default_dppc/files/structures/at.pdb`
    - Auth: None (public).
-   - Processing: water/salt (resn `SOL`/`NA`/`CL`) stripped in pure Python BEFORE `cmd.load` (the ~95k-atom wet file never enters PyMOL); dry ~19k-atom result cached as `.pdb.gz` in `tmp/phase9-demos/cache/`.
+   - Processing: water/salt (resn `SOL`/`NA`/`CL`) stripped in pure Python BEFORE `cmd.load` (the ~95k-atom wet file never enters PyMOL); dry ~19k-atom result cached as `.pdb.gz` in `cache/` (flat `<cwd>/cache/` layout).
 
 3. **SASBDB** (`https://www.sasbdb.org`) — glycoprotein demo (Alpha-1-glycoprotein model).
    - SDK/Client: stdlib `urllib.request`.
@@ -61,8 +61,8 @@ bioCHEMeleon is a **PyMOL 2.5.0 desktop plugin**, NOT a standalone app. There is
 
 **File Storage:**
 - **Bundled demos (offline):** `biochemeleon/data/demos/` — 6 PDB files (`1znf.pdb`, `1xdn.pdb`, `5e54.pdb`, `1k8p.pdb`, `2qbz.pdb`, `4wb3.pdb`). Committed to the repo. Located via `os.path.dirname(__file__)/data/demos/` so the path works whether run from repo or installed plugin dir.
-- **Fetched-demo cache:** `<cwd>/tmp/phase9-demos/cache/` (consistent with `cmd.fetch`; created on first finalize). `.pdb.gz` files written by `cmd.save` (PyMOL writes gzip in one step when filename ends `.gz`). Persists across sessions launched from the same dir (the same limitation `cmd.fetch` has). `PyMOL reads .pdb.gz natively` (gzip magic auto-detected). The cwd-based layout matches the Phase 9 smoke test's staging paths AND `cmd.fetch`'s convention (Pitfall E / Open Risk 4 reframe).
-- **Temp downloads:** `<cwd>/tmp/phase9-demos/<demo_id>.raw` (raw download) + `.dry` (stripped intermediate, written next to the `.raw`). Cleaned by `cleanup_temp()` after cache write. Parent dir created by `download_large_demo` via `os.makedirs(..., exist_ok=True)` before the `open(dest_path, 'wb')` call.
+- **Fetched-demo cache:** `<cwd>/cache/` (flat single-layer layout; consistent with `cmd.fetch`; created on first finalize). `.pdb.gz` files written by `cmd.save` (PyMOL writes gzip in one step when filename ends `.gz`). Persists across sessions launched from the same dir (the same limitation `cmd.fetch` has). `PyMOL reads .pdb.gz natively` (gzip magic auto-detected). The cwd-based layout matches the Phase 9 smoke test's staging paths (smoke now stages under `<cwd>/cache/`) AND `cmd.fetch`'s convention (Pitfall E / Open Risk 4 reframe).
+- **Temp downloads:** `<cwd>/cache/<demo_id>.raw` (raw download) + `.dry` (stripped intermediate, written next to the `.raw`). The `.raw`/`.dry` now live in the SAME flat dir as the `.pdb.gz` cache. Cleaned by `cleanup_temp()` after the cache write; parent dir created by `download_large_demo`'s `os.makedirs(..., exist_ok=True)` before the `open(dest_path, 'wb')` call.
 - **Game checkpoints / puzzles:** `.bcmz` archives (user-chosen path via `QFileDialog.getSaveFileName`). Format = `zipfile.ZIP_DEFLATED` containing `game.pse` (PyMOL session, written by `cmd.save`) + `game.bcm` (JSON sidecar). Implemented in `biochemeleon/persistence.py` `write_bcmz`/`read_bcmz` (pure stdlib `zipfile` + `json`).
 - **Setup configs:** user Save/Load Setup writes/reads JSON (`SETUP_FORMAT = "biochemeleon-setup-v1"`). Via `QFileDialog`.
 
