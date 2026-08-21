@@ -1,3 +1,3 @@
 #!/bin/bash
 #rm -r bioCHEMeleon/biochemeleon
-cp -r ./biochemeleon tmp/bioCHEMeleon/
+cp -r ./pymol/biochemeleon tmp/bioCHEMeleon/
