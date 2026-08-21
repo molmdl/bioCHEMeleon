@@ -108,6 +108,36 @@ def pick_terminal_residues(cas_by_chain, max_chains=None):
     return out
 
 
+def _even_starts(n_res, count, segment_size):
+    """Evenly-spaced DISJOINT window start indices (0-indexed into resis).
+
+    Distributes ``count`` non-overlapping windows of ``segment_size``
+    residues across ``n_res`` residues by splitting the slack
+    (``n_res - count*segment_size``) into ``count + 1`` gaps (leading,
+    between, trailing) as evenly as integer division allows (remainder
+    spread to the leading gaps). The leading gap is >= 1 whenever there
+    is any slack, so the first window avoids the pure N-terminus when
+    the chain has room (mirrors the single-pick "mid-chain" intent).
+
+    Precondition: ``count >= 2`` and ``count * segment_size <= n_res``
+    (the caller caps via ``min(need, n_res // segment_size)``).
+
+    Returns: list of ``count`` 0-indexed start positions into ``resis``.
+    """
+    footprint = count * segment_size
+    slack = n_res - footprint
+    n_gaps = count + 1
+    base = slack // n_gaps
+    rem = slack % n_gaps
+    gaps = [base + (1 if k < rem else 0) for k in range(n_gaps)]
+    starts = []
+    pos = gaps[0]  # leading gap
+    for k in range(count):
+        starts.append(pos)
+        pos += segment_size + gaps[k + 1]
+    return starts
+
+
 def pick_segments(cas_by_chain, count, segment_size=3):
     """Mid-chain segment picker. Returns [(chain, start_resi, end_resi), ...].
 
@@ -123,8 +153,8 @@ def pick_segments(cas_by_chain, count, segment_size=3):
     shape ``_prepare_and_start`` builds). Returns a list of
     ``(chain, start_resi, end_resi)`` 3-tuples where start_resi/end_resi
     are ints (resi values, NOT ca_ids -- alt-conf construction copies by
-    ``chain and resi N-M``). Deterministic (no RNG): centered windows for
-    single picks, greedy spread for multi-picks.
+    ``chain and resi N-M``). Deterministic (no RNG): centered window for a
+    single pick, even spacing across the chain for multi-picks (quick-005).
 
     Args:
         cas_by_chain: ``{chain: [(resi, ca_id), ...]}``.
@@ -159,22 +189,22 @@ def pick_segments(cas_by_chain, count, segment_size=3):
             mid = (len(windows) - 1) // 2
             out.append((ch, windows[mid][0], windows[mid][1]))
         else:
-            # Multiple segments: pick disjoint windows, preferring mid-chain
-            # (skip the pure N-term window when alternatives exist). Advance
-            # past each picked window by segment_size to guarantee disjoint.
-            start = 1 if len(windows) > need else 0
-            last_end = None
-            picked = 0
-            i = start
-            while i < len(windows) and picked < need:
-                s, e = windows[i]
-                if last_end is None or s > last_end:
-                    out.append((ch, s, e))
-                    last_end = e
-                    picked += 1
-                    i += segment_size  # skip overlapping windows
-                else:
-                    i += 1
+            # Multiple segments: EVEN SPACING across the chain (quick-005).
+            # The old greedy advance (i += segment_size) clustered segments
+            # back-to-back near the N-term (e.g. 76-res count=2 -> resi 2-4
+            # and 5-7, gap 0). Even spacing splits the slack into count+1
+            # gaps (leading/between/trailing) so hiders spread across the
+            # whole chain. Cap at the max disjoint windows that fit; if only
+            # one fits, fall through to the centered single-pick above.
+            max_fit = n_res // segment_size
+            actual = min(need, max_fit)
+            if actual <= 1:
+                # Only one fits: centered mid-chain window (same as need==1).
+                mid = (len(windows) - 1) // 2
+                out.append((ch, windows[mid][0], windows[mid][1]))
+            else:
+                for s in _even_starts(n_res, actual, segment_size):
+                    out.append((ch, resis[s], resis[s + segment_size - 1]))
     return out[:count]
 
 
