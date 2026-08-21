@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 Phase: v1 complete (all 12 phases: 1-11 + 04.1)
 Plan: Not started (next milestone)
 Status: Ready to plan next milestone
-Last activity: 2026-08-22 — quick-003: relocate Phase 9 demo cache to `<cwd>/tmp/phase9-demos/` (cmd.fetch parity). v1 milestone complete 2026-08-18 (archived + tagged).
+Last activity: 2026-08-22 — quick-004: flatten Phase 9 demo cache to single `<cwd>/cache/` layer. v1 milestone complete 2026-08-18 (archived + tagged).
 
 Progress: ████████████████████████████████████████████████████████ 100% v1 (77 of 77 plans done — all phases COMPLETE + VERIFIED. v1 shipped.)
 
@@ -39,7 +39,7 @@ Progress: ███████████████████████�
 
 - **VMD tcl script** — deferred per spec.md; different tech stack (tcl vs python). Run `/gsd-new-milestone` to start (questioning → research → requirements → roadmap).
 - **AGENTS.md needs VMD/tcl-specific rewrite** when v2 research begins (currently v1-scoped per AGENTS.md header note).
-- **Known v1 tech debt to consider for v2:** Phase 9 SSL fallback (check_hostname=False for SASBDB HARICA cert); Phase 11 hider fragment secondary-structure inheritance (cosmetic). *(Phase 9 .pdb.gz cache path resolved 2026-08-22 by quick-003: relocated to `<cwd>/tmp/phase9-demos/` for `cmd.fetch` parity; makedirs-on-first-use ensures the dir exists regardless of install location. Network fetch + GUI on a fresh computer remain untested by the quick task — see `.planning/quick/003-*/003-SUMMARY.md`.)*
+- **Known v1 tech debt to consider for v2:** Phase 9 SSL fallback (check_hostname=False for SASBDB HARICA cert); Phase 11 hider fragment secondary-structure inheritance (cosmetic). *(Phase 9 .pdb.gz cache path resolved 2026-08-22: quick-003 relocated to `<cwd>/tmp/phase9-demos/` for `cmd.fetch` parity; quick-004 flattened to a single `<cwd>/cache/` layer (cache + temp `.raw`/`.dry` co-located). makedirs-on-first-use ensures the dir exists regardless of install location. Network fetch + GUI on a fresh computer remain untested by the quick tasks — see `.planning/quick/004-*/004-SUMMARY.md`.)*
 
 ### Resolved (v1 — full log in MILESTONES.md + phase SUMMARYs)
 
