@@ -36,6 +36,7 @@ from biochemeleon.generators import (
     pick_terminal_residues,
     pick_segments,
     generate_middle_displacement,
+    randomize_per_rep,
 )
 
 
@@ -406,6 +407,102 @@ class TestGenerateMiddleDisplacement(unittest.TestCase):
             # Each vector is a unit vector x magnitude (rigid translation)
             norm = math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2)
             self.assertAlmostEqual(norm, 1.5, places=9)
+
+
+class TestRandomizePerRep(unittest.TestCase):
+    """Test randomize_per_rep(hider_count, game_reps, seed) -- quick-008.
+
+    Pure, dependency-injected distribution (mirrors the per-rep loop in
+    ``setup_state.randomize_state`` lines 282-292, but ``game_reps`` is a
+    parameter so this module stays pure / WSL-unit-testable). Used by
+    ``__init__._continue_after_large_demo_fetch`` when the user sets a
+    total ``hider_count`` without per-rep counts (``per_rep={}``) -- instead
+    of the old all-spheres fallback, the count is spread across a random
+    subset of reps so the game mixes representations (parity with the
+    Randomize button).
+
+    Guarantees at least one rep with count > 0 when ``hider_count > 0``
+    (avoids an empty per_rep that would loop back to a fallback). The sum
+    of returned counts may be < hider_count (leftover unassigned) -- same
+    property as ``randomize_state``.
+
+    ``GAME_REPS`` is a LOCAL const here (NOT imported) to keep the test
+    independent of the source-of-truth list.
+    """
+
+    GAME_REPS = ['lines', 'sticks', 'spheres', 'cartoon', 'ribbon']
+
+    def test_zero_hider_count(self):
+        """hider_count=0 -> {} (no hiders, no crash)."""
+        self.assertEqual(randomize_per_rep(0, self.GAME_REPS), {})
+
+    def test_negative_hider_count(self):
+        """hider_count=-5 -> {} (count <= 0 short-circuits to empty)."""
+        self.assertEqual(randomize_per_rep(-5, self.GAME_REPS), {})
+
+    def test_empty_game_reps(self):
+        """game_reps=[] -> {} (no reps to distribute across)."""
+        self.assertEqual(randomize_per_rep(5, []), {})
+
+    def test_non_empty_when_count_positive(self):
+        """For every seed in range(20), result is non-empty with >=1 rep count > 0.
+
+        This is the core quick-008 guarantee: the caller must NOT loop back
+        to a fallback, so a positive hider_count always yields at least one
+        rep with a positive count.
+        """
+        for seed in range(20):
+            result = randomize_per_rep(10, self.GAME_REPS, seed=seed)
+            self.assertTrue(result,
+                            "result must be non-empty for hider_count>0 (seed=%d)" % seed)
+            self.assertTrue(any(v > 0 for v in result.values()),
+                            "at least one rep must have count > 0 (seed=%d)" % seed)
+
+    def test_all_keys_in_game_reps(self):
+        """Every key in result is a valid rep in GAME_REPS (no bogus keys)."""
+        for seed in range(30):
+            result = randomize_per_rep(10, self.GAME_REPS, seed=seed)
+            for k in result:
+                self.assertIn(k, self.GAME_REPS,
+                              "key %r not in GAME_REPS (seed=%d)" % (k, seed))
+
+    def test_values_positive(self):
+        """Every value is > 0 (no zero-count entries leak into the dict)."""
+        for seed in range(30):
+            result = randomize_per_rep(10, self.GAME_REPS, seed=seed)
+            for k, v in result.items():
+                self.assertGreater(v, 0,
+                    "count for %r must be > 0, got %d (seed=%d)" % (k, v, seed))
+
+    def test_sum_le_hider_count(self):
+        """sum(counts) <= hider_count for many seeds (leftover unassigned)."""
+        for seed in range(30):
+            result = randomize_per_rep(10, self.GAME_REPS, seed=seed)
+            self.assertLessEqual(sum(result.values()), 10,
+                "sum %d exceeds hider_count 10 (seed=%d)" % (sum(result.values()), seed))
+
+    def test_hider_count_one(self):
+        """hider_count=1, seed=42 -> exactly one entry with value 1 (sum == 1).
+
+        With count=1 the per-rep loop can draw 0 for the first rep(s); the
+        non-empty guarantee then puts the full count (1) on a random rep.
+        Either way the result is a single rep with count 1.
+        """
+        result = randomize_per_rep(1, self.GAME_REPS, seed=42)
+        self.assertEqual(len(result), 1, "hider_count=1 -> exactly one rep")
+        self.assertEqual(sum(result.values()), 1, "sum must equal hider_count=1")
+
+    def test_seed_determinism(self):
+        """Same seed -> identical result (reproducible distribution)."""
+        first = randomize_per_rep(10, self.GAME_REPS, seed=42)
+        second = randomize_per_rep(10, self.GAME_REPS, seed=42)
+        self.assertEqual(first, second)
+
+    def test_seed_difference(self):
+        """Different seeds -> (almost surely) different results."""
+        first = randomize_per_rep(10, self.GAME_REPS, seed=1)
+        second = randomize_per_rep(10, self.GAME_REPS, seed=2)
+        self.assertNotEqual(first, second)
 
 
 if __name__ == '__main__':
