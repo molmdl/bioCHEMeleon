@@ -45,4 +45,10 @@ Progress: ███████████████████████�
 
 All v1 blockers resolved. Key runtime discoveries encoded in AGENTS.md domain rules (Phase 3 library bugs: id vs ID, b<0 selector, space= hygiene, etc.). Phase 11 alt-conf integration failure resolved via single-state new-chain copy refactor.
 
-*Updated: 2026-08-18 after v1 milestone completion*
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 003 | Relocate Phase 9 fetched-demo cache to cwd (cmd.fetch parity) | 2026-08-22 | 5041541 | [003-relocate-phase9-demo-cache-to-cwd](./quick/003-relocate-phase9-demo-cache-to-cwd/) |
+
+*Updated: 2026-08-22 after quick task 003 completion*
