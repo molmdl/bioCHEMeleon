@@ -200,22 +200,52 @@ def load_demo(demo_id):
 # ---- Phase 9: fetched-large-demo split API (Qt-free; the QProgressDialog ----
 # ---- + QTimer drain that drives these lives in __init__.py, the Qt layer) ----
 
+def _app_dir():
+    """Return the absolute path to the biochemeleon user data directory.
+
+    Resolves to ``~/.biochemeleon`` (e.g. ``C:\\Users\\<user>\\.biochemeleon``
+    on Windows, ``/home/<user>/.biochemeleon`` on Linux) via
+    ``os.path.expanduser('~')`` -- a per-user, always-writable,
+    session-persistent location that works whether the plugin runs from
+    the dev repo OR is installed on a separate computer from the zip.
+
+    This replaces the original v1 dev-repo-relative
+    ``os.path.dirname(__file__)/../tmp/phase9-demos/`` layout (Open Risk 4
+    / Pitfall E). That layout broke when the plugin was installed from
+    ``bioCHEMeleon_v1_pymol-open-src-2.5.0.zip`` on a machine where the
+    git-ignored ``tmp/phase9-demos/`` dir did not exist: the download
+    worker's ``open(dest_path, 'wb')`` raised ``FileNotFoundError``
+    because the parent dir was never created and the path pointed
+    outside the install tree into a non-existent dev-repo-local ``tmp/``.
+
+    ``to_windows_path`` does NOT mangle a ``~``-expanded path: on the
+    Windows runtime ``expanduser('~')`` returns a ``C:\\...`` path (not a
+    ``/mnt/...`` WSL mount), so the WSL->Windows guard returns it
+    unchanged (verified). The dir is created on first use by
+    ``finalize_large_demo`` (cache) and ``download_large_demo`` (temp),
+    both via ``os.makedirs(..., exist_ok=True)``.
+    """
+    return os.path.join(os.path.expanduser('~'), '.biochemeleon')
+
+
 def _cache_dir():
     """Return the absolute path to the fetched-demo cache directory.
 
-    Resolves to <repo>/tmp/phase9-demos/cache/, mirroring load_demo's
-    os.path.dirname(__file__)/data/demos pattern (demos.py module file
-    lives in biochemeleon/, so '..' reaches the repo root). The dir is
-    git-ignored (git check-ignore tmp/phase9-demos returns exit 0); it
-    persists across PyMOL sessions so a fetched demo is downloaded only
-    once. v1 runs from the repo (AGENTS.md); an installed plugin would
-    need a configurable cache dir (Open Risk 4 / Pitfall E -- v2).
+    Resolves to ``~/.biochemeleon/cache/`` -- a per-user, always-writable,
+    session-persistent location (works on the dev repo AND on a fresh
+    install from the zip). The dir persists across PyMOL sessions so a
+    fetched demo is downloaded only once. Created on first finalize by
+    ``os.makedirs(_cache_dir(), exist_ok=True)`` (finalize_large_demo).
 
-    Source: 09-RESEARCH-pipeline.md:296-299 (cache location + path
-    resolution); 09-RESEARCH-sasbdb.md:230 (gitignore verified).
+    This replaces the original dev-repo-relative
+    ``<package>/../tmp/phase9-demos/cache/`` layout (Pitfall E / Open
+    Risk 4) which broke on a fresh install where the git-ignored
+    ``tmp/phase9-demos/`` did not exist.
+
+    Source: 09-RESEARCH-pipeline.md:296-299 (original cache location);
+    fix relocates to ~/.biochemeleon/ for installed-plugin support.
     """
-    return os.path.abspath(
-        os.path.join(os.path.dirname(__file__), '..', 'tmp', 'phase9-demos', 'cache'))
+    return os.path.join(_app_dir(), 'cache')
 
 
 def cache_path_for(demo_id):
@@ -253,18 +283,26 @@ def is_cached(demo_id):
 def temp_download_path(demo_id):
     """Return a temp path for the raw (pre-strip, pre-cache) download.
 
-    Uses tmp/phase9-demos/<demo_id>.raw (repo-local, git-ignored) rather
-    than tempfile.mkstemp so the path is deterministic + traceable for
-    debugging (a tempfile would be cleaned by the OS on restart; the
-    .raw file survives an interrupted fetch for inspection). The caller
-    (the Qt layer's _resolve_large_demo) converts via to_windows_path
-    before handing the path to the worker + finalize_large_demo, and
-    calls cleanup_temp when done.
+    Uses ``~/.biochemeleon/tmp/<demo_id>.raw`` (per-user, always-writable)
+    rather than ``tempfile.mkstemp`` so the path is deterministic +
+    traceable for debugging (a tempfile would be cleaned by the OS on
+    restart; the .raw file survives an interrupted fetch for inspection).
+    The parent dir is created by ``download_large_demo`` via
+    ``os.makedirs(os.path.dirname(dest_path), exist_ok=True)`` before
+    the ``open(dest_path, 'wb')`` call, so the download never fails on a
+    missing parent dir (the original Pitfall E failure on a fresh
+    install). The caller (the Qt layer's _resolve_large_demo) converts
+    via to_windows_path before handing the path to finalize_large_demo,
+    and calls cleanup_temp when done.
 
-    Source: 09-RESEARCH-pipeline.md:482 (temp-file management).
+    This replaces the original dev-repo-relative
+    ``<package>/../tmp/phase9-demos/<demo_id>.raw`` layout which broke on
+    a fresh install (Pitfall E / Open Risk 4).
+
+    Source: 09-RESEARCH-pipeline.md:482 (temp-file management); fix
+    relocates to ~/.biochemeleon/tmp/ for installed-plugin support.
     """
-    return os.path.join(
-        os.path.dirname(__file__), '..', 'tmp', 'phase9-demos', demo_id + '.raw')
+    return os.path.join(_app_dir(), 'tmp', demo_id + '.raw')
 
 
 def cleanup_temp(path):
@@ -372,6 +410,13 @@ def download_large_demo(demo_id, dest_path, progress_queue, cancel_event):
     meta = DEMO_MANIFEST[demo_id]
     url = meta['fetch_url']
     try:
+        # Ensure the temp parent dir exists before opening the dest file
+        # (Pitfall E fix: on a fresh install the ~/.biochemeleon/tmp/ dir
+        # does not exist yet; without this, open(dest_path, 'wb') raises
+        # FileNotFoundError -- the original installed-plugin failure).
+        _parent = os.path.dirname(dest_path)
+        if _parent:
+            os.makedirs(_parent, exist_ok=True)
         with _urlopen_with_ssl_fallback(url, 60, progress_queue) as resp:
             total = int(resp.headers.get('Content-Length', 0))  # 0 = unknown
             received = 0

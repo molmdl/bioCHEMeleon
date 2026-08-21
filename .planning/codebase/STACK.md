@@ -60,7 +60,7 @@
 **Environment:**
 - No `.env` files (`.gitignore` excludes `*.env`). No env vars required at runtime — conda env activation handles PATH.
 - PyMOL plugin discovery: installed via PyMOL GUI *Plugin → Plugin Manager → Install New Plugin* (accepts a package dir with `__init__.py`). Lands in `%APPDATA%/pymol/startup/` (Windows) or `~/.pymol/startup/` (Linux). For dev, run from the repo via the Windows path.
-- Fetched-demo cache: `tmp/phase9-demos/cache/` (repo-local, gitignored). Persists across PyMOL sessions so a fetched large demo downloads only once.
+- Fetched-demo cache: `~/.biochemeleon/cache/` (per-user, always-writable; created on first fetch via `os.makedirs`). Persists across PyMOL sessions so a fetched large demo downloads only once. Works on dev repo AND fresh install from zip (replaces the original repo-local `tmp/phase9-demos/cache/` which broke on a fresh install — Pitfall E fix).
 
 **Build:**
 - No build step. Python package is interpreted directly by PyMOL's bundled Python.

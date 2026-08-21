@@ -61,8 +61,8 @@ bioCHEMeleon is a **PyMOL 2.5.0 desktop plugin**, NOT a standalone app. There is
 
 **File Storage:**
 - **Bundled demos (offline):** `biochemeleon/data/demos/` — 6 PDB files (`1znf.pdb`, `1xdn.pdb`, `5e54.pdb`, `1k8p.pdb`, `2qbz.pdb`, `4wb3.pdb`). Committed to the repo. Located via `os.path.dirname(__file__)/data/demos/` so the path works whether run from repo or installed plugin dir.
-- **Fetched-demo cache:** `tmp/phase9-demos/cache/` (gitignored). `.pdb.gz` files written by `cmd.save` (PyMOL writes gzip in one step when filename ends `.gz`). Persists across sessions. `PyMOL reads .pdb.gz natively` (gzip magic auto-detected).
-- **Temp downloads:** `tmp/phase9-demos/<demo_id>.raw` (raw download) + `.dry` (stripped intermediate). Cleaned by `cleanup_temp()` after cache write.
+- **Fetched-demo cache:** `~/.biochemeleon/cache/` (per-user, always-writable; created on first fetch). `.pdb.gz` files written by `cmd.save` (PyMOL writes gzip in one step when filename ends `.gz`). Persists across sessions. `PyMOL reads .pdb.gz natively` (gzip magic auto-detected). Works on dev repo AND fresh install (replaces the original repo-local `tmp/phase9-demos/cache/` — Pitfall E fix).
+- **Temp downloads:** `~/.biochemeleon/tmp/<demo_id>.raw` (raw download) + `.dry` (stripped intermediate, written next to the `.raw`). Cleaned by `cleanup_temp()` after cache write. Parent dir created by `download_large_demo` via `os.makedirs(..., exist_ok=True)` before the `open(dest_path, 'wb')` call.
 - **Game checkpoints / puzzles:** `.bcmz` archives (user-chosen path via `QFileDialog.getSaveFileName`). Format = `zipfile.ZIP_DEFLATED` containing `game.pse` (PyMOL session, written by `cmd.save`) + `game.bcm` (JSON sidecar). Implemented in `biochemeleon/persistence.py` `write_bcmz`/`read_bcmz` (pure stdlib `zipfile` + `json`).
 - **Setup configs:** user Save/Load Setup writes/reads JSON (`SETUP_FORMAT = "biochemeleon-setup-v1"`). Via `QFileDialog`.
 

@@ -25,7 +25,7 @@ tech_debt:  # Non-critical, deferred, cosmetic, or v1-scoped-acceptable
     items:
       - "⚠️ v1-scoped (human-approved 09-03): SSL fallback uses `check_hostname=False`/`CERT_NONE` for SASBDB HARICA cert gap — security tradeoff for public PDB downloads. Acceptable for v1 offline educational tool; revisit for v2."
       - "⚠️ v1-scoped: 60s urllib timeout may be tight for slow MemProtMD connections."
-      - "⚠️ v2 concern: `.pdb.gz` cache lives in repo-relative `tmp/phase9-demos/cache/` (gitignored) — won't exist for an installed plugin. Out of v1 scope per AGENTS.md."
+      - "✅ Resolved (installed-plugin cache path): `.pdb.gz` cache relocated from repo-relative `tmp/phase9-demos/cache/` to `~/.biochemeleon/cache/` (per-user, always-writable, created on first fetch). Download worker now `os.makedirs` the temp parent before `open()`. Was a v2 concern; now fixed in v1 after it broke on a fresh install from the zip (debug: .planning/debug/resolved/phase9-hardcoded-demo-cache-path.md)."
   - phase: 11-alt-conf-cartoon-hider
     items:
       - "⚠️ User-accepted caveat (2026-08-16): hider fragment renders as loop (`ss='L'`) — does NOT inherit the parent's secondary structure. Cosmetic visual polish, future enhancement (consistent with reverted commit 2715df5). Hiders are visible + clickable; game playable."
@@ -170,7 +170,7 @@ All items below are either cosmetic (ℹ️), v1-scoped-and-human-approved (⚠�
 - **Phase 11 SS-copy caveat** (⚠️, user-accepted 2026-08-16): hider fragment renders as loop (`ss='L'`), not inheriting parent secondary structure. Cosmetic visual polish for a future cycle. Hiders are visible + clickable; game fully playable.
 - **Phase 9 SSL fallback** (⚠️, human-approved 09-03): `check_hostname=False`/`CERT_NONE` for SASBDB HARICA cert gap — security tradeoff for public PDB downloads. Acceptable for v1 offline educational tool; revisit for v2.
 - **Phase 9 60s urllib timeout** (⚠️): may be tight for slow MemProtMD connections.
-- **Phase 9 cache path** (⚠️ v2 concern): `.pdb.gz` cache in repo-relative `tmp/phase9-demos/cache/` (gitignored) won't exist for an installed plugin. Out of v1 scope per AGENTS.md.
+- **Phase 9 cache path** (✅ resolved): `.pdb.gz` cache relocated from repo-relative `tmp/phase9-demos/cache/` (gitignored, broke on fresh install) to `~/.biochemeleon/cache/` (per-user, always-writable). Download worker now creates the temp parent dir via `os.makedirs` before `open()`. Was a v2 concern; fixed in v1 after it broke on a fresh install from the zip.
 
 ### Already resolved (listed for traceability)
 - **Phase 8** post-win imported-game empty scene (✅ commit da8d7a8 + smoke Section N regression).
