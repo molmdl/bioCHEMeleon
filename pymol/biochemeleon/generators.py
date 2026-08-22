@@ -17,6 +17,7 @@ Functions:
   - pick_terminal_residues(cas_by_chain, max_chains)  -- Phase 5 (C-term pick)
   - pick_segments(cas_by_chain, count, segment_size)  -- Phase 11 (mid-chain)
   - generate_middle_displacement(n, seed, magnitude)  -- Phase 11 (rigid vec)
+  - randomize_per_rep(hider_count, game_reps, seed)  -- quick-008 (random per_rep)
 """
 
 import random
@@ -246,3 +247,59 @@ def generate_middle_displacement(n, seed=None, magnitude=1.5):
                     dy / norm * magnitude,
                     dz / norm * magnitude])
     return out
+
+
+def randomize_per_rep(hider_count, game_reps, seed=None):
+    """Distribute hider_count across a random non-empty subset of reps.
+
+    Mirrors the per-rep distribution in setup_state.randomize_state but as
+    a PURE, dependency-injected function: game_reps is passed in (not
+    imported) so this module stays pure (WSL-unit-testable). Used by
+    __init__._continue_after_large_demo_fetch when the user sets a total
+    hider_count without per-rep counts (per_rep={}) -- instead of the old
+    all-spheres fallback, the count is spread across a random subset of
+    GAME_REPS so the game mixes representations (parity with the Randomize
+    button).
+
+    Guarantees at least one rep with count > 0 when hider_count > 0 (avoids
+    an empty per_rep that would loop back to a fallback). The per-rep
+    generation loop in _continue_after_large_demo_fetch already handles
+    under-generation (cartoon/ribbon need mid-chain segments; sticks need
+    neighbor atoms) with warnings -- a rep that cannot fulfill its count
+    yields fewer (or zero) hiders, matching the Randomize button's behavior.
+
+    Like randomize_state, the sum of returned counts may be < hider_count
+    (leftover unassigned): randomize_state has the same property. This is
+    intentional parity, not a bug.
+
+    Args:
+        hider_count: total hiders to distribute (int). <= 0 -> {}.
+        game_reps: ordered list of valid rep names (e.g. GAME_REPS). Empty -> {}.
+        seed: int for deterministic output (tests). None = entropy.
+
+    Returns:
+        dict {rep: count} with count > 0 for each key, sum(counts) <=
+        hider_count, at least one key when hider_count > 0 and game_reps is
+        non-empty. {} for hider_count <= 0 or empty game_reps.
+    """
+    if hider_count <= 0 or not game_reps:
+        return {}
+    rng = random.Random(seed)
+    # Pick a random NON-EMPTY subset (>=1 rep). randomize_state uses
+    # randint(0, ...) which can yield an empty subset; here we MUST avoid
+    # empty (the caller's fallback would otherwise re-trigger).
+    reps = rng.sample(game_reps, rng.randint(1, len(game_reps)))
+    per_rep = {}
+    remaining = hider_count
+    for rep in reps:
+        if remaining <= 0:
+            break
+        c = rng.randint(0, remaining)
+        if c:
+            per_rep[rep] = c
+            remaining -= c
+    # Guarantee non-empty: if every random draw came back 0 (possible when
+    # hider_count==1 and each rep draws 0), put the full count on a random rep.
+    if not per_rep:
+        per_rep[rng.choice(game_reps)] = hider_count
+    return per_rep
