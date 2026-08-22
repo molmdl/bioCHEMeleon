@@ -8,6 +8,19 @@ A "hide-and-seek" game played on molecular structures inside PyMOL (v1 shipped),
 
 The player can load a molecule, generate blended "hider" atoms that match the local representation style, and reliably find them by clicking — with a working timer and win condition. If nothing else works, this loop must work.
 
+## Current Milestone: v2.0 VMD tcl Script
+
+**Goal:** Port v1's hide-and-seek game to VMD 1.9.3 as a sourced tcl script, with MVP-first approach and research-driven representation selection.
+
+**Target features:**
+- Core gameplay loop (load → generate hiders → click-to-find → win) on VMD, loaded via `source` + command
+- Hider generation adapted to VMD's command-based representation system (`mol addrep`; VMD default is Lines only — unlike PyMOL's GUI-layered reps)
+- Random total hider count distributed across all available reps from the start (v1.1 quick-008 fix baked in, not a post-ship patch)
+- Research-driven selection of which VMD representations are viable for the blend-in mechanic
+- Explore whether VMD's material system (Glass, Metallic, Translucent) adds a blending dimension beyond v1's rep-based approach
+- Reuse v1 demo PDB set with VMD-appropriate rep setup
+- Headless testing from WSL via `vmd -dispdev text -e <script> -eofexit`
+
 ## Requirements
 
 ### Validated
@@ -46,39 +59,46 @@ The player can load a molecule, generate blended "hider" atoms that match the lo
 
 <!-- Current scope. Building toward these. -->
 
-#### VMD tcl Script (v2 — deferred)
+#### VMD tcl Script (v2.0 — current milestone)
 
-- [ ] Sourced tcl + command to launch GUI; similar gameplay to PyMOL
-- [ ] Research and limit the set of VMD materials/representations the game plays on
-- [ ] Seek approval for any additional VMD tcl libs (e.g. tooltip.tcl)
+- [ ] Sourced tcl script + command to launch GUI; same core gameplay as v1 (load → generate hiders → click-to-find → win)
+- [ ] Hider generation adapted to VMD's command-based representation system (`mol addrep`); VMD default is Lines only — research rep setup workflow
+- [ ] Random total hider count distributed across all available reps from the start (v1.1 quick-008 fix baked in)
+- [ ] Research and limit which VMD representations are viable for the blend-in mechanic
+- [ ] Explore whether VMD's material system (Glass, Metallic, Translucent) adds a blending dimension beyond v1's rep-based approach
+- [ ] Headless testing via `vmd -dispdev text -e <script> -eofexit` from WSL
+- [ ] Reuse v1 demo PDB set (1znf, 1xdn, 5E54, 1K8P, 2QBZ, 4WB3 + fetched 1GZM/3GP6/SASBDB)
+- [ ] Code under `vmd/` (multi-viewer project layout, mirrors `pymol/`)
+- [ ] Seek approval for any additional VMD tcl libs (e.g. tooltip.tcl — staged in `vmd-ref/` as reference; vendor under `vmd/3rd_party_lib/` if needed)
 
 ### Out of Scope
 
 <!-- Explicit boundaries. Includes reasoning to prevent re-adding. -->
 
 - Surface representation hiders — excluded by user spec; does not fit the "blend in" mechanic well
-- VMD plugin — deferred to v2 milestone; different tech (tcl vs python) and testing, delivered as a separate milestone
 - Installing packages or creating conda envs in the dev environment — explicit constraint; WSL is for syntax checking only, PyMOL runs in Windows conda via setenv.bat
 - Auto-fetching/installing external Python libs silently — any non-PyMOL dependency must be listed to a file, approved by the user, then either user-installed or vendored into ./3rd_party_lib (git-ignored) with license noted
+- chimeraX port — later milestone candidate (placeholder dir chimeraX/ exists); different viewer/extension model, research needed when active
 
 ## Context
 
 - **v1 shipped 2026-08-18.** ~14,000 lines of Python (5,621 biochemeleon + 4,420 smoke + 3,959 tests). 125 unit tests green + 6 headless smoke suites + 9 human-verify checkpoints APPROVED. Milestone audit PASSED (46/46 requirements, 12/12 phases, 9/9 integration, 6/6 E2E flows).
-- **Working environment:** WSL Ubuntu for development. PyMOL 2.5.0 (anaconda) runs in a Windows conda env, accessed via `setenv.bat` (a Windows cmd.exe batch script). Python 3.6 is available in the WSL shell for syntax checking only — nothing may be installed in WSL, and no conda envs may be created. Headless PyMOL (cmd-only, no Qt) CAN be run from WSL via `cmd.exe /c C:\\src\\run-conda-pymol.bat -cq <script>` (discovered Phase 3).
-- **Reference material:** `./Pymol-script-repo` (git-ignored) holds open-source PyMOL plugins for learning how to write PyMOL plugins.
+- **Working environment:** WSL Ubuntu for development. PyMOL 2.5.0 (anaconda) runs in a Windows conda env, accessed via `setenv.bat` (a Windows cmd.exe batch script). VMD 1.9.3 (Windows) is accessible from WSL via alias `vmd` → `vmd.exe`; headless mode via `vmd -dispdev text -e <script> -eofexit`. Python 3.6 is available in the WSL shell for syntax checking only — nothing may be installed in WSL, and no conda envs may be created. Headless PyMOL (cmd-only, no Qt) CAN be run from WSL via `cmd.exe /c C:\\src\\run-conda-pymol.bat -cq <script>` (discovered Phase 3).
+- **v2 reference material:** `vmd-ref/` (git-ignored) holds VMD User's Guide PDF, 5 curated bundled tcl plugins (clonerep, ramaplot, autoionize, viewmaster, mergestructs), VMD core scripts (vmdinit, materials.dat, colordefs.dat, atomselect.tcl), and tklib tooltip.tcl (Tcl/Tk license terms). Internal learning only — UIUC Open Source License for VMD material, Tcl/Tk license terms for tklib.
+- **Reference material (v1):** `./Pymol-script-repo` (git-ignored) holds open-source PyMOL plugins for learning how to write PyMOL plugins.
 - **Demo PDBs:** 6 bundled small PDBs (1znf, 1xdn, 5E54, 1K8P, 2QBZ, 4WB3) + 3 fetched large demos (1GZM, 3GP6 from MemProtMD; SASDPG4 from SASBDB). Sources cited in `biochemeleon/data/demos/SOURCES.md` and `DATA_SOURCES.md`.
 - **Known tech debt (v1):** Phase 9 SSL fallback uses check_hostname=False for SASBDB HARICA cert gap (revisit for v2); Phase 9 .pdb.gz cache in repo-relative tmp/ won't exist for installed plugin (out of v1 scope); Phase 11 hider fragment renders as loop (ss='L') — doesn't inherit parent secondary structure (cosmetic, future enhancement); stale docstrings in game.py/__init__.py (cosmetic).
-- **Next milestone:** v2 — VMD tcl script (deferred per spec.md); chimeraX port is a later candidate (placeholder dir chimeraX/ exists). Run `/gsd-new-milestone`.
+- **Current milestone:** v2.0 — VMD tcl port (active). AGENTS.md needs VMD/tcl-specific rewrite after this workflow (currently v1-scoped per AGENTS.md header note). v2 code lives under `vmd/` (mirrors `pymol/` layout).
 
 ## Constraints
 
-- **Tech stack:** PyMOL plugin (Python, PyMOL 2.5.0) for v1; VMD tcl script for v2. No web/backend.
-- **Compatibility:** Must run under PyMOL 2.5.0 (anaconda, Windows) launched via `setenv.bat`.
-- **Dependencies:** Only libraries required by pymol-open-source may be assumed. Any additional Python library must be written to a list file and explicitly approved by the user before use; approved libs are either user-installed locally or vendored into `./3rd_party_lib` (git-ignored) with their license noted. The user must be told whether a Linux-like env is needed or the "call cmd from WSL" approach still works.
-- **Environment:** WSL Ubuntu — do NOT install anything, do NOT create conda envs. Python 3.6 is only for syntax checks.
+- **Tech stack:** PyMOL plugin (Python, PyMOL 2.5.0) for v1 (shipped); VMD tcl script (VMD 1.9.3) for v2 (current); chimeraX extension for future milestone. No web/backend.
+- **Compatibility:** v1 must run under PyMOL 2.5.0 (anaconda, Windows) launched via `setenv.bat`. v2 must run under VMD 1.9.3 (Windows) launched via `vmd` alias or `source`d in a VMD session.
+- **Dependencies:** v1: only libraries required by pymol-open-source. v2: only what VMD ships (tcl/Tk 8.5, built-in plugins). Any additional tcl lib (e.g. tooltip.tcl from tklib) must be approved by the user before use; approved libs are vendored under `vmd/3rd_party_lib/` (git-ignored) with their license noted.
+- **Environment:** WSL Ubuntu — do NOT install anything, do NOT create conda envs. Python 3.6 is only for syntax checks. VMD accessible via alias `vmd` (headless: `-dispdev text`).
 - **Code quality:** Efficient, traceable, clean, safe. Repo must be structured.
 - **UI:** Simple, user-friendly, with clear but sufficient in-game explanation.
-- **Repo hygiene:** Vendored libs (`3rd_party_lib/`) and the reference repo (`Pymol-script-repo/`) are git-ignored. Large processed demo PDBs should be compressed.
+- **Repo hygiene:** Vendored libs (`3rd_party_lib/`, `vmd/3rd_party_lib/`) and reference repos (`Pymol-script-repo/`, `vmd-ref/`) are git-ignored. Large processed demo PDBs should be compressed.
 
 ## Key Decisions
 
@@ -97,6 +117,10 @@ The player can load a molecule, generate blended "hider" atoms that match the lo
 | Headless PyMOL from WSL via `cmd.exe /c run-conda-pymol.bat -cq` | Closed the WSL/Windows runtime gap for cmd-only scripts (discovered Phase 3) | ✓ Good — 6 smoke suites run headlessly |
 | Parallel-subagent worktree/branch protocol (one worktree per parallel plan) | Eliminates shared-index races when ≥2 plans run concurrently | ✓ Good — no collisions since adoption |
 | Phase 11 single-state new-chain copy (abandoned alt-conf design mid-execution) | Alt-conf caused 4 GUI-only bug cycles; single-state copy gives connected, blended cartoon hiders | ✓ Good — verified on 1ubq |
+| v2 code under `vmd/` (mirrors `pymol/` layout) | Multi-viewer project; each viewer's code is self-contained | — Pending — v2 starting |
+| v2 MVP-first with random total distribution from start | v1.1 quick-008 showed all-spheres default was a post-ship fix; bake the fix in from the start | — Pending — v2 starting |
+| VMD headless testing via `vmd -dispdev text -e <script> -eofexit` | Closes WSL/Windows runtime gap for tcl scripts (v2 equivalent of v1's run-conda-pymol.bat) | — Pending — v2 starting |
+| AGENTS.md VMD/tcl rewrite deferred until after /gsd-new-milestone | Workflow first, then update agent notes with verified VMD API behavior | — Pending |
 
 ---
-*Last updated: 2026-08-18 after v1 milestone*
+*Last updated: 2026-08-22 after v2.0 milestone start*

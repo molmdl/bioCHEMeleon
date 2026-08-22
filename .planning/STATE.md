@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 
 ## Current Position
 
-Phase: v1 complete (all 12 phases: 1-11 + 04.1)
-Plan: Not started (next milestone)
-Status: Ready to plan next milestone
-Last activity: 2026-08-22 — v1.1 shipped (quick-005/006/007/008/009: gameplay tuning + alt-conf fix + multi-viewer docs). v1 milestone complete 2026-08-18 (archived + tagged).
+Phase: Not started (defining requirements for v2.0)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-08-22 — Milestone v2.0 (VMD tcl port) started. Reference material copied to `vmd-ref/` (gitignored). VMD 1.9.3 confirmed accessible headlessly via `vmd -dispdev text -e <script> -eofexit`.
 
-Progress: ████████████████████████████████████████████████████████ 100% v1 (77 of 77 plans done — all phases COMPLETE + VERIFIED. v1 shipped.)
+Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% v2.0 (defining requirements)
 
 ## v1 Milestone Summary
 
@@ -37,11 +37,11 @@ Progress: ███████████████████████�
 
 ### Open items for next milestone
 
-- **VMD tcl script** — deferred per spec.md; different tech stack (tcl vs python). Run `/gsd-new-milestone` to start (questioning → research → requirements → roadmap).
+- **VMD tcl script (v2.0 — ACTIVE)** — Milestone started 2026-08-22. Port v1's hide-and-seek game to VMD 1.9.3. MVP-first approach; research drives rep selection; explore VMD materials as differentiator. Reference material in `vmd-ref/` (gitignored). Headless testing via `vmd -dispdev text -e <script> -eofexit`.
 - **chimeraX port** — placeholder dir chimeraX/ exists; a later milestone candidate after VMD (v2). Different viewer/extension model than PyMOL and VMD; research needed when it becomes active.
-- **Repo reorg (2026-08-19, commit 9ff57f1):** v1 code moved under pymol/ (biochemeleon/, smoke/, tests/); vmd/ and chimeraX/ placeholders added. Root AGENTS.md paths updated to pymol/-prefixed layout.
-- **AGENTS.md needs VMD/tcl-specific rewrite** when v2 research begins (currently v1-scoped per AGENTS.md header note).
-- **Known v1 tech debt to consider for v2:** Phase 9 SSL fallback (check_hostname=False for SASBDB HARICA cert); Phase 11 hider fragment secondary-structure inheritance (cosmetic). *(Phase 9 .pdb.gz cache path resolved 2026-08-22: quick-003 relocated to `<cwd>/tmp/phase9-demos/` for `cmd.fetch` parity; quick-004 flattened to a single `<cwd>/cache/` layer (cache + temp `.raw`/`.dry` co-located). makedirs-on-first-use ensures the dir exists regardless of install location. Network fetch + GUI on a fresh computer remain untested by the quick tasks — see `.planning/quick/004-*/004-SUMMARY.md`.)*
+- **AGENTS.md needs VMD/tcl-specific rewrite** after /gsd-new-milestone workflow (currently v1-scoped per AGENTS.md header note). Will be updated with verified VMD API behavior as v2 research/execution progresses.
+- **Repo reorg (2026-08-19, commit 9ff57f1):** v1 code moved under pymol/ (biochemeleon/, smoke/, tests/); vmd/ and chimeraX/ placeholders added. v2 code will live under vmd/.
+- **Known v1 tech debt to consider for v2:** Phase 9 SSL fallback (check_hostname=False for SASBDB HARICA cert); Phase 11 hider fragment secondary-structure inheritance (cosmetic). v1.1 quick-008 fix (random total distribution) must be baked in from start in v2.
 
 ### Resolved (v1 — full log in MILESTONES.md + phase SUMMARYs)
 
