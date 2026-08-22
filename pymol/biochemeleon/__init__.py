@@ -410,8 +410,21 @@ class PluginDialog(QtWidgets.QDialog):
                     "stored.append((chain, resv, ID))",
                     space={'stored': cas_list})
         cas_by_chain = {}
+        # Quick-009: dedup alt-conf duplicates. cmd.iterate matches BOTH
+        # alt-conf CAs at a residue with alt-A + alt-B backbone atoms (each
+        # matches `name CA`/`name P`), producing duplicate (resv, ID) entries
+        # per alt-conf residue. This inflates chain lengths and compresses
+        # segment ranges in pick_segments (spreading windows collide). Dedup
+        # by (chain, resv): keep the FIRST entry per residue (alt-A; the
+        # alt-B duplicate is dropped). 4wb3 hits this at chain-A residues
+        # 710 and 734 (CA alt-A id=256, CA alt-B id=257). NOT specific to
+        # mixed protein-nucleic -- any structure with alt-conf backbone atoms.
+        _seen_res = set()
         for chain, resi, ca_id in cas_list:
-            cas_by_chain.setdefault(chain, []).append((resi, ca_id))
+            _key = (chain, resi)
+            if _key not in _seen_res:
+                _seen_res.add(_key)
+                cas_by_chain.setdefault(chain, []).append((resi, ca_id))
         # Phase 11 fix (cartoon+ribbon KeyError): pick_segments is called ONCE
         # for the COMBINED cartoon+ribbon count so the returned segments are
         # GLOBALLY DISJOINT across reps. Previously pick_segments was called

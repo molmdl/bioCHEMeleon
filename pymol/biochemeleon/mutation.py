@@ -632,6 +632,28 @@ def insert_cartoon_segment_hider(object, chain, start_resi, end_resi, handle,
     segment_sele = "%s and chain '%s' and resi %d-%d and backbone" % (
         backup_name, chain, start_resi, end_resi)
     cmd.create(tmp, segment_sele, 1, 1, zoom=0)  # creating.py:960; zoom=0 (Bug 3)
+    # Quick-009: dedup alt-conf variants in the copy. The `backbone` selector
+    # matches ALL alt-conf atoms, so a residue with alt-A + alt-B backbone
+    # atoms produces 2 atoms at the same (chain, resv, name) in tmp. The
+    # upcoming alt='' retag would merge them into true duplicates -> the
+    # anchor selector (name CA or name P) would match N>1 -> AssertionError
+    # ("expected 1 anchor id, got [256, 257]"). Keep one atom per
+    # (chain, resv, name); remove the rest by id. 4wb3 chain-A resi 710/734.
+    # NOT specific to mixed protein-nucleic -- any structure with alt-conf
+    # backbone atoms. Iterate exposes ID uppercase (AGENTS.md; editing.py:1444).
+    _atom_info = []
+    cmd.iterate(tmp, "stored.append((ID, chain, resv, name))",
+                space={'stored': _atom_info})
+    _seen = set()
+    _dup_ids = []
+    for _aid, _ch, _resv, _name in _atom_info:
+        _k = (_ch, _resv, _name)
+        if _k in _seen:
+            _dup_ids.append(_aid)
+        else:
+            _seen.add(_k)
+    for _aid in _dup_ids:
+        cmd.remove("%s and ID %d" % (tmp, _aid))
     # 2. Retag the copy: NEW hider chain 'H' + sentinel + alt='' (NO alt-conf)
     #    + loop ss + NEW resi (resv shifted by CARTOON_RESI_OFFSET so the copy's
     #    resv differs from the real CA's resv -> on_pick resv-gate disambiguates
