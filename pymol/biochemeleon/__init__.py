@@ -379,18 +379,21 @@ class PluginDialog(QtWidgets.QDialog):
         _gen_warnings = []  # collected under-generation warnings (05-05 Issue 1)
         # Pre-fetch the data the pure generators need (cmd-coupled, here so
         # generators.py stays pure):
-        # For line/stick: pool of real neighbor backbone-anchor atom ids (to
-        # bond hiders to). Uses 'name CA or name P' so BOTH protein (CA =
-        # C-alpha) and nucleic acid (P = phosphate) backbones are covered —
-        # nucleic acids have NO 'name CA' atoms (headless-verified 2026-08-16:
-        # 5e54/1k8p/2qbz all return 0 for 'name CA'). P is the nucleic-acid
-        # equivalent of CA: a stable one-per-residue backbone atom and a valid
-        # bond target. (05-07 fix note: the original 'name CA' rationale was
-        # that non-CA atoms could be removed by a terminal-valence step; Phase
-        # 11 single-state path no longer runs that step, so the pool just needs
-        # stable one-per-residue backbone atoms — CA for protein, P for NA.)
+        # For line/stick: pool of real neighbor heavy-atom ids to bond hiders
+        # to. 'not elem H' covers ALL heavy atoms (backbone + side chain) for
+        # BOTH protein and nucleic acid — side-chain heavy atoms are stable
+        # bond targets and land hiders OFF the backbone trace where cartoon/
+        # ribbon would obscure them. 'not segi GAME' excludes existing hiders
+        # from the pool. Hydrogens are excluded (too many, tiny, poor bond
+        # targets). (quick-006 fix: the pool was previously backbone-only
+        # 'name CA or name P' — one per residue — because a legacy terminal-
+        # valence step could remove non-CA atoms. Phase 11's single-state
+        # refactor eliminated that step, so the backbone-only restriction is
+        # stale; side-chain heavy atoms are now valid, stable neighbors.
+        # insert_line_stick_hider already handles arbitrary neighbor_id — it
+        # reads elem/color via iterate_state and copies them for blending.)
         neighbor_ids = []
-        cmd.iterate("%s and not segi GAME and (name CA or name P)" % target_obj,
+        cmd.iterate("%s and not segi GAME and not elem H" % target_obj,
                     "stored.append(ID)", space={'stored': neighbor_ids})
         # For cartoon/ribbon: per-chain backbone-anchor (resi, id) list. Phase
         # 11 pick_segments consumes this for mid-chain segments (replacing the

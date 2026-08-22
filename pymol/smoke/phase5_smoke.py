@@ -333,6 +333,58 @@ except Exception as exc:
     print("spike: iterate_state(elem,color) raised: %r" % (exc,))
     check("spike: iterate_state elem/color skipped (informational)", True)
 
+# --- 7. SIDE-CHAIN NEIGHBOR POOL (quick-006) ---
+# quick-006 widened the line/stick neighbor pool from backbone-only
+# (name CA or name P) to ALL heavy atoms (not elem H). Stick hiders
+# previously always bonded to a backbone CA/P -- exactly where cartoon
+# draws its tube, obscuring them. Side-chain heavy atoms are stable bond
+# targets (Phase 11 removed the terminal-valence step that needed
+# backbone-only). This section proves a SIDE-CHAIN neighbor works:
+# insert_line_stick_hider bonds cleanly to a non-backbone heavy atom,
+# sentinel is set, color blends, cleanup restores. (Section 2 still
+# tests the backbone-CA neighbor path as a regression guard.)
+cmd.delete(obj)
+cmd.fetch("1ubq", async_=0)
+orig_count_7 = cmd.count_atoms(obj)
+# Pick a side-chain heavy atom: CB (beta carbon) -- present in most non-Gly
+# residues, NOT a backbone atom (backbone = N, CA, C, O). 1ubq has many.
+sc_ids = cmd.identify("%s and not segi GAME and name CB and not elem H" % obj, mode=0)
+check("sidechain: 1ubq has CB atoms (side-chain pool non-empty)", len(sc_ids) > 0)
+sc_neighbor_id = sc_ids[0]
+offset_7 = [0.4, 0.4, 0.4]
+sc_stick_id = mutation.insert_line_stick_hider(obj, offset=offset_7,
+                                               neighbor_id=sc_neighbor_id,
+                                               handle="S007", rep="sticks")
+check("sidechain: insert_line_stick_hider returns int id (side-chain neighbor)",
+      isinstance(sc_stick_id, int))
+# sentinel set (segi=GAME, b=-999; iterate exposes segi/b lowercase, ID uppercase)
+sc_sent = []
+cmd.iterate("%s and id %d" % (obj, sc_stick_id), "stored.append((segi, b))",
+            space={'stored': sc_sent})
+check("sidechain: sentinel set",
+      bool(sc_sent) and sc_sent[0][0] == 'GAME' and abs(sc_sent[0][1] - (-999.0)) < 1e-6)
+# bonded to the side-chain neighbor (same neighbor(...) selector pattern as
+# section 2; explicit outer parens force intended grouping -- see section 2 note)
+check("sidechain: hider bonded to side-chain neighbor",
+      cmd.count_atoms("(neighbor (%s and id %d)) and id %d" %
+                      (obj, sc_neighbor_id, sc_stick_id)) > 0)
+# color matches neighbor (blend -- insert copies neighbor color; Open Risk 3)
+sc_nbr_col = []
+cmd.iterate("%s and id %d" % (obj, sc_neighbor_id), "stored.append(color)",
+            space={'stored': sc_nbr_col})
+sc_hdr_col = []
+cmd.iterate("%s and id %d" % (obj, sc_stick_id), "stored.append(color)",
+            space={'stored': sc_hdr_col})
+check("sidechain: color matches neighbor (blend)",
+      bool(sc_nbr_col) and bool(sc_hdr_col) and sc_nbr_col[0] == sc_hdr_col[0])
+print("diag: sc_stick_id=%r sc_neighbor_id=%r (CB) sc_nbr_col=%r sc_hdr_col=%r" %
+      (sc_stick_id, sc_neighbor_id, sc_nbr_col, sc_hdr_col))
+# cleanup restores count (sentinel-only via segi GAME; AGENTS.md domain rule)
+mutation.cleanup_hiders(obj)
+check("sidechain: cleanup restores count", cmd.count_atoms(obj) == orig_count_7)
+check("sidechain: no GAME atoms remain after cleanup",
+      cmd.count_atoms("%s and segi GAME" % obj) == 0)
+
 # --- summary ---
 print("\n=== SUMMARY ===")
 fails = [n for n, c in RESULTS if not c]
