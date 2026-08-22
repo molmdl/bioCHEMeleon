@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-08-18)
 
 **Core value:** The player can load a molecule, generate blended "hider" atoms that match the local representation style, and reliably find them by clicking — with a working timer and win condition.
-**Current focus:** v1 milestone COMPLETE (shipped 2026-08-18). Planning next milestone (v2 — VMD tcl script, deferred per spec.md).
+**Current focus:** v1 milestone COMPLETE (shipped 2026-08-18). Repo reorganized for multi-viewer support (commit 9ff57f1): v1 PyMOL code now lives under pymol/; vmd/ and chimeraX/ are placeholder dirs. Planning next milestone (v2 — VMD tcl script, deferred per spec.md; chimeraX is a later candidate).
 
 ## Current Position
 
@@ -35,9 +35,11 @@ Progress: ███████████████████████�
 
 ## Accumulated Context
 
-### Open items for next milestone (v2)
+### Open items for next milestone
 
 - **VMD tcl script** — deferred per spec.md; different tech stack (tcl vs python). Run `/gsd-new-milestone` to start (questioning → research → requirements → roadmap).
+- **chimeraX port** — placeholder dir chimeraX/ exists; a later milestone candidate after VMD (v2). Different viewer/extension model than PyMOL and VMD; research needed when it becomes active.
+- **Repo reorg (2026-08-19, commit 9ff57f1):** v1 code moved under pymol/ (biochemeleon/, smoke/, tests/); vmd/ and chimeraX/ placeholders added. Root AGENTS.md paths updated to pymol/-prefixed layout.
 - **AGENTS.md needs VMD/tcl-specific rewrite** when v2 research begins (currently v1-scoped per AGENTS.md header note).
 - **Known v1 tech debt to consider for v2:** Phase 9 SSL fallback (check_hostname=False for SASBDB HARICA cert); Phase 11 hider fragment secondary-structure inheritance (cosmetic). *(Phase 9 .pdb.gz cache path resolved 2026-08-22: quick-003 relocated to `<cwd>/tmp/phase9-demos/` for `cmd.fetch` parity; quick-004 flattened to a single `<cwd>/cache/` layer (cache + temp `.raw`/`.dry` co-located). makedirs-on-first-use ensures the dir exists regardless of install location. Network fetch + GUI on a fresh computer remain untested by the quick tasks — see `.planning/quick/004-*/004-SUMMARY.md`.)*
 

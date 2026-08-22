@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A "hide-and-seek" game played on molecular structures inside PyMOL (v1 shipped) and VMD (v2 deferred). Given a user-provided molecule or PyMOL scene, the game inserts foreign atoms directly into the molecule's own object — styled to blend with the local representation (line/stick mimic, cartoon/ribbon segment copy, spheres anywhere) — and the player must hunt them down by clicking atoms in the OpenGL viewer. Because hiders live in the same object as the real structure, the player can't trivially isolate them by toggling object visibility; they must visually spot the impostors. For structural-biology users, students, and educators who want an engaging way to explore and study molecular representations.
+A "hide-and-seek" game played on molecular structures inside PyMOL (v1 shipped), VMD (v2 deferred), and chimeraX (future candidate). Given a user-provided molecule or PyMOL scene, the game inserts foreign atoms directly into the molecule's own object — styled to blend with the local representation (line/stick mimic, cartoon/ribbon segment copy, spheres anywhere) — and the player must hunt them down by clicking atoms in the OpenGL viewer. Because hiders live in the same object as the real structure, the player can't trivially isolate them by toggling object visibility; they must visually spot the impostors. For structural-biology users, students, and educators who want an engaging way to explore and study molecular representations.
 
 ## Core Value
 
@@ -68,7 +68,7 @@ The player can load a molecule, generate blended "hider" atoms that match the lo
 - **Reference material:** `./Pymol-script-repo` (git-ignored) holds open-source PyMOL plugins for learning how to write PyMOL plugins.
 - **Demo PDBs:** 6 bundled small PDBs (1znf, 1xdn, 5E54, 1K8P, 2QBZ, 4WB3) + 3 fetched large demos (1GZM, 3GP6 from MemProtMD; SASDPG4 from SASBDB). Sources cited in `biochemeleon/data/demos/SOURCES.md` and `DATA_SOURCES.md`.
 - **Known tech debt (v1):** Phase 9 SSL fallback uses check_hostname=False for SASBDB HARICA cert gap (revisit for v2); Phase 9 .pdb.gz cache in repo-relative tmp/ won't exist for installed plugin (out of v1 scope); Phase 11 hider fragment renders as loop (ss='L') — doesn't inherit parent secondary structure (cosmetic, future enhancement); stale docstrings in game.py/__init__.py (cosmetic).
-- **Next milestone:** v2 — VMD tcl script (deferred per spec.md). Run `/gsd-new-milestone`.
+- **Next milestone:** v2 — VMD tcl script (deferred per spec.md); chimeraX port is a later candidate (placeholder dir chimeraX/ exists). Run `/gsd-new-milestone`.
 
 ## Constraints
 
