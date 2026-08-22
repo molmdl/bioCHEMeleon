@@ -13,34 +13,35 @@ This is the single most common way to break things.
 - **Headless PyMOL CAN be run from WSL** (discovered Phase 3, 2026-08-06). `C:\src\run-conda-pymol.bat` accepts args passed through to `python .../pymol/__init__.py %*`. The `-cq` flags run PyMOL without the GUI (command-line, quiet). So a WSL agent CAN execute any pure-cmd script (no Qt, no interactive viewer) headlessly via:
   ```bash
   # 1. Stage the package + script to the Windows-facing path first:
-  bash wsl2win_cp.sh                          # copies biochemeleon/ -> tmp/bioCHEMeleon/biochemeleon/
-  mkdir -p tmp/bioCHEMeleon/smoke && cp smoke/phase3_smoke.py tmp/bioCHEMeleon/smoke/  # stage the script
+  bash wsl2win_cp.sh                          # copies pymol/biochemeleon/ -> tmp/bioCHEMeleon/biochemeleon/
+  mkdir -p tmp/bioCHEMeleon/smoke && cp pymol/smoke/phase3_smoke.py tmp/bioCHEMeleon/smoke/  # stage the script
   # 2. Run headlessly (no GUI, ~30s for the phase3 smoke). Wrap in timeout + tail to avoid hangs:
   cd tmp/bioCHEMeleon && timeout 90 cmd.exe /c "C:\\src\\run-conda-pymol.bat -cq smoke\\phase3_smoke.py" 2>&1 | tail -50
   # 3. Check exit code: 0 = clean (or sys.exit(1) caught by wrapper); nonzero = crash.
   ```
   This closes the WSL/Windows runtime gap for cmd-only scripts. It does NOT help with Qt (GUI/prompt tests still need a human in a real PyMOL session). Always `cd` into the staged Windows path first (PyMOL resolves relative paths against the cmd.exe cwd, which is the WSL cwd mapped to `\\wsl$` or the /mnt/c path — use the /mnt/c path so Windows PyMOL can read it).
-- **Consequence:** any code path that executes `pymol.Qt.*` at runtime STILL cannot be run from WSL (GUI/Qt needs a real display). Pure `pymol.cmd.*` paths CAN be run headlessly as above. Only the pure data layer (`biochemeleon/setup_state.py`) is unit-testable in WSL without invoking PyMOL at all. Qt/GUI smoke tests remain human-verify checkpoints.
-- `wsl2win_cp.sh` copies `biochemeleon/` to `tmp/bioCHEMeleon/` so the Windows PyMOL Plugin Manager (or the headless cmd.exe invocation above) can point at a Windows-side path.
+- **Consequence:** any code path that executes `pymol.Qt.*` at runtime STILL cannot be run from WSL (GUI/Qt needs a real display). Pure `pymol.cmd.*` paths CAN be run headlessly as above. Only the pure data layer (`pymol/biochemeleon/setup_state.py`) is unit-testable in WSL without invoking PyMOL at all. Qt/GUI smoke tests remain human-verify checkpoints.
+- `wsl2win_cp.sh` copies `pymol/biochemeleon/` to `tmp/bioCHEMeleon/` so the Windows PyMOL Plugin Manager (or the headless cmd.exe invocation above) can point at a Windows-side path.
 - **PyMOL source for API verification:** `tmp/pymol-src/` holds the PyMOL 2.5.0 open-source Python modules (gitignored — NOT present in parallel-execution worktrees). It IS readable from any worktree via the main-repo absolute path `tmp/pymol-src/modules/pymol/` (i.e. `/mnt/c/Users/nglok/Desktop/WORKDIR/molmdl/bioCHEMeleon/tmp/pymol-src/modules/pymol/`). When a plan cites an API with a `file:line` reference (e.g. `creating.py:960`, `editing.py:1424`, `querying.py:1269`, `viewing.py:491`, `editing.py:800`, `editing.py:1535`) and you need to confirm the signature or debug unexpected runtime behavior, Read the file at that absolute path. The inline citations are usually sufficient on their own; the source is for when the API behaves differently than the citation suggests (Phase 5 05-06 spike discovered `cmd.create(obj, seg, 1, 1)` is a NO-OP despite the citation — that kind of surprise is when you consult the source). Key modules: `creating.py` (create/fuse), `editing.py` (alter/alter_state/iterate/remove/sort), `querying.py` (identify/count_atoms/iterate), `viewing.py` (show/hide), `commanding.py` (delete/fetch), `wizard/` (wizard base).
 
 ## Commands (run from repo root)
 
 ```bash
 # Syntax-check every module (py_compile checks syntax, NOT imports):
-python3.6 -m py_compile biochemeleon/*.py
+python3.6 -m py_compile pymol/biochemeleon/*.py
 
 # Run the pure-layer unit tests (48 tests, currently green):
-python3.6 -m unittest tests.test_setup_state -v
+# (pymol/ is the package root — no pymol/__init__.py, so use PYTHONPATH, not pymol.tests.X)
+PYTHONPATH=pymol python3.6 -m unittest tests.test_setup_state -v
 
 # Pitfall-1 gate — MUST return ZERO matches across the package.
 # Warning: literal tokens in comments/docstrings trip this grep too
 # (we hit a false positive on a docstring that said "from PyQt5 import").
-grep -rnE "import Tkinter|import tkinter|from tkinter|import Pmw|from Pmw|app\.root|grab_set|mainloop|Toplevel|menuBar\.addmenuitem|from PyQt5 import|import PyQt5" biochemeleon/
+grep -rnE "import Tkinter|import tkinter|from tkinter|import Pmw|from Pmw|app\.root|grab_set|mainloop|Toplevel|menuBar\.addmenuitem|from PyQt5 import|import PyQt5" pymol/biochemeleon/
 
 # exec_ gate — any hits must be on QFileDialog/QMessageBox, NEVER on the
 # main PluginDialog/SetupTab (the main dialog must stay modeless):
-grep -rnE "\.exec_\(\)" biochemeleon/
+grep -rnE "\.exec_\(\)" pymol/biochemeleon/
 ```
 
 Running the interactive PyMOL GUI requires the Windows side (`setenv.bat` → `pymol`); not doable from a WSL agent. But headless cmd-only scripts CAN be run from WSL via `cmd.exe /c C:\\src\\run-conda-pymol.bat -cq <script>` (see the Environment section above). Prefer the Grep tool over bash `grep` for content searches; `rg` is denied in `opencode.json` (the `grep -rnE` commands above are the runnable equivalent).
@@ -48,22 +49,22 @@ Running the interactive PyMOL GUI requires the Windows side (`setenv.bat` → `p
 ## Architecture — module dependency direction is strict
 
 ```
-setup_state.py  (PURE: stdlib only — no pymol, no Qt; unit-testable in WSL)
+pymol/biochemeleon/setup_state.py  (PURE: stdlib only — no pymol, no Qt; unit-testable in WSL)
       ↑
-demos.py        (cmd bridge: imports FROM setup_state; uses pymol.cmd)
+pymol/biochemeleon/demos.py        (cmd bridge: imports FROM setup_state; uses pymol.cmd)
       ↑
-gui_setup.py    (Qt + cmd: imports FROM setup_state AND demos)
+pymol/biochemeleon/gui_setup.py    (Qt + cmd: imports FROM setup_state AND demos)
 
-Phase 3 stack (mutation-safety; game.py is the composition root):
-  registry.py  (PURE: stdlib + GAME_REPS from setup_state; unit-testable in WSL)
-  backup.py    (cmd: snapshot/restore/discard/verify_intact — standalone)
-  mutation.py  (cmd: insert_hider/fetch_all_hider_ids/cleanup_hiders — standalone)
-  game.py      (cmd orchestrator: GameController imports backup+mutation+registry)
+Phase 3 stack (mutation-safety; pymol/biochemeleon/game.py is the composition root):
+  pymol/biochemeleon/registry.py  (PURE: stdlib + GAME_REPS from setup_state; unit-testable in WSL)
+  pymol/biochemeleon/backup.py    (cmd: snapshot/restore/discard/verify_intact — standalone)
+  pymol/biochemeleon/mutation.py  (cmd: insert_hider/fetch_all_hider_ids/cleanup_hiders — standalone)
+  pymol/biochemeleon/game.py      (cmd orchestrator: GameController imports backup+mutation+registry)
 ```
 
 Never reverse. `setup_state.py` must have NO `from pymol import cmd` and NO `from pymol.Qt import`. `registry.py` (Phase 3) is ALSO pure (stdlib + `GAME_REPS` from setup_state; no `from pymol`) — unit-testable in WSL. `backup.py`/`mutation.py` are standalone cmd bridges (no cross-module imports); `game.py` is the composition root that wires all three. `GAME_REPS` and `DEMO_MANIFEST` live in `setup_state.py` (the pure layer) so pure functions can reference them without importing the cmd-coupled module.
 
-Plugin entry point and dialog live in `biochemeleon/__init__.py`:
+Plugin entry point and dialog live in `pymol/biochemeleon/__init__.py`:
 - Entry point is `__init_plugin__(app=None)` (NOT legacy `__init__(self)`); `addmenuitemqt` is imported locally inside it.
 - `dialog = None` is a module-level singleton (GC prevention — must be module scope, not inside `__init_plugin__`).
 - Main dialog is modeless: `dialog.show()`, NEVER `.exec_()`. Required so the 3D viewer stays interactive for the click-to-find loop.
@@ -71,7 +72,7 @@ Plugin entry point and dialog live in `biochemeleon/__init__.py`:
 
 ## Tests
 
-- `tests/test_setup_state.py` stubs `pymol` and `pymol.Qt` with `MagicMock` via `sys.modules` before importing `biochemeleon.*`, because `__init__.py` does `from pymol.Qt import ...` at module level. Keep this stub pattern when adding WSL-runnable tests.
+- `pymol/tests/test_setup_state.py` stubs `pymol` and `pymol.Qt` with `MagicMock` via `sys.modules` before importing `biochemeleon.*`, because `__init__.py` does `from pymol.Qt import ...` at module level. Keep this stub pattern when adding WSL-runnable tests.
 - Pure functions → `setup_state.py` + unit tests. cmd-coupled code → `demos.py`, verified by the Windows smoke test (not WSL tests).
 
 ## Domain rules (easy to get wrong)
@@ -109,7 +110,7 @@ Plugin entry point and dialog live in `biochemeleon/__init__.py`:
 ## Dependencies & attribution (spec.md constraints)
 
 - Assume only what `pymol-open-source` ships (PyQt5 via `pymol.Qt`, numpy). If a specific Python lib is needed beyond that, the agent MUST write the list to a file and explicitly seek user approval first. Then the user either installs it locally, or the agent obtains a local copy for import from `./3rd_party_lib/` (git-ignored) with the library's license noted. When proposing a lib, state whether the user must set up a linux-like env or can keep the "calling cmd from WSL" approach. Do NOT `pip install` silently.
-- Do NOT make up anything. ALL claims and citations (DOIs, PDB IDs, sources) MUST be verified against a source and explicitly approved by a human. Bundled demo sources are in `biochemeleon/data/demos/SOURCES.md`.
+- Do NOT make up anything. ALL claims and citations (DOIs, PDB IDs, sources) MUST be verified against a source and explicitly approved by a human. Bundled demo sources are in `pymol/biochemeleon/data/demos/SOURCES.md`.
 
 ## GSD workflow (`.planning/`)
 
