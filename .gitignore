@@ -13,3 +13,5 @@ Pymol-script-repo
 ./3rd_party_lib/**
 tmp
 *.zip
+cache
+**/cache/**
