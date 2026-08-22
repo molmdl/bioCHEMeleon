@@ -1,6 +1,10 @@
 Pymol-script-repo
 ./Pymol-script-repo/**
 
+# v2 VMD reference material (UIUC license, internal learning only)
+vmd-ref
+./vmd-ref/**
+
 *.env
 *.pyc
 *.npy
