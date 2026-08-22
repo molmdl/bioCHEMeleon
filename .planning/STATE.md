@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-08-18)
 
 **Core value:** The player can load a molecule, generate blended "hider" atoms that match the local representation style, and reliably find them by clicking — with a working timer and win condition.
-**Current focus:** v1 milestone COMPLETE (shipped 2026-08-18). Repo reorganized for multi-viewer support (commit 9ff57f1): v1 PyMOL code now lives under pymol/; vmd/ and chimeraX/ are placeholder dirs. Planning next milestone (v2 — VMD tcl script, deferred per spec.md; chimeraX is a later candidate).
+**Current focus:** v1.1 shipped 2026-08-22 (bugfix + gameplay improvements over v1). Repo reorganized for multi-viewer support (commit 9ff57f1): v1 PyMOL code now lives under pymol/; vmd/ and chimeraX/ are placeholder dirs. Planning next milestone (v2 — VMD tcl script, deferred per spec.md; chimeraX is a later candidate).
 
 ## Current Position
 
 Phase: v1 complete (all 12 phases: 1-11 + 04.1)
 Plan: Not started (next milestone)
 Status: Ready to plan next milestone
-Last activity: 2026-08-22 — quick-005/006/007/008/009: gameplay tuning (cartoon segment spreading, stick sidechain neighbors, multi-viewer docs, random rep distribution) + alt-conf anchor fix. v1 milestone complete 2026-08-18 (archived + tagged).
+Last activity: 2026-08-22 — v1.1 shipped (quick-005/006/007/008/009: gameplay tuning + alt-conf fix + multi-viewer docs). v1 milestone complete 2026-08-18 (archived + tagged).
 
 Progress: ████████████████████████████████████████████████████████ 100% v1 (77 of 77 plans done — all phases COMPLETE + VERIFIED. v1 shipped.)
 

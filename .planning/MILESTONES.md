@@ -33,3 +33,25 @@
 **What's next:** v2 — VMD tcl script (deferred per spec.md). Run `/gsd-new-milestone` to start.
 
 ---
+
+## v1.1 bioCHEMeleon (Shipped: 2026-08-22)
+
+**Type:** Bugfix & gameplay improvements (post-v1 quick tasks, no new phases)
+
+**Delivered:** Five focused fixes addressing gameplay tuning issues and a crash on alt-conf structures, plus repo restructuring for upcoming multi-viewer support.
+
+**Changes:**
+
+- **Bugfix — alt-conf crash:** Structures with alternate-location backbone atoms (e.g. 4wb3 nucleosome) no longer crash when generating cartoon/ribbon hiders (quick-009)
+- **Bugfix — all-spheres fallback:** Setting only a total hider count now randomly distributes across all representations instead of defaulting to all spheres (quick-008)
+- **Gameplay — spread cartoon hiders:** Multiple cartoon/ribbon hiders evenly distributed across the chain instead of clustering back-to-back near the N-terminus (quick-005)
+- **Gameplay — stick sidechain placement:** Stick/line hiders bond to any heavy atom (side chains included), not just backbone; cartoon no longer obscures them (quick-006)
+- **Infra — multi-viewer repo layout:** v1 code moved under `pymol/`; `vmd/` and `chimeraX/` placeholders added; tracking docs updated (quick-007)
+
+**Stats:** 5 quick tasks, ~15 commits, 207 unit tests green, human-verified across protein / membrane protein / glycoprotein / DNA / RNA / mixed protein-nucleic structures
+
+**Git range:** `e9a4c78` (v1 tag) → HEAD
+
+**What's next:** v2 — VMD tcl script (deferred per spec.md); chimeraX is a later candidate.
+
+---
