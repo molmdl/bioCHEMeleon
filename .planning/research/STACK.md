@@ -1,10 +1,12 @@
 # Stack Research
 
-**Domain:** PyMOL 2.5.0 desktop plugin — interactive molecular "hide-and-seek" game
-**Researched:** 2026-08-03
-**Confidence:** HIGH (core), with one MEDIUM-confidence deviation flagged below
+**Domain:** VMD 1.9.3 desktop molecular-visualization extension — interactive "hide-and-seek" game (v2.0, tcl/Tk port of v1 PyMOL plugin)
+**Researched:** 2026-08-22
+**Confidence:** HIGH (core stack & APIs verified by running a 19-check headless smoke test against the actual VMD install — all PASS; corroborated by the official VMD 1.9.3 User's Guide and the bundled plugin/source files)
 
-> **⚠ Read this first — a spec deviation.** PROJECT.md / spec.md state the UI must be built in **Tkinter** ("PyMOL's built-in GUI framework"). After verifying against the **official PyMOL 2.5.0 source** (`schrodinger/pymol-open-source` tag `v2.5.0`, cloned and inspected) and the **only modern plugin shipped with PyMOL itself** (`data/startup/lightingsettings_gui/`), the evidence is unambiguous: **the supported, non-legacy plugin GUI framework in PyMOL 2.5.0 is PyQt5 via `pymol.Qt`, not Tkinter.** The user confirmed this during research ("check the lighting plugin in open-source pymol, as i know its not legacy and need qt", "newer pymol dont support tk"). This file recommends PyQt5 via `pymol.Qt` and explains why. The Tkinter assumption in the spec is treated as a hypothesis that the evidence overturned — see "Why not Tkinter" below.
+> **Scope note (v2 supersedes v1 research).** This file documents the **VMD tcl** stack for the v2.0 milestone. The previous STACK.md documented v1's **PyMOL 2.5.0 Python** stack; that verified PyMOL API behavior is now archived in the shipped v1 codebase, the `pymol/` package + tests, and the PyMOL-specific domain rules in `AGENTS.md` (which is explicitly v1-scoped and flagged for a VMD/tcl rewrite). v1's architecture (pure-layer `setup_state.py`/`registry.py`, mutation-safety backup→mutate→restore) is the *conceptual* model v2 ports, but every concrete API below is VMD-verified, not carried over from PyMOL.
+>
+> **Zero external dependencies.** The headline result: VMD 1.9.3 ships everything the game needs (Tcl/Tk 8.5 + ttk). **No external tcl libraries are required** — `tooltip.tcl` is NOT needed (write a ~30-line helper or defer; see §Supporting Libraries). This is the cleanest possible stack outcome and avoids the non-BSD Tcl/Tk-license tracking that vendoring `tooltip.tcl` would impose.
 
 ---
 
@@ -14,407 +16,276 @@
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| **Python** | 3.x (bundled with conda PyMOL 2.5.0; ≥3.6 for WSL syntax checks) | Plugin implementation language | PyMOL 2.5.0 is Python 3 only. `pymol.cmd` is Python. The whole plugin is one Python package. Use `from __future__ import annotations` for forward refs if needed. |
-| **PyMOL** | 2.5.0 (open-source, anaconda) | Host application; provides `pymol.cmd`, `pymol.wizard`, `pymol.Qt`, `pymol.plugins` | Hard requirement from spec. Verified against `v2.5.0` source tag (commit `9ea504e`, `_PyMOL_VERSION "2.5.0"` in `layer0/Version.h`). |
-| **PyQt5 via `pymol.Qt`** | PyQt5 (preferred); `pymol.Qt` also accepts PySide2 / PyQt4 / PySide | Plugin GUI (setup tab + game-status tab) | Officially sanctioned by the only modern plugin shipped inside PyMOL 2.5.0 (`lightingsettings_gui`). `pymol.Qt` is a thin wrapper that auto-selects whichever Qt binding is installed (tries PyQt5 first). It is a **runtime dependency of conda-forge `pymol-open-source`** (`pyqt` listed in `requirements.run` of the conda-forge recipe), so it is already present in the user's env — no install, no approval, no vendoring needed. |
-| **PyMOL Wizard API** (`pymol.wizard.Wizard`) | built into PyMOL 2.5.0 | Click-to-find picking callback | GUI-agnostic: `do_pick(self, bondFlag)` fires on atom picks regardless of whether PyMOL runs the Tk or Qt GUI. Every interactive pick-based workflow in PyMOL uses this (measurement, mutagenesis, mtsslWizard, etc.). See "Picking" below. |
-| **numpy** | bundled with PyMOL (build/run requirement; `import numpy` at top of `setup.py`) | Coordinate math for hider placement | REQUIRED by pymol-open-source itself, therefore already available under the spec's "only libs required by pymol-open-source" rule. Use for vector ops when placing line/stick/cartoon/sphere hiders. No approval needed. |
-| **Python stdlib** (json, random, math, os, gzip/zlib, pickle) | stdlib | Game-state files, randomized placement, demo-PDB bundling, compression | Always present. `json` for human-readable game-state sidecar; `gzip`/`zlib` for compressing large demo PDBs (spec: "compress before bundling"). |
+| **VMD** | 1.9.3 (Nov 30 2016) | Host molecular viewer + script runtime | The target platform per `spec.md`. v1's PyMOL plugin can't run here; v2 is a tcl script sourced into VMD. Install verified at `C:\Program Files (x86)\University of Illinois\VMD\` (readable from WSL). Banner: `VMD for WIN32, version 1.9.3`. |
+| **Tcl** | **8.5.6** (`info patchlevel` = `8.5.6`) | Implementation language for the entire game | Verified three ways: `tcl85.dll`+`tcldde13.dll`+`tclpip85.dll`+`tclreg12.dll` in the install root (dated 2009-01-30); `scripts/8.5.6/` + `scripts/tcl8.5/` dirs; and `info patchlevel` at runtime = `8.5.6`. **Tcl 8.5 feature set available: `dict`, `lassign` (built-in), `lreverse` (built-in), `expr` `**` operator, `apply` (lambdas), `namespace ensemble`, `trace add/remove variable`.** NOT available (Tcl 8.6): `try`/`finally`/`throw`, `tailcall`, `coroutine`, `yield` — use `catch`/`error` for error handling. `dict` is the right structure for game state (verified round-trip in smoke test). |
+| **Tk** | **8.5** (`tk85.dll`) | GUI framework (Setup + Game tabs, dialogs) | Tk loads **only in GUI mode** (`-dispdev win`), NOT in headless `-dispdev text` (verified: `package require Tk` fails headless with "can't find package Tk"). This is the VMD analog of v1's "PyMOL Qt can't run from WSL" split. Use pure Tk (`toplevel`, `frame`, `button`, `label`, `entry`, `menu`, `menubutton`, `listbox`, `tk_messageBox`, `tk_dialog`, `tk_getSaveFile`/`tk_getOpenFile`). |
+| **ttk (Tile)** | bundled with Tk 8.5 (`scripts/tk8.5/ttk/`, `::ttk::*`) | Themed widgets — **`ttk::notebook` for the Setup/Game tabbed UI** (analog to v1's PyQt5 `QTabWidget`) | ttk was merged into Tk as `::ttk::*` in 8.5, so it ships with VMD's Tk. Provides `ttk::notebook`, `ttk::frame`, `ttk::button`, `ttk::label`, `ttk::entry`, `ttk::combobox`, `ttk::progressbar`, `ttk::scrollbar`, `ttk::tree`, `ttk::panedwindow`, `ttk::spinbox`, `ttk::separator`. **Confidence MEDIUM-HIGH**: can't verify headless (Tk doesn't load in text mode — smoke test confirmed `package require ttk` returns 0 in text mode, *expected*); the `scripts/tk8.5/ttk/` widget library is present. Flag for first GUI smoke test. |
+| **VMD mol/atomselect/molinfo commands** | built-in | Molecule loading, atom manipulation, rep management | The complete game API surface (see §Stack Patterns / §Question-by-question). All verified headlessly against real PDB `1k8p.pdb`: `mol new/addrep/delrep/modstyle/showrep/repname/repindex/delete`, `molinfo numreps/{rep/selection/color/material}`, `atomselect get/set` (incl. `beta`/`user` fields), `molinfo list`. |
+| **VMD Tcl variable traces** | built-in (`trace add/remove variable`) | Click-to-find picking + lifecycle callbacks | THE mechanism that replaces v1's PyMOL Wizard `do_pick`. Verified: `trace add variable ::vmd_pick_event write <cb>` fires on pick, callback reads globals `vmd_pick_atom`/`vmd_pick_mol` (smoke test: simulate pick → callback fires, sees atom=5). See §Stack Patterns. |
 
-### Supporting Libraries — the PyMOL API surface (not pip libs)
+### Supporting Libraries
 
-These are not installs; they are the PyMOL `cmd` functions central to this project. All verified present in the `v2.5.0` source.
-
-| API | Module (v2.5.0) | Purpose in this project | When to use |
-|-----|------------------|------------------------|------------|
-| `cmd.create(name, selection, ...)` | `pymol/creating.py:960` | **Insert hiders INTO an existing object.** Idiom: build hiders in a temp object, then `cmd.create(existing_obj, "(existing_obj) or (tmp_hiders)", zoom=0)` — replaces `existing_obj` with the union. (Confirmed pattern: `bnitools.py:1529` does exactly `cmd.create(name, "(%s or %s)" % (a, b))`.) | Merging hider atoms so they share the player's object (spec's core "blend in" mechanic). |
-| `cmd.get_model(selection, state)` | `pymol/querying.py:1053` | Read the chempy `Model` (atoms + coords + bonds) of the existing object | Compute placement (find terminal C-alpha for cartoon extension, neighbor atoms for line/stick mimic, free space for sphere). |
-| `cmd.load_model(model, object, ...)` | `pymol/importing.py:319` | Load a chempy `Model` into a (temp) object | Build the temp hider object from a programmatically-constructed model. |
-| `cmd.alter(selection, expression, ...)` | `pymol/editing.py:1424` | Modify atom string properties: `name`, `resn`, `resi`, `chain`, `elem`, `segi`, `text`, and numeric `b`, `q` | Give hiders atom/residue names that mimic the local representation (CA, N, C for cartoon; backbone names for line/stick). Optionally tag hiders via `b`/`q` for in-object marking. |
-| `cmd.alter_state(state, selection, expression, ...)` | `pymol/editing.py:1535` | Modify atom coordinates `x,y,z` | Set hider positions (line/stick alternate positions, cartoon extended terminus, sphere anywhere). |
-| `cmd.iterate(...)` / `cmd.iterate_state(...)` | `pymol/editing.py:1490` / `:1578` | Read atom properties/coords into Python (`stored.x = ID`, `stored.coords.append((x,y,z))`) | Inspect existing structure for placement; read picked atom identity. |
-| `cmd.index(selection)` | `pymol/querying.py:1302` | **Returns `[(model, index), ...]` — the canonical unique atom ID in PyMOL.** | (a) record each hider's identity at generation time; (b) identify the picked atom in `do_pick`. Used by `annocryst.py:376` (`cmd.index(self.selection)`). **Core to the click-to-find check.** |
-| `cmd.get_names(type, ...)` / `cmd.get_object_list(selection)` / `cmd.get_type(name)` / `cmd.count_atoms(selection)` | `pymol/querying.py:1148,131,1199,1412` | List loaded objects, filter to `object:molecule`, count atoms | Populate the setup-tab object dropdown; verify a picked atom belongs to the game object. |
-| `cmd.show(rep, sel)` / `cmd.hide(rep, sel)` / `cmd.as(reps, sel)` / `cmd.cartoon(...)` | `pymol/viewing.py` | Apply representations (lines, sticks, cartoon, ribbon, spheres) | "Lock current scene" reads current reps; "randomize" applies presets. Surface is intentionally NOT used (out of scope). |
-| `cmd.fetch(code, name, type=, async_=0, ...)` | `pymol/importing.py:1323` | Download a structure from the PDB/wwPDB | "Fetch large demo on demand". **Pass `async_=0`** so the structure fully loads before the game starts (interactive default is async — a subtle trap; see PITFALLS). |
-| `cmd.load(filename, object, ...)` / `cmd.load_pse(filename)` | `pymol/importing.py:635` / `:823` | Load PDB/CIF/MMTF/etc.; load a PyMOL session (.pse) | Load bundled demo PDBs; restore a saved game session. |
-| `cmd.save(filename, selection, state, format)` | `pymol/exporting.py:782` | Save a PyMOL session (`.pse`) or structure (`.pdb`, `.cif`, ...) | Save game state as a `.pse` (spec: "save the state of the game as a pymol session"). Format auto-detected from extension. |
-| `cmd.get_session(...)` / `cmd.set_session(session, ...)` | `pymol/exporting.py:370` / `pymol/importing.py:130` | Get/set the whole session object (pickleable) | Optional advanced embedding. **Recommended simpler approach:** `.pse` + sidecar JSON. |
-| `cmd.set_wizard(wiz)` / `cmd.set_wizard()` | `pymol/wizarding.py:110` | Activate / clear the active wizard | Start the picking wizard on "Start"; clear on win/restart/exit. `cmd.set_wizard()` with no args clears. |
-| `cmd.refresh_wizard()` / `cmd.get_wizard()` | `pymol/wizarding.py:146` / `:156` | Update the wizard prompt / retrieve current wizard | Update the rolling info / "remaining hiders" text in the PyMOL prompt area. |
-| `cmd.button(button, modifier, action)` / `cmd.set('button_mode', ...)` / `cmd.edit_mode()` | `pymol/controlling.py:799` / `:196` / `:688` | Configure mouse so single-click picks an atom (action `PkAt` / `Pk1`) | Ensure a click populates `pk1` / `(sele)` so the wizard's `do_pick` fires. Restore prior mouse mode on cleanup. |
-| `cmd.extend(name, function)` | `pymol/commanding.py:532` | Register a new PyMOL command-line command | Recommended: expose `chameleon_start`, `chameleon_cleanup`, etc. for power users. |
-| `cmd.color(color, selection)` / `cmd.label` | `pymol/...` | Recolor found hiders; "hint" coloring of N atoms around a hider; labels | Found-hider visibility/color dropdown (spec); Hint button (spec). |
-| `cmd.delete(name)` / `cmd.remove(selection)` | `pymol/editing.py` | Cleanup model: remove game-generated atoms/representations | "Cleanup model" button (spec). Requires keeping the original atom-id set so you can select "obj and not (hiders)". |
-| `cmd.select(name, selection)` | `pymol/selecting.py` | Create named selections (`_chameleon_hiders`, `_chameleon_found`) | Fast recolor/hide and cleanup. |
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| **(none — stdlib only)** | — | — | VMD ships Tcl/Tk 8.5 + ttk. **Do NOT add external tcl libs without explicit user approval** (AGENTS.md dependency rule carries over). The recommendation is to ship with zero external deps. |
+| `tooltip.tcl` (tklib) | 2.0.4 (staged in `vmd-ref/tooltip/`) | Hover tooltips on GUI controls | **RECOMMENDATION: DO NOT vendor.** VMD does not ship tklib (verified: `package require tooltip`/`tklib`/`BWidget`/`tablelist` all return 0). If/when tooltips are wanted (they were v1 *polish*, not table stakes), write a ~30-line helper using pure Tk `<Enter>`/`<Leave>` bindings + `after` timer + a borderless `toplevel` with a `label`. This avoids dragging in a 700-line tklib file under the **Tcl/Tk license** (permissive but NOT BSD — would require copying `license.terms` verbatim and tracking a second license). **Defer tooltips to a polish phase; zero-dep MVP first.** |
+| `mergestructs` plugin | 1.1 (in `vmd-ref/plugins/`) | Reference only — merging atoms into a molecule | **Reference, not a dependency.** VMD has no `pseudoatom` primitive (PyMOL did). Hider creation likely needs either (a) a separate hider molecule via temp PDB + `mol new`, or (b) selecting real atoms. `mergestucts.tcl` shows the merge idiom if we ever need to inject atoms into an existing molecule. Decision belongs to ARCHITECTURE.md. |
 
 ### Development Tools
 
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| WSL Ubuntu shell + `python3.6` | **Syntax checking only** (`python3.6 -m py_compile <file>`). Do NOT install anything in WSL; do NOT create conda envs. | Hard constraint from spec. `py_compile` catches syntax errors but cannot run PyMOL (no Qt, no `pymol._cmd` C ext). PyMOL's `cmd` is dynamic — type-checks are limited. |
-| `setenv.bat` (Windows `cmd.exe`) → `chemtools-win10` conda env | Launch PyMOL 2.5.0 with the plugin for real testing | Activates the Miniconda env. From WSL, invoke Windows commands via `cmd.exe /c setenv.bat && pymol <args>` or run a `.bat` wrapper. The "call cmd from WSL" approach works — **no Linux-like env needed** because PyQt + PyMOL run on Windows. |
-| `git` | Version control; `3rd_party_lib/` and `Pymol-script-repo/` are git-ignored | Both already in `.gitignore`. |
-| Reference repo `./Pymol-script-repo` (git-ignored) | Read real-world plugin examples | Studied: `mtsslWizard.py` (Wizard/do_pick), `bnitools.py` (`cmd.create` merge idiom, `cmd.alter`), `mtsslDockGui.py` (ttk + Pmw dialogs), `optimize.py` (PyQt port). The modern canonical template is `lightingsettings_gui` in the PyMOL source itself. |
+| **Headless VMD from WSL** | Run tcl scripts without the GUI for automated smoke tests | Verified command: `bash -ic "vmd -dispdev text -e <relpath>.tcl -eofexit < /dev/null"` from a `/mnt/c` cwd, with the script staged under `/mnt/c`. See §Headless Testing — this is the v2 analog of v1's `run-conda-pymol.bat -cq` headless pattern. |
+| **`vmdinfo` command** | Introspect VMD at runtime (`vmdinfo version`, `vmdinfo arch`, `vmdinfo www`) | Verified `HAS_vmdinfo=1`. Use `vmdinfo version` for the version string in save files; `vmdinfo arch` (= `WIN32` here) for platform branches. |
+| **`vmdcon` command** | Console logging (`vmdcon -info/-warn/-err`) | VMD's analog of Python `logging`/PyMOL print. `vmdinit.tcl` provides a fallback impl if not compiled in. Use for all diagnostic output. |
+| **Bundled plugins (read-only reference)** | Learn the canonical extension pattern | 5 curated plugins in `vmd-ref/plugins/`: `clonerep1.3` (rep management + Tk GUI — **most relevant**), `viewmaster2.6`, `autoionize1.4` (GUI+CLI), `mergestructs1.1`, `ramaplot1.1`. All use `package ifneeded <name> <ver> [list source [file join $dir <file>.tcl]]`. |
+| **VMD core tcl scripts** | Authoritative API-usage examples | `scripts/vmd/`: `vmdinit.tcl` (startup, command overrides), `atomselect.tcl` (selection helpers), `save_state.tcl` (the `.vmd` persistence script — shows the full `mol`/`molinfo`/`mol` rep API), `loadplugins.tcl` (extension discovery + `vmd_install_extension`). Read these before non-trivial VMD work. |
+
+---
 
 ## Installation
 
-**There is nothing to install.** This is the strongest property of the recommended stack:
+There is **no `npm`/`pip` step** — v2 is a tcl script. Delivery is one of four sourcing methods (the milestone context specifies "sourced tcl script"; the first two are primary):
 
-```bash
-# Core: already present with PyMOL 2.5.0 (conda):
-#   - pymol.cmd, pymol.wizard, pymol.plugins, pymol.Qt
-#   - PyQt5 (conda-forge pymol-open-source run-dep: "pyqt")
-#   - numpy  (pymol-open-source build/run requirement)
-#   - Python stdlib (json, random, math, os, gzip, pickle)
+```tcl
+# (1) Interactive — from the VMD Tk Console or text console:
+source /path/to/biochemeleon.tcl
+biochemeleon            ;# launches the GUI (or auto-launches on source — see §Stack Patterns)
 
-# Plugin install (end-user, one of):
-#   a) PyMOL GUI: Plugin > Plugin Manager > Install > point at the
-#      biochemeleon/ package directory (its __init__.py). PyMOL's
-#      installation.py accepts a single .py OR a package dir with __init__.py.
-#   b) Copy/clone the package into the user plugin dir:
-#        Windows: %APPDATA%/pymol/startup/biochemeleon/__init__.py
-#        Linux:   ~/.pymol/startup/biochemeleon/__init__.py
-#   c) During dev: symlink the repo dir into the user plugin dir, or add
-#      its parent to PYMOL path so PyMOL finds biochemeleon/__init__.py at startup.
+# (2) Auto-load on every VMD start — add to a startup file (UG §13.3, node251):
+#     Windows: ./vmd.rc  or  $HOME/vmd.rc  or  $VMDDIR/vmd.rc  (first found wins)
+#     Unix:    ./.vmdrc  or  $HOME/.vmdrc  or  $VMDDIR/.vmdrc
+#     Append one line:
+source /path/to/biochemeleon.tcl
 
-# Dev dependencies: NONE. (No pytest in WSL — can't install. Syntax-check with
-# python3.6 -m py_compile; functional test in Windows PyMOL via setenv.bat.)
+# (3) Command-line (GUI mode, load script then open viewer):
+vmd -e /path/to/biochemeleon.tcl
+
+# (4) Full plugin install (OPTIONAL — puts bioCHEMeleon in the VMD Extensions menu):
+#     Drop  biochemeleon/<biochemeleon.tcl + pkgIndex.tcl>  into
+#       $VMDDIR/plugins/WIN32/tcl/   (or set env VMDPLUGINPATH=<dir>)
+#     Then in vmd.rc:
+vmd_install_extension biochemeleon biochemeleon_tk_cb "Visualization/bioCHEMeleon"
 ```
 
-**Vendoring strategy (`./3rd_party_lib`): not needed for v1.** If a future phase needs a non-PyMOL Python lib, the workflow is: (1) write the proposed lib + version + license to an approval file, (2) get explicit user sign-off, (3) either let the user `pip install` it into the `chemtools-win10` Windows env, OR drop a vendored copy into `./3rd_party_lib/<lib>/` (git-ignored via the existing `.gitignore` entry) and `sys.path.insert(0, './3rd_party_lib')` at plugin import. Note the license in `./3rd_party_lib/<lib>/LICENSE`. The "call cmd from WSL" approach still works for pure-Python vendored libs; C-extension libs need the Windows env.
+WSL path guard (carries over from v1): Windows VMD cannot read WSL-only paths (`/tmp/…`, `~`). The sourced path must be Windows-visible — use a `/mnt/c/…` path (VMD resolves it) or stage to one. v1's `demos.to_windows_path()` concept applies: convert `/mnt/c/X` → `C:\X` for any path handed to VMD file ops.
+
+---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not (or when alternative wins) |
-|----------|-------------|-------------|-------------------------------------|
-| GUI framework | **PyQt5 via `pymol.Qt`** | Tkinter + `ttk` | Tkinter is the *legacy* path; the modern PyMOL GUI is Qt and the only shipped modern plugin (`lightingsettings_gui`) uses `pymol.Qt`. On the Qt GUI build there is no live Tk root (`pymol.plugins.legacysupport.get_tk_root()` returns `None` via `createlegacypmgapp`), so a `tkinter.Toplevel` plugin GUI would not work. See "Why not Tkinter" below. Tkinter would be acceptable ONLY if the user confirms they run the open-source *Tk* GUI build — not recommended. |
-| GUI framework | **PyQt5 via `pymol.Qt`** | Pmw (Python megawidgets) | Pmw is **no longer bundled** with pymol-open-source (`setup.py` raises if `--bundled-pmw`; message: "please install Pmw from github.com/schrodinger/pmw-patched"). conda-forge does pull `pmw` as a run-dep, so it *happens* to be present on conda installs — but relying on that violates the spirit of "only libs required by pymol-open-source" and is fragile. Use `QTabWidget`/`QGroupBox`/`QComboBox`/`QDoubleSpinBox` (PyQt5) instead. |
-| GUI framework | **PyQt5 via `pymol.Qt`** | Raw PyQt5 import (`from PyQt5 import ...`) | Use the `pymol.Qt` wrapper, NOT raw PyQt5. `pymol.Qt` auto-selects PyQt5/PySide2/PyQt4/PySide and sets `QT_API` for qtpy compatibility. Direct `from PyQt5 import` breaks if the user's build uses PySide2. |
-| Hider detection | **`cmd.index()` registry + Wizard `do_pick`** | Polling `pk1`; custom `cmd.button` only | Wizard is the canonical PyMOL pick-callback mechanism — robust, restores cleanly, shows a prompt. Polling is fragile and not event-driven. |
-| Atom insertion | **`cmd.create(obj, "(obj) or (tmp)")` merge idiom** | `cmd.load_model` replace; `cmd.alter` + `cmd.load_coordset` | `load_coordset` only adds coordinate *states* to an existing object (same atom count), NOT new atoms. `load_model` on an existing name replaces the whole object (loses representations). The `create`-merge idiom is the proven pattern (`bnitools.py`). |
-| Game state | **`.pse` (cmd.save) + sidecar JSON** | `cmd.get_session`/`set_session` embedding | Sidecar JSON is simpler, human-editable, and decoupled from PyMOL's session pickle format (which can change across versions). `.pse` captures the scene/objects; JSON captures hider registry, timer, found-status, setup params. |
-| Math | **numpy** (already a PyMOL dep) | pure-Python `math` lists | numpy is required by pymol-open-source itself → free to use. Cleaner vector math for placement. |
-| PDB fetch | **`cmd.fetch(..., async_=0)`** | `cmd.fetch` with default async | Default is async in interactive mode → next command may run before load completes. Force `async_=0` for reliable "load then play". |
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| **Sourced tcl script** (`source`/`-e`/`vmd.rc`) | Full packaged plugin (`pkgIndex.tcl` + `vmd_install_extension` into the Extensions menu) | Use the packaged form only if the milestone later requires "appears in VMD Extensions menu automatically." The sourced form is what `spec.md` calls for and is simpler to distribute/iterate. **Design the file to support BOTH** (namespace + `package provide` + a `biochemeleon_tk_cb` proc) — costs nothing and keeps the door open. |
+| **Pure Tk + ttk** for the GUI | VMD's built-in FLTK forms / `menu` commands | Tk is the only scriptable GUI in VMD tcl; FLTK forms aren't tcl-accessible. ttk gives native-looking themed widgets + `ttk::notebook` for tabs. No real alternative. |
+| **`ttk::notebook`** for Setup/Game tabs | Separate `toplevel` windows | Use one `toplevel` with a `ttk::notebook` (matches v1's single modeless dialog with tabs; keeps the 3D viewer interactive). Separate windows fragment the UX. |
+| **`beta` (B-factor) sentinel** (`$sel set beta -999`, selector `beta < 0`) | `user` per-atom field (`$sel set user <val>`) | `beta` is the direct port of v1's `b=-999` sentinel and is human-inspectable in VMD's GUI (Graphical Representations). `user` is "cleaner" (not a real physical prop) but invisible in default GUI. **Use `beta` as primary sentinel (parity with v1), optionally also set `user` as a secondary tag.** Both verified round-trippable in the smoke test. |
+| **Custom `.bcm` sidecar (tcl list/dict)** for game state | VMD `save_state` (`.vmd` script) alone | `save_state` **does NOT persist `user`/`beta` per-atom fields** (confirmed in `save_state.tcl` comment: "It doesn't currently restore: User provided data fields such as 'user', 'beta', …"). So the hider sentinel AND the game state are LOST on `.vmd` reload. **Must use a custom sidecar** (v1's `.bcm`/`.bcmz` approach carries over). Use `.vmd` for VMD scene state + `.bcm` (tcl `dict` serialized as a list) for game state; optionally zip both into `.bcmz`. |
+| **Headless `-dispdev text` smoke tests from WSL** | Interactive human-only GUI verification | Headless covers ALL pure-`mol`/`atomselect`/`molinfo`/`trace`/`dict`/file logic (the game engine). GUI/Tk/picking-by-real-mouse MUST be human-verified (Tk doesn't load in text mode). Same split as v1. |
+
+---
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| **Tkinter / `tkinter.ttk`** for the plugin GUI | Legacy path. No live Tk root under the Qt GUI build (the default for modern PyMOL). The official modern template (`lightingsettings_gui`) uses `pymol.Qt`. The user confirmed Tk is not supported on their newer PyMOL. | `pymol.Qt` (PyQt5): `QtWidgets.QDialog`, `QTabWidget`, `QGroupBox`, `QComboBox`, `QDoubleSpinBox`, `QPushButton`, `QLineEdit`, `QCheckBox`. |
-| **Pmw** (`Pmw.NoteBook`, `Pmw.Dialog`, `Pmw.Group`, `Pmw.EntryField`, `Pmw.OptionMenu`) | No longer bundled with pymol-open-source (`setup.py` explicitly removed `--bundled-pmw`). Only present via conda-forge's `pmw` run-dep — fragile. | PyQt5 widgets: `QTabWidget` (tabs), `QDialog` (window), `QGroupBox` (group), `QLineEdit`+`QLabel` (entry), `QComboBox` (option menu). |
-| **`tkintertable`** or other 3rd-party Tk widgets | Extra dependency requiring user approval + vendoring. Not needed — the game's UI is simple. | PyQt5 `QTableWidget` if a table is ever needed (it isn't for MVP). |
-| **`cmd.load_coordset` / `cmd.load_coords`** to add hider atoms | These only add coordinate *states* to an existing object (same atom count) or replace coordinates of a selection. They do NOT add new atoms. | Build hiders in a temp object, then `cmd.create(obj, "(obj) or (tmp)")`. |
-| **`cmd.load_model(model, existing_obj)`** to add atoms to an existing object | This *replaces* the existing object — losing its current representations/scene state. | The `cmd.create` merge idiom preserves object identity; restore representations from a saved rep-list if needed. |
-| **Surface representation** for hiders | Explicitly out of scope (spec): doesn't fit the blend-in mechanic. | line/stick (mimic), cartoon/ribbon (extend-or-replicate), sphere (anywhere). |
-| **Installing anything in WSL** / creating conda envs | Hard constraint from spec. | WSL = syntax check only (`python3.6 -m py_compile`). Run/test in Windows via `setenv.bat`. |
-| **Auto-pip-installing extra libs** | Spec: any non-PyMOL lib must be approved first, then user-installed or vendored. | The recommended stack uses zero extra libs, so this never triggers in v1. |
-| **`from PyQt5 import ...` directly** | Breaks on PySide2 builds. | `from pymol.Qt import QtGui, QtCore, QtWidgets`. |
-| **Polling `pk1` in a loop** to detect clicks | Not event-driven; racy; blocks the GUI. | Subclass `pymol.wizard.Wizard`, override `do_pick(self, bondFlag)`, activate with `cmd.set_wizard(wiz)`. |
+| **`try`/`throw`/`finally`/`tailcall`/`coroutine`** | Tcl 8.6+ features; VMD ships Tcl **8.5.6** (verified). Will be parse errors. | `catch {…} rc; set err $rc` and `error "msg"`; structured cleanup via explicit procs. |
+| **`package require tooltip` / `tklib` / `BWidget` / `tablelist` / `tile`** | None ship with VMD 1.9.3 (verified: all return 0). Forcing them adds external deps needing user approval + non-BSD license tracking. | Pure Tk + ttk (bundled). For tooltips: a ~30-line own helper, or defer. |
+| **`tile::*`** (standalone Tile package) | Tile was merged into Tk as `::ttk::*` in 8.5; the standalone `tile` package isn't present (`package require tile` = 0). | `::ttk::*` widgets (e.g. `ttk::button`, `ttk::notebook`). |
+| **Relying on `save_state`/`.vmd` to persist the hider sentinel or game state** | `save_state.tcl` explicitly omits `user`/`beta` and "any data produced or modified by scripts, even atom positions." The `.vmd` reloads the original file + reps but NOT per-atom script data. | Custom `.bcm` sidecar (tcl `dict` → flat list → file) recording hider atom indices + rep names + game state; re-apply the sentinel on load. |
+| **Bare `label`/`menu`/`scale` as if pure Tk** | `vmdinit.tcl` OVERRIDES these three Tcl commands to dispatch between Tk and VMD (Tk if first arg contains `.` → widget path; else VMD command). | This is transparent for normal use (`label .win.x`, `menu .win.m` work as Tk). Just know that `$w.menubar.help` (has `.`) → Tk, while `menu main on` (no `.`) → VMD. Don't `rename` them. |
+| **Python (VMD's Python interface) for v2** | `spec.md` says tcl. Mixing Python+tcl doubles the surface (two interp states, callback bridging). v1 was Python; v2 is deliberately tcl. | Pure tcl. (VMD's Python interface exists but is out of scope.) |
+| **Tkinter** | That's PyMOL/Python (v1). VMD's GUI is Tk, not Tkinter. | `pymol.Qt`→`pymol` was v1; v2 uses `toplevel`/`ttk::*`. |
+| **Adding atoms to an existing molecule via a pseudoatom primitive** | VMD has NO `cmd.pseudoatom` analog. `mol addfile` adds *frames/coords* to the top molecule, not new atoms. | Create hiders as a **separate molecule** (write a temp PDB, `mol new` it) drawn with a matching rep, OR select real atoms as hiders. (Architecture decision — see ARCHITECTURE.md.) |
+| **`info loaded` to detect available packages** | Returns loaded shared libs, not tcl packages. (Misleading in the probe.) | `package require <pkg>` in a `catch`, or check `package ifavailable`. |
+| **`$env(VMDVERSION)`** | No such env var (smoke test: "can't read env(VMDVERSION)"). | `[vmdinfo version]` for the version string; `$env(VMDDIR)` is set (`C:/Program Files (x86)/University of Illinois/VMD/`). |
+
+---
 
 ## Stack Patterns by Variant
 
-**If the user is on the conda-forge `pymol-open-source` build (Tk GUI default + PyQt available):**
-- `pymol.Qt` works (PyQt5 is a run-dep). Plugin GUI via PyQt5 renders fine inside the Tk-hosted Qt widgets.
-- `pymol.plugins.addmenuitemqt(...)` works (Qt is available).
+### Pattern: Sourced-script extension structure (the canonical VMD tcl plugin form)
 
-**If the user is on the Schrodinger `pymol` Incentive build (Qt GUI default):**
-- `pymol.Qt` works (PyQt5 bundled). This is the natural case.
-- Legacy Tk plugins would have no Tk root — another reason PyQt is the safe common denominator.
+Verified against `clonerep.tcl` (the most relevant reference — rep management + Tk GUI) and `loadplugins.tcl` (`vmd_install_extension`). Structure the file so it works as a sourced script AND as a package:
 
-**If PyMOL is launched with `-x` / no GUI (batch):**
-- `pymol.Qt` import will fail → `addmenuitemqt` raises `QtNotAvailableError` (caught by the plugin loader; the plugin is skipped with a warning). The game requires the GUI anyway, so this is acceptable.
+```tcl
+# biochemeleon.tcl
+namespace eval ::bioCHEMeleon {
+    variable version 2.0
+    variable w              ;# handle to our toplevel window (GC-prevention: keep at namespace scope)
+    variable state [dict create molid {} hiders {} reps {} found {} timer 0]
+    namespace export biochemeleon
+}
+package provide bioCHEMeleon $::bioCHEMeleon::version
 
-**Picking pattern (GUI-agnostic, works in all builds):**
-```
-class ChameleonWizard(Wizard):
-    def __init__(self, game): self.game = game; ...
-    def get_event_mask(self): return Wizard.event_mask_pick
-    def get_prompt(self): return self.game.prompt_text
-    def get_panel(self): return [[1, 'bioCHEMeleon', ''], [2, 'Quit', 'cmd.set_wizard()']]
-    def do_pick(self, bondFlag):
-        picked = cmd.index('pk1')   # [(model, index)]
-        if picked and picked[0] in self.game.hider_ids:
-            self.game.mark_found(picked[0])
-        cmd.refresh_wizard()
-    def cleanup(self): ...restore mouse mode...
+# --- engine procs (pure mol/atomselect/molinfo; headless-testable) ---
+proc ::bioCHEMeleon::generate_hiders {molid rep} { ... }
+proc ::bioCHEMeleon::on_pick {args} {
+    global vmd_pick_atom vmd_pick_mol
+    # called by trace; vmd_pick_atom/vmd_pick_mol are the picked atom/molecule
+}
+
+# --- GUI proc (Tk; only callable when Tk loaded, i.e. GUI mode) ---
+proc ::bioCHEMeleon::gui {} {
+    variable w
+    set w .biochemeleon
+    catch {destroy $w}
+    toplevel $w
+    wm title $w "bioCHEMeleon"
+    set nb [ttk::notebook $w.nb]
+    ttk::frame $nb.setup ; ttk::frame $nb.game
+    $nb add $nb.setup -text "Setup" ; $nb add $nb.game -text "Game"
+    pack $nb -fill both -expand yes
+    # react to molecule load/delete:
+    trace add variable ::vmd_molecule write ::bioCHEMeleon::refresh_mol_list
+}
+
+# --- callback for the optional VMD Extensions-menu install ---
+proc biochemeleon_tk_cb {} { ::bioCHEMeleon::gui; return $::bioCHEMeleon::w }
+
+# --- self-launch on source (only if Tk is loaded, i.e. not headless) ---
+if {[info exists tk_version]} { ::bioCHEMeleon::gui }
 ```
 
-**Hider-insertion pattern:**
+Key conventions learned from the bundled plugins:
+- Namespace `::Name::` with `variable` defs at the top; `package provide Name $ver`.
+- GUI in a `*_tk_cb` or `*gui` proc that returns the window path (so `vmd_install_extension` can register it).
+- Use `trace variable vmd_molecule w <proc>` to refresh the molecule dropdown when mols load/delete (clonerep does exactly this).
+- `vmdcon -info/-warn/-err` for all console output (NOT bare `puts` for diagnostics).
+- `wm withdraw .` is already done by `vmdinit.tcl` when Tk is up — don't fight the default toplevel.
+
+### Pattern: Click-to-find (the v2 `do_pick` replacement)
+
+```tcl
+# Activate pick-atom mode (UG node143: mouse mode 4 N; N=2 => pick atom)
+mouse mode 4 2
+# Register the callback (UG node159: trace vmd_pick_event)
+trace add variable ::vmd_pick_event write ::bioCHEMeleon::on_pick
+
+proc ::bioCHEMeleon::on_pick {args} {
+    global vmd_pick_atom vmd_pick_mol vmd_pick_shift_state
+    set atom $vmd_pick_atom
+    set mol  $vmd_pick_mol
+    # ... check if atom is a hider (by sentinel) -> mark found ...
+}
+
+# On game end / window close: ALWAYS remove the trace and restore mouse mode
+trace remove variable ::vmd_pick_event write ::bioCHEMeleon::on_pick
+mouse mode 0   ;# back to rotate
 ```
-# 1. Build hider atoms in a temp chempy Model (or temp object via fragment+alter)
-# 2. cmd.load_model(hider_model, '_chameleon_tmp')
-# 3. cmd.alter('_chameleon_tmp', 'resn="HID"; name="CA"; ...')   # mimic local rep
-# 4. cmd.create(obj, f'({obj}) or (_chameleon_tmp)', zoom=0)     # merge INTO obj
-# 5. Record hider identities: hider_ids = set(cmd.index(f'{obj} and resn HID'))
-# 6. cmd.delete('_chameleon_tmp')
+Verified: the trace fires and reads `vmd_pick_atom`/`vmd_pick_mol` (smoke test §picking). `vmd_pick_shift_state` is 1 if shift held (use for "hint" modifier, optional). **Caveat from UG node140**: *"Hidden reps cannot be picked"* — `mol showrep $m $rep off` makes a rep un-pickable. So hider reps must be SHOWN to be clickable; design hint/reveal around `mol showrep`, not around hiding the rep you want clicked.
+
+### Pattern: Hider sentinel (v1's `b=-999`+`segi=GAME` ported)
+
+```tcl
+set sel [atomselect $molid "name CA and chain A"]   ;# candidate hider atoms
+$sel set beta -999                                  ;# sentinel value
+$sel delete
+# Later, find all hiders (VMD has no exact-b-factor selector; use beta < 0)
+set hiders [atomselect $molid "beta < 0"]
+# [$hiders num] == number of hiders; [$hiders get index] == their indices
 ```
+Verified round-trip (smoke test §sentinel). v1 pitfall carries over: **selector is `beta < 0`, NEVER `beta -999`** (no exact-match b-factor selector in VMD either). Optionally also set the `user` field as a secondary tag (`$sel set user <id>`), and/or define a macro: `atomselect macro bchm_hiders "beta < 0"` (verified usable in selections) for readable selection strings.
+
+### Pattern: Stable registry key for reps (v1's id-keyed registry ported)
+
+VMD renumbers reps when one is deleted, BUT `mol repname <molid> <rep>` returns a **stable unique name** that survives renumbering, and `mol repindex <molid> <name>` is the reverse lookup (both verified in smoke test). Use the rep **name** as the registry key (analog to v1 keying on stable atom `id`, never fragile `index`):
+```tcl
+set repname [mol repname $molid $repidx]     ;# stable
+# ... later, after reps may have been added/removed:
+set idx [mol repindex $molid $repname]       ;# current index, or -1 if gone
+```
+
+### Pattern: Game-state persistence sidecar (v1's `.bcm`/`.bcmz` ported)
+
+Because `save_state` omits `user`/`beta`/script data, persist game state ourselves:
+```tcl
+# Save: serialize the dict to a flat list, write as a tcl assignment
+set pairs [list]; dict for {k v} $st { lappend pairs $k $v }
+set fd [open "puzzle.bcm" w]; puts $fd [list set saved_pairs $pairs]; close $fd
+# Load: source-style read + rebuild dict
+set fd [open "puzzle.bcm" r]; set data [read $fd]; close $fd
+eval $data
+set loaded [dict create {*}$saved_pairs]
+```
+Verified round-trip (smoke test §sidecar). For a shareable `.bcmz`, zip the `.vmd` (VMD scene) + `.bcm` (game state) — same as v1. Store hiders as **atom `index`** (stable across add/delete within a session; smoke test confirmed) + the rep name, and re-apply the `beta -999` sentinel on load (since `.vmd` won't carry it).
+
+### Variant: Headless testing (the WSL→Windows split, v2 edition)
+
+**The exact verified command** (quality gate passed — 19/19 checks):
+```bash
+# 1. Stage the script under /mnt/c (Windows-visible); WSL-only /tmp/ paths FAIL
+#    (Windows VMD can't read them — same trap as v1's PyMOL).
+mkdir -p tmp/vmd_test && cp your_script.tcl tmp/vmd_test/
+# 2. Run headlessly from a /mnt/c cwd (repo root), relative script path,
+#    /dev/null on stdin to guarantee EOF-exit (prevents hang on script error):
+timeout 180 bash -ic "vmd -dispdev text -e tmp/vmd_test/your_script.tcl -eofexit < /dev/null" 2>&1 | tail -80
+# 3. Exit code 0 + "FAILS=0" line = clean; nonzero = crash (inspect full output).
+```
+Flags: `-dispdev text` (no GUI), `-e <script>` (execute tcl), `-eofexit` (exit on stdin EOF). `bash -ic` loads the `vmd` alias from `~/.bashrc`. **`< /dev/null` is essential** — without it, a script syntax error drops VMD to the `vmd >` prompt and it hangs waiting for stdin.
+
+**What headless CAN test** (verified): `mol new/addrep/delrep/modstyle/showrep/repname/repindex/delete`, `molinfo`, `atomselect get/set`, `trace` (pick + lifecycle — by simulating the variable write), `dict`, file I/O, `graphics`, `atomselect macro`. **What headless CANNOT test** (needs human GUI): real mouse clicks firing `vmd_pick_event`, any Tk/`ttk::*` widget rendering, `tk_getSaveFile`/`tk_messageBox` dialogs, `mouse mode 4 2` actually entering pick mode visually. This mirrors v1's "Qt/GUI smoke tests are human-verify checkpoints."
+
+**The v2 smoke-test template is the verified file `tmp/vmd_test/game_api_smoke.tcl`** (19 PASS checks covering load, sentinel, reps, pick trace, dict, sidecar, graphics, lifecycle, cleanup). Re-use it as the headless gate for every engine phase.
+
+### Variant: GUI verification (human checkpoint)
+
+```bash
+# From a Windows shell (or WSL, since vmd.exe opens its own window):
+bash -ic "vmd -e /mnt/c/.../biochemeleon.tcl"      # GUI mode (default -dispdev win)
+# Human verifies: window appears, tabs work, pick mode engages, click finds a hider, win/restart.
+```
+Same human-verify-checkpoint discipline as v1's 9 GUI checkpoints.
+
+---
 
 ## Version Compatibility
 
-| Package / API | Compatible With | Notes |
-|-----------|-----------------|-------|
-| `pymol.Qt` (v2.5.0) | PyQt5, PySide2, PyQt4, PySide | Auto-selects in order; sets `QT_API` env var. Prefer PyQt5 (conda-forge default). |
-| `pymol.wizard.Wizard` (v2.5.0) | Both Tk (`pmg_tk`) and Qt (`pmg_qt`) GUIs | Core PyMOL; GUI-agnostic. `do_pick` fires in both. |
-| `cmd.create` merge idiom | PyMOL ≥1.x (still valid in 2.5.0) | Verified `creating.py:960` v2.5.0; same idiom used in `bnitools.py`. |
-| `cmd.index` | PyMOL ≥1.x (still valid in 2.5.0) | `querying.py:1302` v2.5.0. |
-| `cmd.fetch(..., async_=0)` | PyMOL 2.x | `async_` kwarg renamed from `async` (Python 2.7 keyword conflict). Use `async_=0`. |
-| `pymol.plugins.addmenuitemqt` | PyMOL ≥1.x with Qt | Raises `QtNotAvailableError` if no Qt — loader catches it. |
-| numpy | any version bundled with the conda PyMOL env | PyMOL 2.5.0 conda typically ships numpy 1.x or 2.x; both fine for our vector ops. |
-| `lightingsettings_gui` template | v2.5.0+ | The canonical modern plugin structure — copy its `__init_plugin__` + `addmenuitemqt` + `pymol.Qt` pattern. |
+| Component | Version | Compatible With | Notes |
+|-----------|---------|------------------|-------|
+| VMD | 1.9.3 (Nov 30 2016) | Tcl 8.5.6, Tk 8.5, ttk (bundled) | Verified by `info patchlevel`=8.5.6 + `tcl85.dll`/`tk85.dll`. Banner confirms 1.9.3. |
+| Tcl | 8.5.6 | VMD 1.9.3 (bundled) | **No Tcl 8.6 features** (`try`/`tailcall`/`coroutine`/`yield`). `dict`/`lassign`/`lreverse`/`apply`/`trace` ARE available. |
+| Tk | 8.5 | Tcl 8.5.6 (bundled) | Loads in GUI mode only. `tk_patchLevel` unavailable headless. |
+| ttk | bundled in Tk 8.5 | Tk 8.5 | `::ttk::*`. MEDIUM-HIGH confidence (present in `scripts/tk8.5/ttk/`; verify on first GUI run). |
+| Windows VMD ↔ WSL paths | — | `/mnt/c/…` paths only | Windows VMD cannot read WSL-only `/tmp/`, `~`. Stage scripts/data under `/mnt/c` or a Windows path. Convert `/mnt/c/X`→`C:\X` when handing paths to VMD file ops. |
+| VMD molfile plugins | 75 loaded at startup (`plugins/WIN32/molfile/*.so`) | All common formats (pdb, psf, dcd, xtc, …) | Banner: "Dynamically loaded 75 plugins." No action needed for PDB/trajectory load. |
 
-## Why not Tkinter (the spec deviation, explained)
+---
 
-The spec's "Tkinter (PyMOL's built-in GUI framework)" was a reasonable starting hypothesis, but the evidence overturns it:
+## Question-by-question answers (the 6 specific questions)
 
-1. **The only modern plugin shipped inside PyMOL 2.5.0 uses PyQt.** `data/startup/lightingsettings_gui/__init__.py` registers via `plugins.addmenuitemqt(...)` and `main.py` does `from pymol.Qt import QtGui, QtCore, QtWidgets`. There is no shipped Tkinter plugin template in v2.5.0 except the legacy comment-only placeholder in `pmg_tk/startup/__init__.py`.
+**1. What tcl/Tk version does VMD 1.9.3 ship?** — **Tcl 8.5.6 / Tk 8.5.** Verified three ways: the install root DLLs `tcl85.dll` + `tk85.dll` (+ `tcldde13.dll`, `tclpip85.dll`, `tclreg12.dll`, all 2009-01-30); the `scripts/8.5.6/`, `scripts/tcl8.5/`, `scripts/tk8.5/` library dirs; and runtime `info patchlevel` = `8.5.6`. **Confidence: HIGH.** Consequence: Tcl 8.5 feature set (`dict`, `lassign`, `lreverse`, `apply`, `trace`); NO Tcl 8.6 (`try`/`throw`/`tailcall`/`coroutine`).
 
-2. **Pmw is no longer bundled.** `setup.py` (v2.5.0) explicitly raises if `--bundled-pmw` is passed: *"--bundled-pmw has been removed, please install Pmw from github.com/schrodinger/pmw-patched"*. So even the legacy Tk+Pmw stack is not a "pymol-open-source required library."
+**2. What VMD built-in commands are available for each capability?** (all verified headless + UG):
+- **Molecule loading:** `mol new [file] [type …]`, `mol addfile`, `mol load <type> <file>`, `mol urlload`, `mol pdbload <4-char>` (RCSB fetch — v1 `cmd.fetch` analog), `mol delete`, `mol list`, `mol top/on/off/active/inactive/rename`. (UG node140)
+- **Atom manipulation:** `atomselect <molid> <sel> [frame N]` → a command object with `get`/`set` (single or multi-attr list), `num`, `list`, `delete`, `global`, `frame`, `update`, `move`/`moveby`/`moveto`, `getbonds`/`setbonds`, `writepdb`. Keywords include `name resname resid chain segname x y z beta occupancy user index mass type` etc. `atomselect macro <name> <sel>` defines reusable macros. (UG node122)
+- **Representation management:** `mol representation/color/selection/material <X>` (set defaults), `mol addrep <molid>`, `mol modcolor/modmaterial/modstyle/modselect <rep> <molid> <X>`, `mol modrep <rep> <molid>`, `mol delrep <rep> <molid>`, `mol showrep <molid> <rep> [on|off]`, `mol repname <molid> <rep>` (stable name), `mol repindex <molid> <name>`, `mol selupdate/colupdate/scaleminmax/smoothrep/drawframes`, `mol clipplane …`, `molinfo <molid> get numreps/{rep i}/{selection i}/{color i}/{material i}/list/name/drawn/active/fixed`. (UG node140, node142; verified in smoke test)
+- **Atom picking:** `mouse mode 4 2` (pick-atom mode) + `trace add variable ::vmd_pick_event write <cb>`; callback reads globals `vmd_pick_atom`/`vmd_pick_mol`/`vmd_pick_shift_state`. `mouse callback on/off` toggles pick callbacks; `mouse mode 0` returns to rotate. (UG node143, node159; verified by simulation)
+- **Save/load:** `save_state <file.vmd>` (writes a tcl script; `vmd -e file.vmd` replays) — BUT it does NOT persist `user`/`beta`/script-modified atom data (confirmed in `save_state.tcl`). So use a **custom `.bcm` sidecar** (tcl `dict`→list→file) for game state, optionally zipped with `.vmd` into `.bcmz` (v1 parity). `atomselect0 writepdb <file>` writes a selection; `mol new <file>` reloads.
 
-3. **Under the Qt GUI there is no live Tk root.** `pymol/gui.py` `get_pmgapp()` calls `createlegacypmgapp()` when `pymol._ext_gui is None`, producing a fake PMGApp with `app.root = None` and no-op `menuBar`. `pymol.plugins.legacysupport.get_tk_root()` returns that `None`. A `tkinter.Toplevel(parent=None)` plugin GUI will not render.
+**3. Do we need any external tcl libs?** — **NO.** Verified `package require tooltip/tklib/BWidget/tablelist/tile` all return 0 (not shipped). **`tooltip.tcl` is NOT needed**: it was v1 *polish*; for v2 either write a ~30-line pure-Tk tooltip helper or defer tooltips. Vendoring `tooltip.tcl` would pull in the non-BSD Tcl/Tk license (must copy `license.terms` verbatim) — avoid. **Zero external dependencies is the recommendation.** Any future external lib must be user-approved per AGENTS.md (carries over).
 
-4. **The community is actively porting away from Tk.** In the local `Pymol-script-repo`, `dynoplot.py` was "Ported to PyQt 2024 by Thomas Holder" and `optimize.py` uses `pymol.Qt` with `QTabWidget` (replacing `Pmw.NoteBook`).
+**4. How does VMD's tcl extension loading work?** — Standard Tcl `package` mechanism:
+- `package ifneeded <name> <ver> [list source [file join $dir <file>.tcl]]` in a `pkgIndex.tcl` (verified across all 5 bundled plugins).
+- `loadplugins.tcl` prepends `$VMDDIR/plugins/<arch>/tcl` and `$VMDDIR/plugins/noarch/tcl` to `auto_path`, plus `VMDPLUGINPATH` env dirs.
+- `vmd_install_extension <package> <tk_callback> "<Menu/Path>"` does `package require <package>` then `menu tk register` → installs in the VMD Extensions menu (loads AFTER `.vmdrc` so users can customize).
+- For a **sourced script** (our primary form): `source <file.tcl>` (or `play`, or `-e`, or a line in `.vmdrc`/`vmd.rc`). No `pkgIndex.tcl` required for the sourced form, but including `package provide` + a `biochemeleon_tk_cb` proc costs nothing and enables the optional packaged form.
 
-5. **PyQt5 is already available under the spec's strictest rule.** The spec says "only libraries required by pymol-open-source may be assumed available." `pyqt` is a runtime dependency of conda-forge `pymol-open-source` (confirmed in the feedstock `meta.yaml` `requirements.run`). So using `pymol.Qt` violates nothing — it is *required* by the open-source package.
+**5. How to structure a sourced tcl script that adds a command to VMD?** — See §Stack Patterns "Sourced-script extension structure." Canonical form (from `clonerep.tcl`): `namespace eval ::Name:: { variable …; namespace export … }` → `package provide Name $ver` → engine procs → `gui` proc building a `toplevel` with Tk/ttk → `biochemeleon_tk_cb` returning the window path → optional `if {[info exists tk_version]} { ::Name::gui }` to self-launch on source. The user-visible command is just a proc in the namespace (`::bioCHEMeleon::start`) or auto-launch.
 
-6. **Zero extra installs.** PyQt5 + numpy are both already in the conda env. This is the cleanest possible outcome for the spec's dependency-approval constraint: the approval step never triggers.
+**6. Can we run VMD headlessly from WSL? What's the exact command?** — **YES, verified.** `bash -ic "vmd -dispdev text -e <relpath>.tcl -eofexit < /dev/null"` from a `/mnt/c` cwd, script staged under `/mnt/c`. Tk does NOT load in text mode → GUI/picking-by-real-mouse need a human (same split as v1's PyMOL Qt). The verified 19-check smoke test (`tmp/vmd_test/game_api_smoke.tcl`, all PASS) is the v2 headless-gate template.
 
-**Net:** PyQt5 via `pymol.Qt` is more correct, more future-proof, fully spec-compliant on dependencies, and works on both the open-source (Tk-host) and Incentive (Qt) builds. Tkinter would only be safe on the open-source Tk build and is the deprecated path. Recommend the roadmap adopt PyQt5 and update PROJECT.md's "UI: Tkinter" constraint to "UI: PyQt5 via `pymol.Qt`". This is flagged MEDIUM confidence only because it contradicts the written spec — the technical evidence itself is HIGH confidence.
+---
 
 ## Sources
 
-- **PyMOL open-source v2.5.0 source** (cloned `schrodinger/pymol-open-source` tag `v2.5.0`, commit `9ea504e`) — HIGH confidence:
-  - `layer0/Version.h` — confirms `_PyMOL_VERSION "2.5.0"`.
-  - `modules/pymol/__init__.py` `launch()` — confirms default GUI is `pmg_qt`, falling back to `pmg_tk` on Qt ImportError.
-  - `modules/pymol/plugins/__init__.py` — plugin loader; `__init_plugin__` (modern) vs legacy `__init__`; `addmenuitemqt` raises `QtNotAvailableError` if no Qt.
-  - `modules/pymol/plugins/legacysupport.py` — `get_tk_root()` returns `pmgapp.root`; `createlegacypmgapp()` sets `app.root = None` (no live Tk root under Qt).
-  - `modules/pymol/plugins/installation.py` — plugin install accepts single `.py` or package dir with `__init__.py`; user plugin dir is `%APPDATA%/pymol/startup` (Windows) or `~/.pymol/startup` (Linux).
-  - `modules/pymol/Qt/__init__.py` — confirms `pymol.Qt` auto-selects PyQt5/PySide2/PyQt4/PySide.
-  - `modules/pymol/wizard/__init__.py` — `Wizard` base class, `event_mask_pick`, `do_pick(self, bondFlag)`, `get_prompt`, `get_panel`.
-  - `modules/pymol/creating.py:960` (`cmd.create`), `editing.py:1424/1535/1490/1578` (`alter`/`alter_state`/`iterate`/`iterate_state`), `querying.py:1053/1148/1302/1199/1412/131` (`get_model`/`get_names`/`index`/`get_type`/`count_atoms`/`get_object_list`), `importing.py:635/823/1323/319/1396/1420` (`load`/`load_pse`/`fetch`/`load_model`/`load_coordset`/`load_coords`), `exporting.py:782/370` (`save`/`get_session`), `importing.py:130` (`set_session`), `commanding.py:532` (`extend`), `controlling.py:799/196/688` (`button`/`button_mode`/`edit_mode`), `wizarding.py:110/146/156` (`set_wizard`/`refresh_wizard`/`get_wizard`).
-  - `data/startup/lightingsettings_gui/__init__.py` + `main.py` — the canonical modern plugin template (`__init_plugin__` + `addmenuitemqt` + `pymol.Qt` + `QtWidgets.QDialog`).
-  - `setup.py` — confirms `--bundled-pmw` removed (Pmw not bundled); numpy is a build requirement.
-  - `modules/pmg_qt/__init__.py` — 3-line "dummy module placeholder" (real Qt GUI is closed-source Incentive only); open-source falls back to `pmg_tk`.
-- **conda-forge `pymol-open-source` feedstock `meta.yaml`** — HIGH confidence: confirms `pyqt` and `pmw` are runtime deps of the conda build (so PyQt5 is already in the user's env).
-- **Local `Pymol-script-repo`** (git-ignored reference) — MEDIUM-HIGH (real-world patterns, older):
-  - `plugins/mtsslWizard.py` — Wizard/do_pick pattern, `from pymol.wizard import Wizard`.
-  - `plugins/bnitools.py:1529` — `cmd.create(name, "(%s or %s)" % (a, b))` merge idiom; `cmd.alter` usage.
-  - `plugins/annocryst.py:376` — `cmd.index(self.selection)` for unique atom IDs.
-  - `plugins/optimize.py` — PyQt port using `pymol.Qt`, `QTabWidget` (replacing `Pmw.NoteBook`), `__init_plugin__` + `addmenuitemqt`.
-  - `plugins/mtsslDockGui.py` — legacy Tk+Pmw+ttk mixed pattern (example of what NOT to copy wholesale).
-  - `plugins/dynoplot.py` — "Ported to PyQt 2024" header confirms the migration trend.
+- **VMD 1.9.3 install** (`C:\Program Files (x86)\University of Illinois\VMD\`): `tcl85.dll`/`tk85.dll` (Tcl/Tk version), `scripts/{tcl8.5,tk8.5,8.5.6,vmd}/` (bundled libs + core tcl), `vmd.rc` (startup example), `scripts/vmd/{vmdinit,atomselect,save_state,loadplugins}.tcl` (API usage + extension mechanism). — **HIGH confidence** (primary, runtime-verified).
+- **Headless VMD probe + 19-check smoke test** (`tmp/vmd_test/probe.tcl`, `tmp/vmd_test/game_api_smoke.tcl`): ran `vmd -dispdev text -e … -eofexit` against the real install; confirmed Tcl 8.5.6, command existence, `mol new`/atomselect/repname/repindex/showrep/modstyle/delrep, pick-trace firing, dict round-trip, sidecar round-trip, graphics, lifecycle trace, ttk-unavailable-in-text-mode. 19/19 PASS. — **HIGH confidence**.
+- **VMD 1.9.3 User's Guide** (online, https://www.ks.uiuc.edu/Research/vmd/current/ug/, matches local `vmd-ref/ug.pdf` v1.9.3 Nov 27 2016): node117 (Tcl Text Interface), node120 (Tcl Text Commands index), node122 (`atomselect`), node140 (`mol`), node142 (`molinfo`), node143 (`mouse` — pick modes `4 N`), node154 (`user` — hotkeys; note: `user` is ALSO an atomselect keyword for per-atom values), node159 (Tcl callbacks — `vmd_pick_event`/`vmd_pick_mol`/`vmd_molecule`/`vmd_initialize_structure`/`vmd_quit` traces), node251 (`.vmdrc`/`vmd.rc` startup loading). — **HIGH confidence** (official docs, version-matched).
+- **Bundled VMD tcl plugins** (`vmd-ref/plugins/`): `clonerep1.3/clonerep.tcl` (rep management + Tk GUI + `trace variable vmd_molecule` + `vmd_install_extension` pattern + `vmdcon`), `viewmaster2.6`, `autoionize1.4` (GUI+CLI split), `mergestructs1.1`, `ramaplot1.1`; all `pkgIndex.tcl` files. — **HIGH confidence** (authoritative extension-pattern examples).
+- **`vmd-ref/tooltip/`** (`tooltip.tcl` v2.0.4, `pkgIndex.tcl`, `license.terms`): confirmed tklib tooltip under Tcl/Tk license (permissive, non-BSD); staged as reference, **recommendation: do not vendor**. — **HIGH confidence**.
+- **Confidence caveats (flag for first GUI smoke test):** ttk availability in GUI mode (MEDIUM-HIGH — present in `scripts/tk8.5/ttk/` but unverifiable headless since Tk doesn't load in `-dispdev text`); real-mouse-click firing of `vmd_pick_event` after `mouse mode 4 2` (HIGH on mechanism from UG node159+node143 + trace verified by simulation, but the actual click→trace path is a human GUI checkpoint).
 
 ---
-*Stack research for: PyMOL 2.5.0 plugin — bioCHEMeleon hide-and-seek game*
-*Researched: 2026-08-03*
-
-## FOLLOW-UP VERIFICATION
-
-**Purpose:** Resolve two open questions left by the initial STACK/FEATURES research:
-(1) Are the reference-repo plugins "Outliner" and "show_contacts" non-legacy (Qt-based) 3rd-party plugins? (FEATURES.md leaned Tk; STACK/ARCH/PITFALLS leaned Qt — the user expected Outliner & show_contacts to be non-legacy Qt.)
-(2) Is the standard plugin install path the GUI Plugin Manager (universal across platforms), and what does that imply for bioCHEMeleon's packaging?
-
-**Method:** Read `./Pymol-script-repo/plugins/outline.py` and `./Pymol-script-repo/plugins/show_contacts.py` in full; cross-checked the entry-point pattern against every other plugin in the same directory. Per user instruction, NO system/conda/PyMOL install location was searched or probed — all evidence below comes from files inside the workspace and `./Pymol-script-repo`.
-
-**Confidence:** HIGH (repo evidence, directly read source). The plugin-loader mechanics below combine (a) repo pattern evidence (HIGH) with (b) the already-cloned PyMOL 2.5.0 source findings already cited earlier in this file (HIGH) — no new system probing was done.
-
----
-
-### Goal 1a — "Outliner" (`plugins/outline.py`): NON-LEGACY Qt-based plugin (unambiguous)
-
-**Location:** `Pymol-script-repo/plugins/outline.py` (481 lines). Menu label "Outliner"; window title "Outliner" (line 326).
-
-**Authorship / version signal:** Header reads `Author: Jarrett Johnson (Schrodinger, Inc.)` (line 4), `__version__ = "0.2"` (line 26). A Schrodinger author + use of `from __future__ import annotations` (line 7) and `dataclasses` (line 14) place this firmly in the modern era (PyMOL 2.x / Python 3.7+).
-
-**Concrete evidence (quoted lines):**
-
-- Imports — pure Qt, no Tk/Pmw:
-  - `outline.py:9`  `from pymol import cmd`
-  - `outline.py:10` `from pymol.Qt import QtCore`
-  - `outline.py:11` `from pymol.Qt import QtGui`
-  - `outline.py:12` `from pymol.Qt import QtWidgets`
-  - (No `Tkinter`, `ttk`, `Pmw`, `pmg_tk`, `app.root`, or `get_tk_root` anywhere in the file.)
-
-- Modern entry-point symbol:
-  - `outline.py:29` `def __init_plugin__(app=None) -> None:`
-  - `outline.py:30`     `from pymol.plugins import addmenuitemqt`
-  - `outline.py:31`     `addmenuitemqt('Outliner', run_plugin_gui)`
-
-- GUI is a `QtWidgets.QDialog` subclass:
-  - `outline.py:311` `class RepresentationOutlineDialog(QtWidgets.QDialog):`
-  - `outline.py:326`     `self.setWindowTitle("Outliner")`
-
-**Classification: (a) Qt-based / NON-LEGACY.** This is a textbook modern PyMOL plugin. It matches the canonical `lightingsettings_gui` template (cited earlier in this file) exactly: top-level `__init_plugin__(app=None)` → `addmenuitemqt(...)` → a `pymol.Qt` `QDialog`. There is no legacy `def __init__(self)` entry point, no `self.menuBar.addmenuitem(...)`, and no Tk/Pmw import anywhere.
-
-**One caveat (unrelated to Qt-vs-Tk):** Outliner also imports `from PIL import Image` (lines 20-24) — i.e. it depends on Pillow. This is a 3rd-party dep that bioCHEMeleon should NOT inherit. It does not change the Qt classification; it just means "don't copy Outliner's imports wholesale." bioCHEMeleon's UI needs only `pymol.Qt` + stdlib + numpy.
-
----
-
-### Goal 1b — "show_contacts" (`plugins/show_contacts.py`): HYBRID / transitional (Qt-preferred, Tk fallback)
-
-**Location:** `Pymol-script-repo/plugins/show_contacts.py` (338 lines). Menu label "Show Contacts".
-
-This plugin is the most nuanced of the two. It is **not** a clean modern Qt plugin like Outliner — it is mid-port. The user's expectation that it is "non-legacy" is *directionally* correct (Qt is the primary code path and the Tk path is only a fallback) but *technically* partial: the entry-point signature is still the legacy `def __init__(self):` form, and a full Tk+Pmw GUI class is still present in the file.
-
-**Concrete evidence (quoted lines):**
-
-- The plugin entry point is the LEGACY signature (note `self`, not `app=None`):
-  - `show_contacts.py:329` `def __init__(self):`
-  - `show_contacts.py:330`     `try:`
-  - `show_contacts.py:331`         `from pymol.plugins import addmenuitemqt`
-  - `show_contacts.py:332`         `addmenuitemqt('Show Contacts', Show_Contacts_Qt_Dialog)`
-  - `show_contacts.py:333`         `return`
-  - `show_contacts.py:334`     `except Exception as e:`
-  - `show_contacts.py:335`         `print(e)`
-  - `show_contacts.py:336`     `self.menuBar.addmenuitem('Plugin', 'command', 'Show Contacts', label = 'Show Contacts', command = lambda s=self : Show_Contacts(s))`
-
-  → The body **tries Qt first** (`addmenuitemqt`) and **returns early on success**; only if Qt registration raises does it fall back to the legacy `self.menuBar.addmenuitem('Plugin', ...)` + the `Show_Contacts` Tk class. So Qt is the preferred/primary path; Tk is the legacy fallback.
-
-- The Qt GUI class (modern):
-  - `show_contacts.py:276` `class Show_Contacts_Qt_Dialog(object):`
-  - `show_contacts.py:279`     `from pymol.Qt import QtWidgets`
-  - `show_contacts.py:280`     `dialog = QtWidgets.QDialog()`
-  - `show_contacts.py:305`     `from pymol.Qt import QtCore, QtWidgets`
-
-- The Tk+Pmw GUI class (legacy, kept as fallback):
-  - `show_contacts.py:191` `class Show_Contacts:`
-  - `show_contacts.py:193`     `def __init__(self, app):`
-  - `show_contacts.py:194`         `parent = app.root`            ← legacy Tk-root access pattern
-  - `show_contacts.py:199`         `import Pmw`
-  - `show_contacts.py:205`         `self.select_dialog = Pmw.Dialog(parent, ...)` ← Pmw megawidget
-  - `show_contacts.py:214`         `self.select_object_combo_box = Pmw.ComboBox(...)`
-
-- Pure-Python command (no GUI) also exported:
-  - `show_contacts.py:174` `cmd.extend('contacts', show_contacts)` — the `show_contacts` function (lines 15-173) is a GUI-less `cmd`-level command usable from the PyMOL command line. The GUI classes wrap it.
-
-**Classification: (c) hybrid / transitional — primarily Qt, with a legacy Tk+Pmw fallback.** It is *not* a clean `__init_plugin__(app=None)` plugin (the entry symbol is `__init__(self)`), but its runtime behavior on any Qt-capable PyMOL (which is all of PyMOL 2.5.0 conda/Incentive) is Qt: it registers `Show_Contacts_Qt_Dialog` via `addmenuitemqt` and returns before ever touching `Pmw`/`app.root`. The Tk path is dead code on a Qt build.
-
-**What this plugin confirms for the Qt-vs-Tk question:** even a plugin that *kept* its legacy Tk fallback chose to make Qt the primary path and `return` early. That is strong community evidence that Qt is the expected modern default. It also serves as a concrete anti-pattern for bioCHEMeleon: **don't keep a Tk+Pmw fallback class** — on PyMOL 2.5.0 Qt builds the fallback is dead weight, and `app.root` would be `None` anyway (per the `legacysupport.get_tk_root()` finding already cited in this file). Just write a clean `__init_plugin__` + `pymol.Qt` plugin like Outliner.
-
----
-
-### Repo-wide pattern survey (corroborating evidence)
-
-The `plugins/` directory bifurcates cleanly into two entry-point patterns. This is the strongest evidence that the Qt + `__init_plugin__` pattern is the modern standard.
-
-**Modern Qt plugins — entry point `def __init_plugin__(app=None):` + `addmenuitemqt` + `from pymol.Qt import ...`:**
-
-| File | Entry point line | GUI toolkit | Notes |
-|------|------------------|-------------|-------|
-| `outline.py` | `:29` `def __init_plugin__(app=None) -> None:` | `pymol.Qt` (`:10-12`) | Outliner — Schrodinger author; `dataclasses`, `from __future__ import annotations` |
-| `optimize.py` | `:29` `def __init_plugin__(app=None) -> None:` → `:31` `addmenuitemqt('OpenBabel Optimize', run_plugin_gui)` | `pymol.Qt` (`:25` `from pymol.Qt import QtCore, QtWidgets, QtGui`) | Osvaldo Martin; `QTabWidget` (replaces `Pmw.NoteBook`) |
-| `dynoplot.py` | (header) `:10` `# Ported to PyQt 2024 by Thomas Holder` | `pymol.Qt` (`:21`) | Explicit "ported to PyQt 2024" note — migration trend on record |
-| `views.py` | `:118` `def __init_plugin__(app=None):` | `pymol.Qt` (uses `pymol.gui.get_qtwindow()`, `addDockWidget`) | Adds a Qt dock widget to the Scene menu |
-| `vina.py` | `:1445` `def __init_plugin__(app=None):` → `:1463-1465` `addmenuitemqt("Vina (Run)", ...)` / `addmenuitemqt("Vina (Analyze)", ...)` | `pymol.Qt` | `if __name__ in ["pymol", ...]: __init_plugin__()` at `:1468` |
-| `colorama.py` | `:559` `def __init_plugin__(app=None):` → `:564-565` `addmenuitemqt('Colorama', open_colorama)` | `pymol.Qt` | Docstring at `:561` literally reads *"PyMOL 3.x plugin initialization. This function is called by PyMOL when the plugin is loaded."* |
-
-**Legacy Tk plugins — entry point `def __init__(self):` + `self.menuBar.addmenuitem('Plugin', 'command', ...)` (+ `Pmw.Dialog` / `app.root` in the GUI class):**
-
-| File | Entry point line | Toolkit |
-|------|------------------|---------|
-| `msms.py` | `:78` `def __init__(self):` → `:81` `self.menuBar.addmenuitem('Plugin', 'command', ...)` | Tk+Pmw (`:92` `self.parent = app.root`; `:93` `Pmw.Dialog`) |
-| `contact_map_visualizer.py` | `:53` `def __init__(self):` → `:54` `self.menuBar.addmenuitem(...)` | Tk |
-| `rendering_plugin.py` | `:40` `def __init__(self):` → `:41` `self.menuBar.addmenuitem(...)` | Tk |
-| `mole.py` | `:117` `def __init__(self):` → `:118` `self.menuBar.addmenuitem(...)` | Tk |
-| `pytms.py` | `:1884` `def __init__(self):` → `:1889-1890` `self.menuBar.addmenuitem('Plugin', ...)` | Tk |
-| `resicolor_plugin.py` | `:14` `def __init__(self):` → `:16` `self.menuBar.addmenuitem(...)` | Tk |
-| `SuperSymPlugin.py` | `:26` `def __init__(self):` → `:30+` `self.menuBar.addmenuitem('SuperSym', ...)` | Tk |
-| `annocryst.py` | `:42` `def __init__(self):` → `:44` `self.menuBar.addmenuitem(...)` | Tk |
-| `castp.py` | `:30` `def __init__(self):` → `:36` `self.menuBar.addmenuitem(...)` | Tk |
-| `autodock_plugin.py` | `:105` `def __init__(self):` → `:106` `self.menuBar.addmenuitem(...)` | Tk |
-
-**Hybrid (legacy `__init__(self)` signature, Qt-preferred body, Tk fallback):**
-
-| File | Entry point line | Notes |
-|------|------------------|-------|
-| `show_contacts.py` | `:329` `def __init__(self):` → `:332` `addmenuitemqt('Show Contacts', Show_Contacts_Qt_Dialog); return` | Qt primary, `self.menuBar.addmenuitem(...)` + `Show_Contacts` (Pmw) fallback |
-
-**Pattern conclusion:** The repo's modern, actively-maintained plugins (6 of them, including a Schrodinger-authored one and one explicitly "Ported to PyQt 2024") ALL use `def __init_plugin__(app=None):` + `addmenuitemqt` + `from pymol.Qt import ...`. The legacy plugins ALL use `def __init__(self):` + `self.menuBar.addmenuitem(...)`. The two entry-point symbols are the reliable classifier — `__init_plugin__` = modern Qt, `__init__(self)` = legacy Tk. Outliner is unambiguously modern; show_contacts is mid-port.
-
----
-
-### Goal 2 — Plugin Manager install path & bioCHEMeleon packaging
-
-**What the repo tells us about the loader (no system probing):**
-
-1. Every modern repo plugin is a **single `.py` file** at the top of `plugins/`, exporting a **module-level** `def __init_plugin__(app=None):` function. (See `outline.py:29`, `optimize.py:29`, `views.py:118`, `vina.py:1445`, `colorama.py:559`.) The GUI class (`QtWidgets.QDialog` subclass) and the `run_plugin_gui` factory live in the same file or are imported from sibling modules.
-2. `vina.py:1468` shows the idiomatic guard for also-runs at startup: `if __name__ in ["pymol", "pmg_tk.startup.XDrugPy"]: __init_plugin__()` — i.e. the loader imports the module under the `pymol` / `pmg_tk.startup.*` package name and then calls `__init_plugin__`.
-3. `colorama.py:561` docstring is explicit: *"PyMOL 3.x plugin initialization. This function is called by PyMOL when the plugin is loaded."* — i.e. the loader calls `__init_plugin`.
-
-**Combined with the PyMOL 2.5.0 source findings already cited earlier in this file** (`modules/pymol/plugins/__init__.py` — plugin loader, `__init_plugin__` modern vs `__init__` legacy; `modules/pymol/plugins/installation.py` — install accepts a single `.py` OR a package dir with `__init__.py`; user plugin dir `%APPDATA%/pymol/startup` on Windows, `~/.pymol/startup` on Linux), the install/discovery story is:
-
-- **The GUI Plugin Manager** (PyMOL menu: *Plugin → Plugin Manager → Install New Plugin*) is the standard, platform-universal install path. It invokes `pymol/plugins/installation.py`, which accepts **either** a single `.py` file **or** a package directory containing `__init__.py` **or** a `.zip` archive of a package. It copies the plugin into the per-user startup directory (`%APPDATA%/pymol/startup/` on Windows; `~/.pymol/startup/` on Linux/macOS).
-- **At PyMOL startup**, the loader (`pymol/plugins/__init__.py`) imports each installed plugin module/package and calls **`__init_plugin__(app=None)`** if present (modern). If `__init_plugin__` is absent, it falls back to the legacy bound-method `__init__(self)` pattern (this is how the legacy `msms.py`-style plugins still load).
-- **The entry-point symbol the Plugin Manager/loader calls is `__init_plugin__(app=None)`.** Inside it, the plugin registers its menu item via `from pymol.plugins import addmenuitemqt` + `addmenuitemqt('<label>', <callable>)`.
-
-**Packaging recommendation for bioCHEMeleon:**
-
-- **Ship as a package directory `biochemeleon/` with an `__init__.py`** that defines `__init_plugin__(app=None)`. Reasons over a single `.py`:
-  - The plugin is multi-file by nature (setup-tab GUI, game-status GUI, the `ChameleonWizard` class, game logic, bundled demo PDBs). A package directory keeps these as sibling modules (`gui_setup.py`, `gui_game.py`, `wizard.py`, `game.py`, `demos/`) imported from `__init__.py`.
-  - It matches the canonical modern template shipped *inside* PyMOL itself (`data/startup/lightingsettings_gui/__init__.py` + `main.py` — cited earlier in this file). A package dir is the form the Plugin Manager most cleanly copies and the loader most cleanly imports.
-  - The demo PDBs (spec: "demo PDB bundled, compress before bundling") can live under `biochemeleon/demos/` and be located via `os.path.dirname(__file__)` — which works identically whether loaded from the repo or from the installed copy in the user plugin dir.
-- **Do NOT ship as a `.zip` for v1.** A zip works with the Plugin Manager, but a package directory is easier to debug (you can edit a file and reload without re-zipping) and is what every modern repo example uses. Reserve zip for a future "distribute via PyPI/wiki" phase if ever needed.
-- **Entry-point code** (the exact shape the Plugin Manager expects):
-  ```python
-  # biochemeleon/__init__.py
-  from pymol import cmd
-
-  def __init_plugin__(app=None):
-      from pymol.plugins import addmenuitemqt
-      addmenuitemqt('bioCHEMeleon', run_plugin_gui)
-
-  def run_plugin_gui():
-      from .gui_setup import SetupDialog   # QtWidgets.QDialog subclass
-      global dialog
-      if dialog is None:
-          dialog = SetupDialog()
-      dialog.show()
-  dialog = None
-  ```
-  This is the Outliner / optimize / lightingsettings_gui pattern verbatim. Do **not** use the `show_contacts` hybrid `def __init__(self):` form — that is the legacy entry signature; on a clean modern build it adds nothing but a Tk fallback that can never render (no Tk root under Qt).
-
-**Platform-universality (Windows conda PyMOL via `setenv.bat` from WSL):**
-
-- The Plugin Manager install path is the **same GUI action on every platform**: *Plugin → Plugin Manager → Install New Plugin → point at the package directory*. It does not depend on any platform-specific directory surgery. This is exactly the universality the user asserted.
-- For the WSL-dev / Windows-run setup in PROJECT.md: launch PyMOL on Windows via `setenv.bat` (the `chemtools-win10` conda env), then inside that Windows PyMOL use the Plugin Manager to install. The only WSL consideration is that the Manager's file picker runs in the **Windows** PyMOL process, so it sees Windows paths. Two clean options:
-  1. Point the Manager at the package via the Windows→WSL path `\\wsl$\<distro>\…\bioCHEMeleon\biochemeleon\` (or `\\wsl.localhost\…`), then let the Manager copy it into `%APPDATA%/pymol/startup/biochemeleon/`.
-  2. Or, for dev iteration, keep the package on the Windows side (e.g. under the project's Windows path) and point the Manager there.
-  Either way the install lands in the standard Windows per-user startup dir; the loader finds `biochemeleon/__init__.py` and calls `__init_plugin__` on next PyMOL launch. No `setenv.bat` changes, no `PYTHONPATH` surgery, no manual `cp` into a startup dir.
-- **Correction to the earlier "Installation" section of this file:** the prior text presented copy-into-`%APPDATA%/pymol/startup` and "symlink the repo dir" as co-equal install options (b)/(c). The user has clarified that the **Plugin Manager is the standard, universal path**; direct-dir copy and symlink are dev-time conveniences, not the install path to document for end users. The Plugin Manager should be listed first; the others demoted to "dev-only shortcuts."
-
----
-
-### Reconciliation: Tkinter vs PyQt5 (resolving the FEATURES.md vs STACK/ARCH/PITFALLS split)
-
-- **Prior STACK/ARCHITECTURE/PITFALLS recommendation:** PyQt5 via `pymol.Qt` (HIGH confidence, citing the in-tree `lightingsettings_gui` plugin + official wiki Tk-deprecation + no live Tk root under the Qt GUI).
-- **Prior FEATURES.md lean:** `tkinter`/`ttk` as a stdlib "anti-Pmw" option.
-- **New evidence from this follow-up:**
-  - **Outliner** is a 3rd-party, Schrodinger-authored, modern Qt plugin using the exact `__init_plugin__` + `addmenuitemqt` + `pymol.Qt` pattern — a second concrete exemplar beyond `lightingsettings_gui`.
-  - **show_contacts**, even with its legacy entry signature, makes Qt the primary path and keeps Tk only as a fallback — community confirmation that Qt is the expected default.
-  - **Six repo plugins** (outline, optimize, dynoplot, views, vina, colorama) all use the modern Qt entry point; **ten** use the legacy Tk entry point; one (show_contacts) is hybrid. The modern, actively-maintained subset is uniformly Qt.
-  - `dynoplot.py:10` literally records "Ported to PyQt 2024 by Thomas Holder" — the migration is current and ongoing.
-
-**Verdict: the prior PyQt5-via-`pymol.Qt` recommendation stands and is STRENGTHENED. The new repo evidence does not contradict it; it contradicts FEATURES.md's Tkinter lean.** Reconciliation: **Tkinter/ttk is the legacy path** (dead on PyMOL 2.5.0 Qt builds — `get_tk_root()` returns `None`); **PyQt5 via `pymol.Qt` is the modern, supported, community-adopted path.** FEATURES.md's Tkinter suggestion should be reclassified: Tkinter is NOT a stdlib "anti-Pmw" alternative for this project — it is the *same legacy family* as Pmw (both need a live Tk root, which the Qt build does not provide). The real anti-Pmw move is `pymol.Qt` widgets (`QTabWidget`, `QDialog`, `QComboBox`, `QDoubleSpinBox`), which Outliner and optimize both demonstrate.
-
-**Net for bioCHEMeleon:**
-- GUI: PyQt5 via `from pymol.Qt import QtCore, QtGui, QtWidgets` (copy the Outliner/optimize template).
-- Entry point: `def __init_plugin__(app=None):` + `addmenuitemqt('bioCHEMeleon', run_plugin_gui)`.
-- Packaging: package directory `biochemeleon/` with `__init__.py`; install via the GUI Plugin Manager (universal across Windows/Linux/macOS, works with the WSL-dev / Windows-conda-PyMOL-via-`setenv.bat` workflow).
-- Do NOT add a Tk/Pmw fallback class (it is dead code on Qt builds and adds a Pmw dependency that violates the "only libs required by pymol-open-source" rule).
-
----
-
-### Sources (this follow-up, repo-only)
-
-- `Pymol-script-repo/plugins/outline.py` — full read; `:9-12` (Qt imports), `:29-31` (`__init_plugin__` + `addmenuitemqt`), `:311`/`:326` (`QDialog` "Outliner"), `:4` (Schrodinger author), `:20-24` (Pillow dep — caveat). HIGH.
-- `Pymol-script-repo/plugins/show_contacts.py` — full read; `:329-336` (hybrid entry: Qt-try/`return` + Tk-fallback), `:276-284`/`:305` (Qt dialog), `:191-258` (Tk+Pmw fallback class with `app.root` at `:194`, `import Pmw` at `:199`, `Pmw.Dialog`/`Pmw.ComboBox`), `:174` (`cmd.extend` CLI command). HIGH.
-- `Pymol-script-repo/plugins/optimize.py` — `:25` (`from pymol.Qt import …`), `:29-31` (`__init_plugin__` + `addmenuitemqt`). HIGH.
-- `Pymol-script-repo/plugins/dynoplot.py` — `:10` ("Ported to PyQt 2024 by Thomas Holder"), `:21` (`from pymol.Qt import …`). HIGH.
-- `Pymol-script-repo/plugins/views.py` — `:118` (`def __init_plugin__(app=None):`). HIGH.
-- `Pymol-script-repo/plugins/vina.py` — `:1445` (`def __init_plugin__(app=None):`), `:1463-1465` (`addmenuitemqt`), `:1468` (`if __name__ in ["pymol", "pmg_tk.startup.XDrugPy"]: __init_plugin__()`). HIGH.
-- `Pymol-script-repo/plugins/colorama.py` — `:559-565` (`def __init_plugin__(app=None):` + `addmenuitemqt`; docstring "PyMOL 3.x plugin initialization. This function is called by PyMOL when the plugin is loaded."). HIGH.
-- `Pymol-script-repo/plugins/msms.py` — `:78` (`def __init__(self):`), `:81-83` (`self.menuBar.addmenuitem('Plugin', 'command', …)`), `:91-93` (`def __init__(self, app): self.parent = app.root; Pmw.Dialog(...)`) — legacy exemplar for contrast. HIGH.
-- `Pymol-script-repo/README.md` — "single file plugins from the PyMOL Wiki" (no install doc; install path inferred from entry-point pattern + prior PyMOL 2.5.0 source findings already cited in this file). MEDIUM (absence of explicit install doc).
-- Prior findings already cited earlier in this file (PyMOL 2.5.0 source `pymol/plugins/__init__.py` loader, `pymol/plugins/installation.py` install accepting `.py`/package-dir/zip, user plugin dirs) — HIGH, not re-probed per user instruction.
-
-*Follow-up verification appended: 2026-08-03*
+*Stack research for: VMD 1.9.3 tcl hide-and-seek game (bioCHEMeleon v2.0)*
+*Researched: 2026-08-22*
