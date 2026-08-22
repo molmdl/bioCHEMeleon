@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-08-18)
 Phase: v1 complete (all 12 phases: 1-11 + 04.1)
 Plan: Not started (next milestone)
 Status: Ready to plan next milestone
-Last activity: 2026-08-22 — quick-004: flatten Phase 9 demo cache to single `<cwd>/cache/` layer. v1 milestone complete 2026-08-18 (archived + tagged).
+Last activity: 2026-08-22 — quick-005/006/007/008/009: gameplay tuning (cartoon segment spreading, stick sidechain neighbors, multi-viewer docs, random rep distribution) + alt-conf anchor fix. v1 milestone complete 2026-08-18 (archived + tagged).
 
 Progress: ████████████████████████████████████████████████████████ 100% v1 (77 of 77 plans done — all phases COMPLETE + VERIFIED. v1 shipped.)
 
@@ -53,5 +53,10 @@ All v1 blockers resolved. Key runtime discoveries encoded in AGENTS.md domain ru
 |---|-------------|------|--------|-----------|
 | 003 | Relocate Phase 9 fetched-demo cache to cwd (cmd.fetch parity) | 2026-08-22 | 5041541 | [003-relocate-phase9-demo-cache-to-cwd](./quick/003-relocate-phase9-demo-cache-to-cwd/) |
 | 004 | Flatten Phase 9 demo cache to single `<cwd>/cache/` layer | 2026-08-22 | 3d8cf9b | [004-flatten-phase9-demo-cache-to-cache-dir](./quick/004-flatten-phase9-demo-cache-to-cache-dir/) |
+| 005 | Spread cartoon/ribbon hiders across chain (even spacing, not adjacent) | 2026-08-22 | 00bda62 | [005-spread-cartoon-segments](./quick/005-spread-cartoon-segments/) |
+| 006 | Expand stick hider neighbor pool to all heavy atoms (side chains) | 2026-08-22 | b8fb430 | [006-stick-sidechain-neighbors](./quick/006-stick-sidechain-neighbors/) |
+| 007 | Update tracking docs for multi-viewer repo structure (pymol/ paths, chimeraX) | 2026-08-22 | 7626414 | [007-update-tracking-docs-multiviewer](./quick/007-update-tracking-docs-multiviewer/) |
+| 008 | Randomize rep distribution when only total count specified (not all spheres) | 2026-08-22 | 889fd00 | [008-randomize-reps-when-total-only](./quick/008-randomize-reps-when-total-only/) |
+| 009 | Fix alt-conf backbone atoms causing duplicate anchor in cartoon segment hider | 2026-08-22 | 4f7ed72 | [009-fix-altconf-anchor-duplicate](./quick/009-fix-altconf-anchor-duplicate/) |
 
-*Updated: 2026-08-22 after quick task 004 completion*
+*Updated: 2026-08-22 after quick tasks 005-009 completion*
