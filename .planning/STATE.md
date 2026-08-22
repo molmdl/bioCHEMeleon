@@ -2,61 +2,70 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-08-18)
+See: .planning/PROJECT.md (updated 2026-08-22)
 
 **Core value:** The player can load a molecule, generate blended "hider" atoms that match the local representation style, and reliably find them by clicking — with a working timer and win condition.
-**Current focus:** v1.1 shipped 2026-08-22 (bugfix + gameplay improvements over v1). Repo reorganized for multi-viewer support (commit 9ff57f1): v1 PyMOL code now lives under pymol/; vmd/ and chimeraX/ are placeholder dirs. Planning next milestone (v2 — VMD tcl script, deferred per spec.md; chimeraX is a later candidate).
+**Current focus:** v2.0 — VMD tcl port. Roadmap created (phases 13-23, 54 requirements). Ready to plan Phase 13.
 
 ## Current Position
 
-Phase: Not started (defining requirements for v2.0)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-08-22 — Milestone v2.0 (VMD tcl port) started. Reference material copied to `vmd-ref/` (gitignored). VMD 1.9.3 confirmed accessible headlessly via `vmd -dispdev text -e <script> -eofexit`.
+Phase: 13 of 23 (Bootstrap & Sourced Entry) — first v2 phase
+Plan: — (not yet planned)
+Status: Ready to plan Phase 13
+Last activity: 2026-08-22 — v2.0 roadmap revised: Phase 17 split into 17.1 (rep setup + simple generators) / 17.2 (cartoon generators) by complexity tier; Phase 23 (documentation — multi-viewer READMEs) added; 3 DOC requirements added (54 total). 12 phases (13-23), 54 requirements mapped (100% coverage).
 
-Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% v2.0 (defining requirements)
+Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% v2.0 (0 of ~12 phases)
 
-## v1 Milestone Summary
+## Performance Metrics
 
-**Shipped:** 2026-08-18 — bioCHEMeleon v1 (PyMOL 2.5.0 plugin)
-- 12 phases, 77 plans, 393 commits, 16 days (2026-08-02 → 2026-08-18)
-- ~14,000 lines Python (5,621 biochemeleon + 4,420 smoke + 3,959 tests)
-- 125 unit tests green + 6 headless smoke suites + 9 human-verify checkpoints APPROVED
-- Milestone audit: ✅ PASSED (46/46 requirements, 12/12 phases, 9/9 integration, 6/6 E2E flows)
-- Git tag: `v1`
+**Velocity:**
+- Total plans completed: 0 (v2.0); 77 in v1 (archived)
+- Average duration: — (v2.0 not started)
+- Total execution time: —
 
-**Archived:**
-- `.planning/milestones/v1-ROADMAP.md` — full phase details
-- `.planning/milestones/v1-REQUIREMENTS.md` — all 46 requirements marked complete
-- `.planning/milestones/v1-MILESTONE-AUDIT.md` — audit report (PASSED)
-- `.planning/MILESTONES.md` — milestone summary entry
+**By Phase:** (v2.0 — none started yet)
 
-**Full v1 execution history:** `.planning/phases/*/*-SUMMARY.md` (77 plan summaries across 12 phases)
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| - | - | - | - |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
-### Open items for next milestone
+### Decisions
 
-- **VMD tcl script (v2.0 — ACTIVE)** — Milestone started 2026-08-22. Port v1's hide-and-seek game to VMD 1.9.3. MVP-first approach; research drives rep selection; explore VMD materials as differentiator. Reference material in `vmd-ref/` (gitignored). Headless testing via `vmd -dispdev text -e <script> -eofexit`.
-- **chimeraX port** — placeholder dir chimeraX/ exists; a later milestone candidate after VMD (v2). Different viewer/extension model than PyMOL and VMD; research needed when it becomes active.
-- **AGENTS.md needs VMD/tcl-specific rewrite** after /gsd-new-milestone workflow (currently v1-scoped per AGENTS.md header note). Will be updated with verified VMD API behavior as v2 research/execution progresses.
-- **Repo reorg (2026-08-19, commit 9ff57f1):** v1 code moved under pymol/ (biochemeleon/, smoke/, tests/); vmd/ and chimeraX/ placeholders added. v2 code will live under vmd/.
-- **Known v1 tech debt to consider for v2:** Phase 9 SSL fallback (check_hostname=False for SASBDB HARICA cert); Phase 11 hider fragment secondary-structure inheritance (cosmetic). v1.1 quick-008 fix (random total distribution) must be baked in from start in v2.
+Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecting current work:
 
-### Resolved (v1 — full log in MILESTONES.md + phase SUMMARYs)
+- **v2.0 milestone start (2026-08-22):** Port v1 to VMD 1.9.3 as a sourced tcl script. MVP-first; research drives rep selection; materials explored as differentiator. Phases numbered 13-23 (continuing from v1's 11+04.1).
+- **v2 architecture:** PDB-rebuild (Option D) replaces in-place insertion — highest-risk change, de-risked in Phase 15. Backup = reload original PDB (no undo). Registry keyed by atom `index` (no global id). `.bcm` JSON hand-rolled (no `json` package). Pure-layer tcl unit-testable in WSL via `tclsh`/`tcltest`.
+- **v2 de-risking order:** Phase 15 (mutation safety) before Phase 16 (MVP loop) — PDB-rebuild proven before generators build on it. Phase 16 locks the pick contract via GUI human-verify (MEDIUM-confidence research flag). Materials (Phase 18) after reps (Phase 17.2) solid.
+- **Phase 17 split (2026-08-22 revision):** Phase 17 (rep generators) split into 17.1 (rep setup infrastructure + simple generators — Lines/VDW/Licorice, HIDER-06/HIDER-04) and 17.2 (cartoon generators — Cartoon/NewCartoon, HIDER-05) by generator complexity tier. Simple reps are bonded pseudoatom analogues; cartoon reps carry the STRIDE `ss='L'` L-complexity caveat (v1 Phase 11 analogue) and are de-risked separately.
+- **Phase 23 docs (2026-08-22 revision):** Final phase 23 added for documentation — root README (multi-viewer), `vmd/README.md` (VMD tcl install/use), `pymol/README.md` (PyMOL plugin install/use). 3 DOC requirements added (54 total). AGENTS.md VMD/tcl rewrite is a post-workflow task, NOT a roadmap phase.
 
-All v1 blockers resolved. Key runtime discoveries encoded in AGENTS.md domain rules (Phase 3 library bugs: id vs ID, b<0 selector, space= hygiene, etc.). Phase 11 alt-conf integration failure resolved via single-state new-chain copy refactor.
+### Pending Todos
 
-### Quick Tasks Completed
+None yet.
 
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 003 | Relocate Phase 9 fetched-demo cache to cwd (cmd.fetch parity) | 2026-08-22 | 5041541 | [003-relocate-phase9-demo-cache-to-cwd](./quick/003-relocate-phase9-demo-cache-to-cwd/) |
-| 004 | Flatten Phase 9 demo cache to single `<cwd>/cache/` layer | 2026-08-22 | 3d8cf9b | [004-flatten-phase9-demo-cache-to-cache-dir](./quick/004-flatten-phase9-demo-cache-to-cache-dir/) |
-| 005 | Spread cartoon/ribbon hiders across chain (even spacing, not adjacent) | 2026-08-22 | 00bda62 | [005-spread-cartoon-segments](./quick/005-spread-cartoon-segments/) |
-| 006 | Expand stick hider neighbor pool to all heavy atoms (side chains) | 2026-08-22 | b8fb430 | [006-stick-sidechain-neighbors](./quick/006-stick-sidechain-neighbors/) |
-| 007 | Update tracking docs for multi-viewer repo structure (pymol/ paths, chimeraX) | 2026-08-22 | 7626414 | [007-update-tracking-docs-multiviewer](./quick/007-update-tracking-docs-multiviewer/) |
-| 008 | Randomize rep distribution when only total count specified (not all spheres) | 2026-08-22 | 889fd00 | [008-randomize-reps-when-total-only](./quick/008-randomize-reps-when-total-only/) |
-| 009 | Fix alt-conf backbone atoms causing duplicate anchor in cartoon segment hider | 2026-08-22 | 4f7ed72 | [009-fix-altconf-anchor-duplicate](./quick/009-fix-altconf-anchor-duplicate/) |
+### Blockers/Concerns
 
-*Updated: 2026-08-22 after quick tasks 005-009 completion*
+- **Phase 16 pick mechanism (MEDIUM confidence):** All 4 researchers referenced VMD's pick system with different specifics; `vmd_pick_*` globals are absent in text mode. Must lock the contract via ONE human-in-GUI test in Phase 16. Design PickBridge defensively (trace + callback-list + label-poll fallback).
+- **Phase 15 PDB-rebuild (HIGHEST risk):** Viewpoint/reps must save+restore on a NEW molid; PDB column misalignment silently drops sentinels (mitigation: tag sentinels in-place via atomselect after load, never rely on PDB columns alone).
+- **AGENTS.md VMD/tcl rewrite** deferred until after v2 research/execution progresses (currently v1-scoped per header note).
+
+## Session Continuity
+
+Last session: 2026-08-22 — v2.0 roadmap revision
+Stopped at: ROADMAP.md, REQUIREMENTS.md, STATE.md revised for v2.0. Phase 17 split into 17.1/17.2, Phase 23 (docs) added, 54 requirements mapped to 12 phases (13-23).
+Resume file: None
+Next: `/gsd-plan-phase 13` (Bootstrap & Sourced Entry)
+
+## v1 Milestone Reference (archived)
+
+- **Shipped:** 2026-08-18 — bioCHEMeleon v1 (PyMOL 2.5.0 plugin), 12 phases, 77 plans, 393 commits, 46/46 requirements ✅ PASSED audit. Git tag: `v1`.
+- **v1.1:** Shipped 2026-08-22 — 5 bugfix/gameplay quick tasks (207 unit tests green).
+- **Archived:** `milestones/v1-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`; full execution history in `phases/*/*-SUMMARY.md`.
+- **Known v1 tech debt considered for v2:** Phase 9 SSL fallback (check_hostname=False); Phase 11 SS-inheritance (cosmetic). v1.1 quick-008 (random total distribution) baked into v2 from the start (SETUP-06).
+
+---
+*Updated: 2026-08-22 after v2.0 roadmap creation*
