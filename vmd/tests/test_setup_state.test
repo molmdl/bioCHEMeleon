@@ -1,0 +1,74 @@
+# vmd/tests/test_setup_state.test
+# tcltest suite for the pure-layer setup_state module.
+# Run under headless VMD: bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/tests/test_setup_state.test -eofexit < /dev/null'
+# (Or standalone tclsh if installed: tclsh vmd/tests/test_setup_state.test)
+
+package require tcltest
+namespace import ::tcltest::*
+configure -verbose {start pass body error}
+
+# Source the pure layer. Under `vmd -e`, [info script] is EMPTY (the probe
+# verified this — VMD uses a non-source mechanism for -e), so use [pwd]
+# (VMD cwd = the staging root) to locate files.
+source [file join [pwd] vmd lib setup_state.tcl]
+
+# Tests (cover the Phase 13 contract):
+
+test game_reps_count {} -body {
+    llength $::biochemeleon::setup_state::GAME_REPS
+} -result 10
+
+test game_reps_first_is_lines {} -body {
+    lindex $::biochemeleon::setup_state::GAME_REPS 0
+} -result {Lines}
+
+test game_reps_has_no_surface {} -body {
+    expr {[lsearch $::biochemeleon::setup_state::GAME_REPS surface] == -1}
+} -result 1
+
+test hider_cap_small {} -body {
+    ::biochemeleon::setup_state::hider_count_cap 212
+} -result 4
+
+test hider_cap_zero {} -body {
+    ::biochemeleon::setup_state::hider_count_cap 0
+} -result 1
+
+test hider_cap_large {} -body {
+    ::biochemeleon::setup_state::hider_count_cap 100000
+} -result 50
+
+test setup_format_v2 {} -body {
+    set ::biochemeleon::setup_state::SETUP_FORMAT
+} -result {biochemeleon-setup-v2}
+
+test defaults_has_format_key {} -body {
+    dict exists $::biochemeleon::setup_state::DEFAULTS format
+} -result 1
+
+test defaults_hider_count_default {} -body {
+    dict get $::biochemeleon::setup_state::DEFAULTS hider_count
+} -result 10
+
+test demo_manifest_has_6_bundled {} -body {
+    llength [dict keys $::biochemeleon::setup_state::DEMO_MANIFEST]
+} -result 6
+
+test demo_manifest_1znf_bundled {} -body {
+    dict get $::biochemeleon::setup_state::DEMO_MANIFEST 1znf source
+} -result {bundled}
+
+test validate_state_stub_returns_defaults {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create]]
+    dict exists $result format
+} -result 1
+
+# CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
+# Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
+# ($? is always 0 from VMD), so the harness MUST parse this marker line.
+set total $::tcltest::numTests(Total)
+set passed $::tcltest::numTests(Passed)
+set failed $::tcltest::numTests(Failed)
+set skipped $::tcltest::numTests(Skipped)
+puts "BCHM_TEST_RESULT Total=$total Passed=$passed Failed=$failed Skipped=$skipped"
+cleanupTests

@@ -1,0 +1,55 @@
+# vmd/tests/test_registry.test
+# tcltest suite for the pure-layer registry module.
+# Run under headless VMD: bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/tests/test_registry.test -eofexit < /dev/null'
+# (Or standalone tclsh if installed: tclsh vmd/tests/test_registry.test)
+
+package require tcltest
+namespace import ::tcltest::*
+configure -verbose {start pass body error}
+
+# Source the pure layer. Under `vmd -e`, [info script] is EMPTY (verified),
+# so use [pwd] (VMD cwd = the staging root) to locate files.
+source [file join [pwd] vmd lib registry.tcl]
+
+# Dependency injection: inject a fake fetch_hider_ids (a command prefix)
+# that returns a fixed list. Built with [list apply ...] so the prefix is
+# passed as a VALUE (not evaluated at the call site); the registry invokes
+# it via {expand}. No molecular-viewer API needed — pure unit test.
+
+test reconstruct_clears_and_populates {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 10 15} }}]
+    list [::biochemeleon::registry::is_hider 5] [::biochemeleon::registry::is_hider 10] [::biochemeleon::registry::is_hider 15] [::biochemeleon::registry::is_hider 99]
+} -result {1 1 1 0}
+
+test reconstruct_clears_previous {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {20 30} }}]
+    list [::biochemeleon::registry::is_hider 5] [::biochemeleon::registry::is_hider 20] [::biochemeleon::registry::is_hider 30]
+} -result {0 1 1}
+
+test reconstruct_empty_list {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return [list] }}]
+    ::biochemeleon::registry::is_hider 1
+} -result 0
+
+test mark_found_sets_status {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {7} }}]
+    ::biochemeleon::registry::mark_found 7
+    # No direct status reader in the Phase 13 stub — assert mark_found
+    # did not error and is_hider is still true.
+    ::biochemeleon::registry::is_hider 7
+} -result 1
+
+test mark_found_unregistered_errors {} -body {
+    catch {::biochemeleon::registry::mark_found 999} err
+    set err
+} -result {hider 999 not registered}
+
+# CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
+# Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
+# ($? is always 0 from VMD), so the harness MUST parse this marker line.
+set total $::tcltest::numTests(Total)
+set passed $::tcltest::numTests(Passed)
+set failed $::tcltest::numTests(Failed)
+set skipped $::tcltest::numTests(Skipped)
+puts "BCHM_TEST_RESULT Total=$total Passed=$passed Failed=$failed Skipped=$skipped"
+cleanupTests

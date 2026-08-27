@@ -20,15 +20,18 @@ namespace eval ::biochemeleon::registry {
 }
 
 # Dependency-injected sentinel reconstruction (port of v1 registry.py:420-443).
-# `fetch_hider_ids` is a proc reference or `apply` lambda INJECTED by the
-# composition root (game.tcl, a later phase), so this module stays pure — it
-# calls $fetch_hider_ids without knowing it touches any molecular-viewer API.
+# `fetch_hider_ids` is a command prefix (a proc name OR an `apply` lambda list)
+# INJECTED by the composition root (game.tcl, a later phase), so this module
+# stays pure — it calls the prefix without knowing it touches any
+# molecular-viewer API. The `{*}` argument expansion is the idiomatic tcl DI:
+# it expands the command-prefix list into command words (works for a single
+# proc name too — a 1-element list expands to itself).
 # Clears existing records first (overwrite, NOT append), then records each
 # sentinel index as a fresh entry with status=hidden.
 proc ::biochemeleon::registry::reconstruct_from_sentinels {fetch_hider_ids} {
     variable _records
     set _records [dict create]
-    foreach idx [$fetch_hider_ids] {
+    foreach idx [{*}$fetch_hider_ids] {
         dict set _records $idx [dict create rep "" status $::biochemeleon::registry::HIDER_STATUS_HIDDEN]
     }
     return
