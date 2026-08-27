@@ -1,8 +1,8 @@
-# AGENTS.md
+# AGENTS.md — v1 PyMOL 2.5.0 Plugin
 
-High-signal notes for OpenCode sessions. Read before touching code. See `spec.md` and `.planning/PROJECT.md` for full project context.
+High-signal notes for OpenCode sessions. Read before touching any `pymol/` code. See root `AGENTS.md` for shared/environment concerns, `spec.md`, and `.planning/PROJECT.md` for full project context.
 
-> **Scope:** v1 (PyMOL 2.5.0 plugin). v2 (VMD tcl script) is deferred per `spec.md` — this file is v1-scoped; revisit it when v2 research begins. When the active milestone becomes v2, flag that AGENTS.md needs a VMD/tcl-specific rewrite.
+> **Scope:** v1 PyMOL 2.5.0 plugin (Python/PyQt5, shipped 2026-08-18). This file is PyMOL-specific. For shared concerns (WSL/Windows split, GSD workflow, parallel execution), read root `AGENTS.md` first. For VMD/v2 work, read `vmd/AGENTS.md`.
 
 ## Environment — the WSL/Windows split (read first)
 
