@@ -44,7 +44,7 @@ Full phase details, plans, and summaries: [`milestones/v1-ROADMAP.md`](milestone
 **Goal**: The script loads cleanly into VMD and opens a modeless dialog — the stable shell every later phase builds on, with the 3D viewer kept interactive for click-to-find.
 **Depends on**: Nothing (first v2 phase)
 **Requirements**: ENTRY-01, ENTRY-02, ENTRY-03, TEST-01, TEST-02
-**Plans**: TBD
+**Plans:** 2 plans
 
 **Success Criteria** (what must be TRUE):
 1. Sourcing `biochemeleon.tcl` in a VMD session registers an "bioCHEMeleon" item in the Extensions menu (via `vmd_install_extension`) with no errors, and re-sourcing the script does not reset state or duplicate the dialog (re-source guard works).
@@ -53,7 +53,8 @@ Full phase details, plans, and summaries: [`milestones/v1-ROADMAP.md`](milestone
 4. The pure layer (`lib/setup_state.tcl`) loads under `tclsh` with no `mol`/`tk` dependency and is ready for `tcltest` (strict layering + zero external deps established from day one).
 
 Plans:
-- [ ] 13-01: TBD
+- [ ] 13-01-PLAN.md — Pure-layer tcl (lib/setup_state.tcl + lib/registry.tcl) + tcltest harness under headless VMD [TEST-02, half ENTRY-03]
+- [ ] 13-02-PLAN.md — Entry script (biochemeleon.tcl) + headless smoke + GUI human-verify checkpoint [ENTRY-01, ENTRY-02, half ENTRY-03, TEST-01]
 
 ### Phase 14: Setup Tab & Bundled Demos
 
@@ -237,7 +238,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 13. Bootstrap & Sourced Entry | v2.0 | 0/TBD | Not started | - |
+| 13. Bootstrap & Sourced Entry | v2.0 | 0/2 | Not started | - |
 | 14. Setup Tab & Bundled Demos | v2.0 | 0/TBD | Not started | - |
 | 15. Mutation Safety & Hider Registry | v2.0 | 0/TBD | Not started | - |
 | 16. MVP Core Loop (Sphere) | v2.0 | 0/TBD | Not started | - |
