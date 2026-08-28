@@ -53,7 +53,7 @@ Full phase details, plans, and summaries: [`milestones/v1-ROADMAP.md`](milestone
 4. The pure layer (`lib/setup_state.tcl`) loads under `tclsh` with no `mol`/`tk` dependency and is ready for `tcltest` (strict layering + zero external deps established from day one).
 
 Plans:
-- [ ] 13-01-PLAN.md — Pure-layer tcl (lib/setup_state.tcl + lib/registry.tcl) + tcltest harness under headless VMD [TEST-02, half ENTRY-03]
+- [x] 13-01-PLAN.md — Pure-layer tcl (lib/setup_state.tcl + lib/registry.tcl) + tcltest harness under headless VMD [TEST-02, half ENTRY-03] — completed 2026-08-28
 - [ ] 13-02-PLAN.md — Entry script (biochemeleon.tcl) + headless smoke + GUI human-verify checkpoint [ENTRY-01, ENTRY-02, half ENTRY-03, TEST-01]
 
 ### Phase 14: Setup Tab & Bundled Demos
@@ -238,7 +238,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 13. Bootstrap & Sourced Entry | v2.0 | 0/2 | Not started | - |
+| 13. Bootstrap & Sourced Entry | v2.0 | 1/2 | In progress | - |
 | 14. Setup Tab & Bundled Demos | v2.0 | 0/TBD | Not started | - |
 | 15. Mutation Safety & Hider Registry | v2.0 | 0/TBD | Not started | - |
 | 16. MVP Core Loop (Sphere) | v2.0 | 0/TBD | Not started | - |

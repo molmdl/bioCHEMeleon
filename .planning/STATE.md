@@ -10,24 +10,24 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 13 of 23 (Bootstrap & Sourced Entry) — first v2 phase
-Plan: — (not yet planned)
-Status: Ready to plan Phase 13
-Last activity: 2026-08-22 — v2.0 roadmap revised: Phase 17 split into 17.1 (rep setup + simple generators) / 17.2 (cartoon generators) by complexity tier; Phase 23 (documentation — multi-viewer READMEs) added; 3 DOC requirements added (54 total). 12 phases (13-23), 54 requirements mapped (100% coverage).
+Plan: 1 of 2 in current phase (13-01 complete)
+Status: In progress
+Last activity: 2026-08-28 — Completed 13-01-PLAN.md (pure-layer tcl + tcltest harness)
 
-Progress: ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ 0% v2.0 (0 of ~12 phases)
+Progress: █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ~4% v2.0 (1 plan of Phase 13's 2; remaining phases TBD)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0 (v2.0); 77 in v1 (archived)
-- Average duration: — (v2.0 not started)
-- Total execution time: —
+- Total plans completed: 1 (v2.0); 77 in v1 (archived)
+- Average duration: 20 min (v2.0, 1 plan)
+- Total execution time: 20 min (v2.0)
 
-**By Phase:** (v2.0 — none started yet)
+**By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 13. Bootstrap & Sourced Entry | 1/2 | 20 min | 20 min |
 
 *Updated after each plan completion*
 
@@ -42,6 +42,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - **v2 de-risking order:** Phase 15 (mutation safety) before Phase 16 (MVP loop) — PDB-rebuild proven before generators build on it. Phase 16 locks the pick contract via GUI human-verify (MEDIUM-confidence research flag). Materials (Phase 18) after reps (Phase 17.2) solid.
 - **Phase 17 split (2026-08-22 revision):** Phase 17 (rep generators) split into 17.1 (rep setup infrastructure + simple generators — Lines/VDW/Licorice, HIDER-06/HIDER-04) and 17.2 (cartoon generators — Cartoon/NewCartoon, HIDER-05) by generator complexity tier. Simple reps are bonded pseudoatom analogues; cartoon reps carry the STRIDE `ss='L'` L-complexity caveat (v1 Phase 11 analogue) and are de-risked separately.
 - **Phase 23 docs (2026-08-22 revision):** Final phase 23 added for documentation — root README (multi-viewer), `vmd/README.md` (VMD tcl install/use), `pymol/README.md` (PyMOL plugin install/use). 3 DOC requirements added (54 total). AGENTS.md VMD/tcl rewrite is a post-workflow task, NOT a roadmap phase.
+- **13-01 pure-layer namespaces (2026-08-28):** `::biochemeleon::setup_state` and `::biochemeleon::registry` (filename parity with v1; NOT `::biochemeleon::setup`). Entry script (13-02) MUST source by these exact names.
+- **13-01 tcltest under headless VMD (2026-08-28):** `tclsh` NOT in WSL (AGENTS.md forbids apt). tcltest runs UNDER headless VMD via `bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e <file>.test -eofexit < /dev/null'`. Result parsed from `BCHM_TEST_RESULT` marker, NOT `$?` (VMD doesn't propagate tcl exit codes). `.test` files are standalone-tclsh-compatible if user later installs tcl.
+- **13-01 DI via tcl command-prefix + {expand} (2026-08-28):** `reconstruct_from_sentinels` uses `[{*}$fetch_hider_ids]` (argument expansion), NOT `[$fetch_hider_ids]` (single-word). Supports both proc names and `apply` lambda lists. Downstream Phase 15 game.tcl MUST use `{*}` when injecting `apply` lambdas.
 
 ### Pending Todos
 
@@ -55,10 +58,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-22 — v2.0 roadmap revision
-Stopped at: ROADMAP.md, REQUIREMENTS.md, STATE.md revised for v2.0. Phase 17 split into 17.1/17.2, Phase 23 (docs) added, 54 requirements mapped to 12 phases (13-23).
+Last session: 2026-08-28 — Phase 13 Plan 01 complete
+Stopped at: Completed 13-01-PLAN.md (pure-layer tcl + tcltest harness). 17 tcltest cases pass under headless VMD (Failed=0); grep gate clean.
 Resume file: None
-Next: `/gsd-plan-phase 13` (Bootstrap & Sourced Entry)
+Next: 13-02-PLAN.md (entry script + headless smoke + GUI human-verify checkpoint)
 
 ## v1 Milestone Reference (archived)
 
@@ -68,4 +71,4 @@ Next: `/gsd-plan-phase 13` (Bootstrap & Sourced Entry)
 - **Known v1 tech debt considered for v2:** Phase 9 SSL fallback (check_hostname=False); Phase 11 SS-inheritance (cosmetic). v1.1 quick-008 (random total distribution) baked into v2 from the start (SETUP-06).
 
 ---
-*Updated: 2026-08-22 after v2.0 roadmap creation*
+*Updated: 2026-08-28 after 13-01-PLAN.md completion*
