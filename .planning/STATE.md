@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 ## Current Position
 
 Phase: 13 of 23 (Bootstrap & Sourced Entry) — first v2 phase
-Plan: 1 of 2 in current phase (13-01 complete)
-Status: In progress
-Last activity: 2026-08-28 — Completed 13-01-PLAN.md (pure-layer tcl + tcltest harness)
+Plan: 2 of 2 in current phase (13-02 in progress: Tasks 1-2 done, PAUSED at Task 3 GUI checkpoint)
+Status: In progress — PAUSED at checkpoint:human-verify (Task 3 of 13-02)
+Last activity: 2026-08-28 — 13-02 Tasks 1-2 committed (entry script + headless smoke BCHM_SMOKE_RESULT PASS=1); awaiting GUI human-verify
 
-Progress: █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ~4% v2.0 (1 plan of Phase 13's 2; remaining phases TBD)
+Progress: █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ~5% v2.0 (13-02 code done; Task 3 GUI checkpoint pending)
 
 ## Performance Metrics
 
@@ -58,10 +58,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-28 — Phase 13 Plan 01 complete
-Stopped at: Completed 13-01-PLAN.md (pure-layer tcl + tcltest harness). 17 tcltest cases pass under headless VMD (Failed=0); grep gate clean.
+Last session: 2026-08-28 — Phase 13 Plan 02, Tasks 1-2 complete (PAUSED at Task 3 GUI checkpoint)
+Stopped at: Task 3 (checkpoint:human-verify) of 13-02-PLAN.md — GUI verify in a real VMD session. Tasks 1 (entry script: 963e201) + 2 (headless smoke BCHM_SMOKE_RESULT PASS=1: 8bca26b) committed. STATE.md updated but NOT committed (continuation agent commits STATE + SUMMARY after checkpoint approval).
 Resume file: None
-Next: 13-02-PLAN.md (entry script + headless smoke + GUI human-verify checkpoint)
+Next: After checkpoint approval -> continuation agent creates 13-02-SUMMARY.md + final docs(13-02) commit; if checkpoint FAILS, revise entry script (Task 1) and re-run headless smoke.
 
 ## v1 Milestone Reference (archived)
 
