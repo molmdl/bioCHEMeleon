@@ -16,7 +16,7 @@ namespace eval ::biochemeleon::registry {
     variable _records [dict create]
 
     # Export the public symbols (documents the public contract).
-    namespace export reconstruct_from_sentinels is_hider mark_found
+    namespace export reconstruct_from_sentinels is_hider mark_found count_hiders reset
 }
 
 # Dependency-injected sentinel reconstruction (port of v1 registry.py:420-443).
@@ -53,5 +53,22 @@ proc ::biochemeleon::registry::mark_found {idx} {
         error "hider $idx not registered"
     }
     dict set _records $idx status $::biochemeleon::registry::HIDER_STATUS_FOUND
+    return
+}
+
+# Phase 15: number of registered hiders (dict size of _records).
+# The capstone smoke asserts count_hiders == N after start_game (SC3)
+# and == 0 after cleanup (proves no over/under-population).
+proc ::biochemeleon::registry::count_hiders {} {
+    variable _records
+    return [dict size $_records]
+}
+
+# Phase 15: clear the registry (game::cleanup calls this after restore so
+# post-cleanup is_hider/count_hiders return 0 — v1 parity). Overwrites
+# _records with an empty dict.
+proc ::biochemeleon::registry::reset {} {
+    variable _records
+    set _records [dict create]
     return
 }
