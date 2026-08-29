@@ -11,9 +11,9 @@ Requirements for the VMD 1.9.3 tcl port. Each maps to exactly one roadmap phase 
 
 ### Bootstrap & Extension Entry
 
-- [ ] **ENTRY-01**: Sourced tcl script + `biochemeleon` command opens a modeless Tk `toplevel` with a `ttk::notebook` (Setup + Game tabs); the main dialog does NOT use `grab set` so the 3D viewer stays interactive for click-to-find
-- [ ] **ENTRY-02**: Extension registers an "bioCHEMeleon" item in the VMD Extensions menu via `vmd_install_extension`; a re-source guard (`info exists`) prevents state reset / duplicate dialogs on re-sourcing
-- [ ] **ENTRY-03**: All v2 code lives under `vmd/` (multi-viewer layout mirroring `pymol/`); zero external dependencies — only what VMD 1.9.3 ships (tcl/Tk 8.5 + ttk)
+- [x] **ENTRY-01**: Sourced tcl script + `biochemeleon` command opens a modeless Tk `toplevel` with a `ttk::notebook` (Setup + Game tabs); the main dialog does NOT use `grab set` so the 3D viewer stays interactive for click-to-find
+- [x] **ENTRY-02**: Extension registers an "bioCHEMeleon" item in the VMD Extensions menu via `vmd_install_extension`; a re-source guard (`info exists`) prevents state reset / duplicate dialogs on re-sourcing
+- [x] **ENTRY-03**: All v2 code lives under `vmd/` (multi-viewer layout mirroring `pymol/`); zero external dependencies — only what VMD 1.9.3 ships (tcl/Tk 8.5 + ttk)
 
 ### Setup Tab — Configuration
 
@@ -76,8 +76,8 @@ Requirements for the VMD 1.9.3 tcl port. Each maps to exactly one roadmap phase 
 
 ### Testing & Infrastructure
 
-- [ ] **TEST-01**: Headless testing via `vmd -dispdev text -e <script> -eofexit` from WSL (closes the WSL/Windows runtime gap for tcl scripts — the v2 equivalent of v1's `run-conda-pymol.bat -cq`)
-- [ ] **TEST-02**: Pure-layer architecture — `lib/setup_state.tcl` + `lib/registry.tcl` are stdlib-only tcl (NO `mol`/`atomselect`/`tk`), unit-testable in WSL via `tclsh` + `tcltest` (no VMD, no Python); strict dependency direction (pure ← interop ← controller)
+- [x] **TEST-01**: Headless testing via `vmd -dispdev text -e <script> -eofexit` from WSL (closes the WSL/Windows runtime gap for tcl scripts — the v2 equivalent of v1's `run-conda-pymol.bat -cq`)
+- [x] **TEST-02**: Pure-layer architecture — `lib/setup_state.tcl` + `lib/registry.tcl` are stdlib-only tcl (NO `mol`/`atomselect`/`tk`), unit-testable in WSL via `tclsh` + `tcltest` (no VMD, no Python); strict dependency direction (pure ← interop ← controller)
 - [ ] **TEST-03**: Seek user approval for any additional VMD tcl libs (e.g. tooltip.tcl — staged in `vmd-ref/` as reference); if approved, vendor under `vmd/3rd_party_lib/` (git-ignored) with the library's license noted — preferred: write a ~30-line pure-Tk helper (zero-dep)
 
 ### Accessibility & Clarity
@@ -105,11 +105,11 @@ Which phases cover which requirements. v2.0 phases are numbered 13-23 (continuin
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENTRY-01 | Phase 13 | Pending |
-| ENTRY-02 | Phase 13 | Pending |
-| ENTRY-03 | Phase 13 | Pending |
-| TEST-01 | Phase 13 | Pending |
-| TEST-02 | Phase 13 | Pending |
+| ENTRY-01 | Phase 13 | Complete |
+| ENTRY-02 | Phase 13 | Complete |
+| ENTRY-03 | Phase 13 | Complete |
+| TEST-01 | Phase 13 | Complete |
+| TEST-02 | Phase 13 | Complete |
 | SETUP-01 | Phase 14 | Pending |
 | SETUP-02 | Phase 14 | Pending |
 | SETUP-03 | Phase 14 | Pending |
