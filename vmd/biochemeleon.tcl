@@ -70,38 +70,26 @@ package provide biochemeleon $::biochemeleon::version
 set _dir [file dirname [info script]]
 source [file join $_dir lib setup_state.tcl]
 source [file join $_dir lib registry.tcl]
+# Phase 14: source the mol bridge (demos.tcl, Plan 02) + the GUI layer
+# (gui/dialog.tcl, Plan 03). dialog.tcl in turn sources gui/setup_tab.tcl.
+# The GUI needs the mol bridge for every molecule operation (load_demo,
+# save/load_setup, atom_count, list_loaded_molecules, get_active_reps).
+# Order matters: setup_state (pure) -> registry (pure) -> demos (mol bridge,
+# sources setup_state) -> dialog (GUI, sources setup_tab which uses both).
+source [file join $_dir lib demos.tcl]
+source [file join $_dir gui dialog.tcl]
 unset _dir
 
 # ---------------------------------------------------------------------------
-# (5) open_dialog -- the dialog proc (GUI; called by both the console command
-# and the _tk_cb callback). Modeless ttk::notebook with Setup + Game tabs.
-# Singleton re-show via `winfo exists` + `wm deiconify` (the 4-plugin pattern:
-# viewmaster.tcl:66-69, autoionizegui.tcl:46-49, ramaplot.tcl:125-128,
-# mergestructs.tcl:44-47). NO `grab set` on the main dialog (ENTRY-01 hard
-# constraint -- grab blocks the 3D viewer for click-to-find). `grab set` IS
-# allowed on brief transient children (none in Phase 13). Phase 14/16
-# populate the tabs; Phase 13 ships empty placeholders.
+# (5) open_dialog -- EXTRACTED to gui/dialog.tcl (Plan 14-03). The entry now
+# sources gui/dialog.tcl (step 4 above), which defines ::biochemeleon::open_dialog
+# (modeless toplevel + ttk::notebook; sources gui/setup_tab.tcl; calls
+# setup_tab::build to populate the Setup tab). Proc resolution is at CALL-TIME
+# in tcl, so the public procs below (biochemeleon / biochemeleon_tk_cb) call
+# ::biochemeleon::open_dialog which is now defined in dialog.tcl. The entry
+# stays a thin bootstrap: re-source guard + namespace + package provide +
+# source lib/*.tcl + source gui/dialog.tcl + public procs + menu registration.
 # ---------------------------------------------------------------------------
-proc ::biochemeleon::open_dialog {} {
-    variable w
-    if {[winfo exists .biochemeleon]} { wm deiconify $w; return }   ;# singleton re-show
-    set w [toplevel .biochemeleon]
-    wm title $w "bioCHEMeleon"
-
-    set nb [ttk::notebook $w.nb]
-    ttk::frame $nb.setup
-    ttk::frame $nb.game
-    $nb add $nb.setup -text "Setup"
-    $nb add $nb.game  -text "Game"
-
-    # Placeholder content (Phase 13 ships empty tabs; Phase 14/16 populate them).
-    ttk::label $nb.setup.placeholder -text "Setup tab (Phase 14)"
-    ttk::label $nb.game.placeholder  -text "Game tab (Phase 16)"
-    pack $nb.setup.placeholder -padx 20 -pady 20
-    pack $nb.game.placeholder  -padx 20 -pady 20
-
-    pack $nb -fill both -expand yes
-}
 
 # ---------------------------------------------------------------------------
 # (6) Global biochemeleon proc -- the user-runnable console command (user
