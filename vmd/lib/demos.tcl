@@ -15,6 +15,15 @@ namespace eval ::biochemeleon::demos {
     # GAME_REPS / DEMO_MANIFEST / SETUP_FORMAT / DEFAULTS live in
     # ::biochemeleon::setup_state (the pure layer). Procs access them via the
     # fully-qualified `variable ::biochemeleon::setup_state::*` form.
+    #
+    # script_dir: this file's directory, captured at SOURCE TIME. [info script]
+    # is DYNAMIC -- it returns the CALL-TIME sourcing context, NOT the
+    # definition-time file, so proc bodies (e.g. load_demo) CANNOT call
+    # [info script] directly (it returns "" once source completes, especially
+    # under `vmd -e`). Capturing it here (namespace eval runs during source,
+    # so [info script] = this file's path) freezes the value for proc-body use.
+    # Standard tcl "where am I defined" pattern (cf. the entry's top-level _dir).
+    variable script_dir [file dirname [info script]]
     namespace export \
         to_vmd_path list_loaded_molecules load_demo get_active_reps \
         fetch_pdb save_setup load_setup atom_count
@@ -48,6 +57,7 @@ proc ::biochemeleon::demos::list_loaded_molecules {} {
 # script-relative (C:/) so no /mnt/c conversion is needed.
 proc ::biochemeleon::demos::load_demo {demo_id} {
     variable ::biochemeleon::setup_state::DEMO_MANIFEST
+    variable script_dir  ;# frozen at source time (proc body can't use [info script])
     if {![dict exists $DEMO_MANIFEST $demo_id]} {
         return -code error "unknown demo: $demo_id"
     }
@@ -60,7 +70,9 @@ proc ::biochemeleon::demos::load_demo {demo_id} {
     }
     set cache_name [dict get $meta cache_name]
     # demos.tcl is at <root>/vmd/lib/demos.tcl; data at <root>/vmd/data/demos/.
-    set path [file normalize [file join [file dirname [info script]] .. data demos $cache_name]]
+    # Use the source-time-frozen script_dir (NOT [info script], which is empty
+    # at call time under `vmd -e`).
+    set path [file normalize [file join $script_dir .. data demos $cache_name]]
     set path [::biochemeleon::demos::to_vmd_path $path]  ;# defensive (no-op for C:/)
     if {![file exists $path]} { return -code error "demo file not found: $path" }
     if {[catch {mol new $path type pdb} molid]} {
