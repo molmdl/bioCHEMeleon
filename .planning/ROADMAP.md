@@ -80,7 +80,7 @@ Plans:
 **Goal**: Hiders can be generated into a molecule and cleaned up, leaving the original intact — the highest-risk VMD-specific unknown (no in-place insertion) is de-risked BEFORE any generator is built on it.
 **Depends on**: Phase 13 (pure layer), Phase 14 (mol new / molinfo proven)
 **Requirements**: HIDER-01, HIDER-02
-**Plans**: TBD
+**Plans:** 5 plans
 
 **Success Criteria** (what must be TRUE):
 1. Given a loaded molecule, the backup → rebuild combined PDB → `mol new` → tag sentinels (atomselect) sequence produces a single molecule containing original + hider atoms, with hiders tagged `resname=GAM`/`beta=-999`/`segid=GAME` (verified via `atomselect` count and the canonical selector `resname GAM and beta < 0`).
@@ -89,7 +89,11 @@ Plans:
 4. Viewpoint and rep list are saved before mutation and restored on the new molid after reload (viewmaster-style save/restore round-trip).
 
 Plans:
-- [ ] 15-01: TBD
+- [ ] 15-01-PLAN.md — Pure-layer registry real logic (count_hiders + reset) via TDD + tcltest under headless VMD [SC3]
+- [ ] 15-02-PLAN.md — mutation.tcl mol bridge: PDB-rebuild engine (5 procs) + headless smoke [SC1, SC3-DI]
+- [ ] 15-03-PLAN.md — backup.tcl mol bridge: viewpoint + rep save/restore on a NEW molid (snapshot/apply/restore) + headless smoke [SC2, SC4]
+- [ ] 15-04-PLAN.md — game.tcl composition root (start/cleanup/restart) + wire entry source order + headless smoke [SC2, SC3, SC4 integration]
+- [ ] 15-05-PLAN.md — Phase-15 capstone smoke: full backup→mutate→reconstruct→cleanup→restore pipeline proving SC1-SC4 end-to-end
 
 ### Phase 16: MVP Core Loop (Sphere) ⚠️ PICK MECHANISM HUMAN-VERIFY
 
@@ -243,7 +247,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 13. Bootstrap & Sourced Entry | v2.0 | 2/2 | ✓ Complete | 2026-08-29 |
 | 14. Setup Tab & Bundled Demos | v2.0 | 4/4 | ✓ Complete | 2026-08-29 |
-| 15. Mutation Safety & Hider Registry | v2.0 | 0/TBD | Not started | - |
+| 15. Mutation Safety & Hider Registry | v2.0 | 0/5 | Not started | - |
 | 16. MVP Core Loop (Sphere) | v2.0 | 0/TBD | Not started | - |
 | 17.1. Rep Setup Infrastructure & Simple Rep Generators | v2.0 | 0/TBD | Not started | - |
 | 17.2. Cartoon/NewCartoon Generators | v2.0 | 0/TBD | Not started | - |
