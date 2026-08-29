@@ -243,8 +243,20 @@ proc ::biochemeleon::setup_tab::build_actions {parent} {
 # Bool coercion via `expr {!!$v}`; hider_count via `expr {int($v)}`.
 # ---------------------------------------------------------------------------
 proc ::biochemeleon::setup_tab::collect_state {} {
-    variable mode selected_mol pdb_code demo_id hider_count lock_scene
-    variable rep_sel rep_cnt difficulty_easy lock_source
+    # Tcl 8.5 `variable a b` is a name-VALUE pair (sets a=b), NOT two links.
+    # `variable rep_sel rep_cnt` would do a scalar `set rep_sel "rep_cnt"` --
+    # which fails once rep_sel is an array (checkbuttons init it as one).
+    # So each namespace var gets its own `variable` (link-only, no value).
+    variable mode
+    variable selected_mol
+    variable pdb_code
+    variable demo_id
+    variable hider_count
+    variable lock_scene
+    variable rep_sel
+    variable rep_cnt
+    variable difficulty_easy
+    variable lock_source
     set per_rep [dict create]
     foreach rep $::biochemeleon::setup_state::GAME_REPS {
         if {[info exists rep_sel($rep)] && $rep_sel($rep)} {
@@ -278,8 +290,18 @@ proc ::biochemeleon::setup_tab::collect_state {} {
 # ---------------------------------------------------------------------------
 proc ::biochemeleon::setup_tab::apply_state {state} {
     variable _loading
-    variable mode selected_mol pdb_code demo_id hider_count lock_scene
-    variable rep_sel rep_cnt difficulty_easy lock_source
+    # Tcl 8.5 `variable a b` is a name-VALUE pair (sets a=b), NOT two links
+    # (see collect_state). One `variable` per name (link-only, no value).
+    variable mode
+    variable selected_mol
+    variable pdb_code
+    variable demo_id
+    variable hider_count
+    variable lock_scene
+    variable rep_sel
+    variable rep_cnt
+    variable difficulty_easy
+    variable lock_source
     set _loading 1
     set code [catch {
         set mode            [_dget $state target_mode "loaded"]
