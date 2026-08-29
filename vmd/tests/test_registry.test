@@ -44,6 +44,34 @@ test mark_found_unregistered_errors {} -body {
     set err
 } -result {hider 999 not registered}
 
+# ---- Phase 15 additions: count_hiders + reset + bound-arg DI ----
+
+test count_hiders_after_reconstruct {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 10 15} }}]
+    ::biochemeleon::registry::count_hiders
+} -result 3
+
+test count_hiders_empty {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return [list] }}]
+    ::biochemeleon::registry::count_hiders
+} -result 0
+
+test reset_clears_records {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {1 2} }}]
+    ::biochemeleon::registry::reset
+    list [::biochemeleon::registry::count_hiders] [::biochemeleon::registry::is_hider 1]
+} -result {0 0}
+
+# Mirrors game.tcl's molid-bound apply-lambda injection shape (bound arg, no atomselect).
+# Proves [{*}$fetch_hider_ids] expands the 3-element command prefix (apply {lambda} <arg>).
+test reconstruct_with_bound_arg_lambda {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels \
+        [list apply {{fake_molid} { return {7 8} }} "dummy_molid"]
+    list [::biochemeleon::registry::is_hider 7] \
+         [::biochemeleon::registry::is_hider 8] \
+         [::biochemeleon::registry::count_hiders]
+} -result {1 1 2}
+
 # CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
 # Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
 # ($? is always 0 from VMD), so the harness MUST parse this marker line.
