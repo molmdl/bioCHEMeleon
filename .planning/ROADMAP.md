@@ -70,10 +70,10 @@ Plans:
 4. The pure setup-state model is unit-tested via `tcltest` in WSL (DEFAULTS, hider-count cap, randomize_state, validate_state, GAME_REPS, DEMO_MANIFEST).
 
 Plans:
-- [ ] 14-01-PLAN.md — Pure-layer setup-state logic (validate_state full + randomize_state + randomize_per_rep quick-008) via TDD [SETUP-02, SETUP-04, SETUP-06, half SETUP-05]
-- [ ] 14-02-PLAN.md — Mol bridge demos.tcl (load_demo, get_active_reps, save/load_setup, fetch_pdb stub) + headless smoke [DEMO-01, half SETUP-01, BTN-03/04 backend]
-- [ ] 14-03-PLAN.md — GUI structure: extract open_dialog to dialog.tcl + build setup_tab.tcl form (3-mode selector, dropdown, spinbox, per-rep rows, 4 buttons) + collect_state/apply_state [SETUP-01/03/05, BTN-01/02/03/04 UI]
-- [ ] 14-04-PLAN.md — Wire GUI callbacks (refresh_mol_menu trace, select_demo, do_reset/randomize/save/load, WM_DELETE handler) + GUI human-verify checkpoint [SETUP-01..06, BTN-01..04, DEMO-01]
+- [x] 14-01-PLAN.md — Pure-layer setup-state logic (validate_state full + randomize_state + randomize_per_rep quick-008) via TDD [SETUP-02, SETUP-04, SETUP-06, half SETUP-05] — completed 2026-08-29
+- [x] 14-02-PLAN.md — Mol bridge demos.tcl (load_demo, get_active_reps, save/load_setup, fetch_pdb stub) + headless smoke [DEMO-01, half SETUP-01, BTN-03/04 backend] — completed 2026-08-29
+- [x] 14-03-PLAN.md — GUI structure: extract open_dialog to dialog.tcl + build setup_tab.tcl form (3-mode selector, dropdown, spinbox, per-rep rows, 4 buttons) + collect_state/apply_state [SETUP-01/03/05, BTN-01/02/03/04 UI] — completed 2026-08-29
+- [x] 14-04-PLAN.md — Wire GUI callbacks (refresh_mol_menu trace, select_demo, do_reset/randomize/save/load, WM_DELETE handler) + GUI human-verify checkpoint [SETUP-01..06, BTN-01..04, DEMO-01] — completed 2026-08-29 (checkpoint approved)
 
 ### Phase 15: Mutation Safety & Hider Registry ⚠️ HIGHEST RISK
 
@@ -242,7 +242,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 13. Bootstrap & Sourced Entry | v2.0 | 2/2 | ✓ Complete | 2026-08-29 |
-| 14. Setup Tab & Bundled Demos | v2.0 | 0/4 | Not started | - |
+| 14. Setup Tab & Bundled Demos | v2.0 | 4/4 | ✓ Complete | 2026-08-29 |
 | 15. Mutation Safety & Hider Registry | v2.0 | 0/TBD | Not started | - |
 | 16. MVP Core Loop (Sphere) | v2.0 | 0/TBD | Not started | - |
 | 17.1. Rep Setup Infrastructure & Simple Rep Generators | v2.0 | 0/TBD | Not started | - |
