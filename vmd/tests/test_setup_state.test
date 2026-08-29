@@ -58,9 +58,222 @@ test demo_manifest_1znf_bundled {} -body {
     dict get $::biochemeleon::setup_state::DEMO_MANIFEST 1znf source
 } -result {bundled}
 
-test validate_state_stub_returns_defaults {} -body {
+# Renamed for clarity (full impl still returns DEFAULTS for an empty dict,
+# which still has the `format` key -> assertion unchanged).
+test validate_state_empty_dict_returns_defaults_with_format {} -body {
     set result [::biochemeleon::setup_state::validate_state [dict create]]
     dict exists $result format
+} -result 1
+
+# ---------------------------------------------------------------------------
+# Phase 14: validate_state (full impl) — ~13 cases
+# Deterministic clamp (NO randomness). Pitfall 4 does NOT apply here.
+# ---------------------------------------------------------------------------
+
+test validate_state_non_dict_returns_defaults {} -body {
+    set result [::biochemeleon::setup_state::validate_state "foo"]
+    expr {$result eq $::biochemeleon::setup_state::DEFAULTS}
+} -result 1
+
+test validate_state_fills_missing_keys {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create demo_id 5e54]]
+    list [llength [dict keys $result]] [dict get $result demo_id]
+} -result {11 5e54}
+
+test validate_state_clamps_hider_count_to_cap {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create hider_count 999] 212]
+    dict get $result hider_count
+} -result 4
+
+test validate_state_clamps_hider_count_min_1 {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create hider_count 0]]
+    dict get $result hider_count
+} -result 1
+
+test validate_state_clamps_hider_count_default_cap_50_no_atom_count {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create hider_count 999]]
+    dict get $result hider_count
+} -result 50
+
+test validate_state_clamps_per_rep_sum_drop_overflow {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create hider_count 8 per_rep {VDW 5 Cartoon 5 Lines 5}]]
+    dict get $result per_rep
+} -result {VDW 5}
+
+test validate_state_drops_invalid_per_rep_key {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create per_rep {Surface 5 VDW 2}]]
+    dict get $result per_rep
+} -result {VDW 2}
+
+test validate_state_drops_zero_negative_counts {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create per_rep {VDW 0 Cartoon -3 Lines 4}]]
+    dict get $result per_rep
+} -result {Lines 4}
+
+test validate_state_invalid_target_mode_falls_to_loaded {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create target_mode "foo"]]
+    dict get $result target_mode
+} -result {loaded}
+
+test validate_state_invalid_demo_id_falls_to_1znf {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create demo_id "xxxx"]]
+    dict get $result demo_id
+} -result {1znf}
+
+test validate_state_lowercase_pdb_code {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create pdb_code "1UBQ"]]
+    dict get $result pdb_code
+} -result {1ubq}
+
+test validate_state_does_not_mutate_input {} -body {
+    set input [dict create hider_count 5 per_rep {VDW 2 Cartoon 3}]
+    set snapshot $input
+    set r [::biochemeleon::setup_state::validate_state $input]
+    expr {$input eq $snapshot}
+} -result 1
+
+test validate_state_pdb_pool_filters_and_dedupes {} -body {
+    set result [::biochemeleon::setup_state::validate_state [dict create pdb_pool {1ubq 1UBQ 12345 1ubq}]]
+    dict get $result pdb_pool
+} -result {1ubq}
+
+# ---------------------------------------------------------------------------
+# Phase 14: randomize_per_rep (quick-008) — ~8 cases
+# Pitfall 4: tcl's PRNG is GLOBAL per-interpreter; state persists across
+# tcltest cases. EVERY test below passes an EXPLICIT seed (the proc reseeds
+# internally via srand($seed)), so no test relies on residual PRNG state.
+# ---------------------------------------------------------------------------
+
+test randomize_per_rep_zero_count_empty {} -body {
+    dict size [::biochemeleon::setup_state::randomize_per_rep 0 $::biochemeleon::setup_state::GAME_REPS 5]
+} -result 0
+
+test randomize_per_rep_negative_count_empty {} -body {
+    dict size [::biochemeleon::setup_state::randomize_per_rep -5 $::biochemeleon::setup_state::GAME_REPS 5]
+} -result 0
+
+test randomize_per_rep_empty_game_reps_empty {} -body {
+    dict size [::biochemeleon::setup_state::randomize_per_rep 5 [list] 5]
+} -result 0
+
+test randomize_per_rep_seed_determinism {} -body {
+    set r1 [::biochemeleon::setup_state::randomize_per_rep 10 $::biochemeleon::setup_state::GAME_REPS 42]
+    set r2 [::biochemeleon::setup_state::randomize_per_rep 10 $::biochemeleon::setup_state::GAME_REPS 42]
+    expr {$r1 eq $r2}
+} -result 1
+
+test randomize_per_rep_seed_difference {} -body {
+    set r1 [::biochemeleon::setup_state::randomize_per_rep 10 $::biochemeleon::setup_state::GAME_REPS 1]
+    set r2 [::biochemeleon::setup_state::randomize_per_rep 10 $::biochemeleon::setup_state::GAME_REPS 2]
+    expr {$r1 ne $r2}
+} -result 1
+
+test randomize_per_rep_non_empty_when_count_positive {} -body {
+    set ok 1
+    for {set s 0} {$s < 20} {incr s} {
+        set r [::biochemeleon::setup_state::randomize_per_rep 1 $::biochemeleon::setup_state::GAME_REPS $s]
+        if {[dict size $r] < 1} { set ok 0; break }
+    }
+    set ok
+} -result 1
+
+test randomize_per_rep_all_counts_positive_and_sum_le_total {} -body {
+    set ok 1
+    for {set s 0} {$s < 30} {incr s} {
+        set r [::biochemeleon::setup_state::randomize_per_rep 15 $::biochemeleon::setup_state::GAME_REPS $s]
+        set sum 0
+        dict for {rep cnt} $r {
+            if {$cnt <= 0} { set ok 0; break }
+            incr sum $cnt
+        }
+        if {$sum > 15} { set ok 0; break }
+    }
+    set ok
+} -result 1
+
+test randomize_per_rep_count_one_single_rep {} -body {
+    set r [::biochemeleon::setup_state::randomize_per_rep 1 $::biochemeleon::setup_state::GAME_REPS 7]
+    set ks [dict keys $r]
+    set ok [expr {[llength $ks] == 1}]
+    if {$ok} {
+        set ok [expr {[dict get $r [lindex $ks 0]] == 1}]
+    }
+    set ok
+} -result 1
+
+# ---------------------------------------------------------------------------
+# Phase 14: randomize_state — ~8 cases
+# Pitfall 4 (global PRNG) applies. EVERY call passes an explicit seed (arg 1),
+# which reseeds the global PRNG at the top of randomize_state. No test relies
+# on residual PRNG state from a prior case.
+# ---------------------------------------------------------------------------
+
+test randomize_state_seed_determinism {} -body {
+    set r1 [::biochemeleon::setup_state::randomize_state 42]
+    set r2 [::biochemeleon::setup_state::randomize_state 42]
+    expr {$r1 eq $r2}
+} -result 1
+
+test randomize_state_seed_difference {} -body {
+    set r1 [::biochemeleon::setup_state::randomize_state 1]
+    set r2 [::biochemeleon::setup_state::randomize_state 2]
+    expr {$r1 ne $r2}
+} -result 1
+
+test randomize_state_has_all_defaults_keys {} -body {
+    set r [::biochemeleon::setup_state::randomize_state 42]
+    set expected {format target_mode selected_object pdb_code demo_id hider_count lock_scene per_rep difficulty_easy lock_source pdb_pool}
+    set ok [expr {[llength [dict keys $r]] == [llength $expected]}]
+    foreach k $expected {
+        if {![dict exists $r $k]} { set ok 0; break }
+    }
+    set ok
+} -result 1
+
+test randomize_state_hider_count_in_range {} -body {
+    set ok 1
+    for {set s 0} {$s < 10} {incr s} {
+        set r [::biochemeleon::setup_state::randomize_state $s 212]
+        set hc [dict get $r hider_count]
+        if {$hc < 1 || $hc > 4} { set ok 0; break }
+    }
+    set ok
+} -result 1
+
+test randomize_state_lock_source_preserves_target {} -body {
+    set locked [dict create target_mode demo selected_object "" pdb_code "" demo_id 5e54]
+    set r [::biochemeleon::setup_state::randomize_state 99 "" 1 $locked]
+    set ok [expr {[dict get $r target_mode] eq "demo"}]
+    if {$ok} { set ok [expr {[dict get $r demo_id] eq "5e54"}] }
+    set ok
+} -result 1
+
+test randomize_state_lock_source_no_locked_state_falls_back {} -body {
+    set r [::biochemeleon::setup_state::randomize_state 99 "" 1 ""]
+    set ok [expr {[dict get $r lock_source] == 1}]
+    if {$ok} {
+        set m [dict get $r target_mode]
+        set ok [expr {[lsearch -exact {loaded fetch demo} $m] >= 0}]
+    }
+    set ok
+} -result 1
+
+test randomize_state_empty_pdb_pool_fetch_rerolls_to_demo {} -body {
+    set ok 1
+    for {set s 0} {$s < 20} {incr s} {
+        set r [::biochemeleon::setup_state::randomize_state $s "" 0 "" ""]
+        if {[dict get $r target_mode] eq "fetch"} { set ok 0; break }
+    }
+    set ok
+} -result 1
+
+test randomize_state_per_rep_non_empty_when_hider_count_positive {} -body {
+    set ok 1
+    for {set s 0} {$s < 10} {incr s} {
+        set r [::biochemeleon::setup_state::randomize_state $s]
+        if {[dict size [dict get $r per_rep]] < 1} { set ok 0; break }
+    }
+    set ok
 } -result 1
 
 # CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
