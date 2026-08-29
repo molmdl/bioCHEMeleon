@@ -9,25 +9,25 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 
 ## Current Position
 
-Phase: 13 of 23 (Bootstrap & Sourced Entry) — first v2 phase
-Plan: 2 of 2 in current phase (13-02 in progress: Tasks 1-2 done, PAUSED at Task 3 GUI checkpoint)
-Status: In progress — PAUSED at checkpoint:human-verify (Task 3 of 13-02)
-Last activity: 2026-08-28 — 13-02 Tasks 1-2 committed (entry script + headless smoke BCHM_SMOKE_RESULT PASS=1); awaiting GUI human-verify
+Phase: 13 of 23 (Bootstrap & Sourced Entry) — COMPLETE
+Plan: 2 of 2 in current phase (13-02 complete; checkpoint approved)
+Status: Phase 13 complete, ready for verification/transition
+Last activity: 2026-08-29 — Phase 13 complete (pure layer + tcltest + entry script + headless smoke + GUI checkpoint approved). One bug fixed during checkpoint (tk_version scoping, 57bcc53).
 
-Progress: █░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ~5% v2.0 (13-02 code done; Task 3 GUI checkpoint pending)
+Progress: ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ~8% v2.0 (1 of ~12 phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (v2.0); 77 in v1 (archived)
-- Average duration: 20 min (v2.0, 1 plan)
-- Total execution time: 20 min (v2.0)
+- Total plans completed: 2 (v2.0); 77 in v1 (archived)
+- Average duration: 25 min (v2.0, 2 plans)
+- Total execution time: 50 min (v2.0)
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 13. Bootstrap & Sourced Entry | 1/2 | 20 min | 20 min |
+| 13. Bootstrap & Sourced Entry | 2/2 | 50 min | 25 min |
 
 *Updated after each plan completion*
 
@@ -45,6 +45,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - **13-01 pure-layer namespaces (2026-08-28):** `::biochemeleon::setup_state` and `::biochemeleon::registry` (filename parity with v1; NOT `::biochemeleon::setup`). Entry script (13-02) MUST source by these exact names.
 - **13-01 tcltest under headless VMD (2026-08-28):** `tclsh` NOT in WSL (AGENTS.md forbids apt). tcltest runs UNDER headless VMD via `bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e <file>.test -eofexit < /dev/null'`. Result parsed from `BCHM_TEST_RESULT` marker, NOT `$?` (VMD doesn't propagate tcl exit codes). `.test` files are standalone-tclsh-compatible if user later installs tcl.
 - **13-01 DI via tcl command-prefix + {expand} (2026-08-28):** `reconstruct_from_sentinels` uses `[{*}$fetch_hider_ids]` (argument expansion), NOT `[$fetch_hider_ids]` (single-word). Supports both proc names and `apply` lambda lists. Downstream Phase 15 game.tcl MUST use `{*}` when injecting `apply` lambdas.
+- **13-02 GUI checkpoint + tk_version lesson (2026-08-29):** Phase 13 GUI checkpoint APPROVED — ttk::notebook renders correctly in VMD 1.9.3 Tk; modeless dialog keeps viewer interactive (no grab; brief OpenGL pause during window-move is normal VMD behavior, acceptable); re-source guard works (prints warning, prevents duplicate dialog + state reset); menu path Extensions → Visualization → bioCHEMeleon confirmed. One bug found+fixed: `info exists tk_version` inside a proc checks LOCAL scope only → use `::tk_version` (global qualifier). Downstream Phase 14+ GUI procs MUST use `::tk_version`. Headless smoke pattern (`bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/smoke/*.tcl -eofexit < /dev/null'` + `BCHM_SMOKE_RESULT` marker + `[pwd]`-based path resolution) is the established Phase 14+ pattern.
 
 ### Pending Todos
 
@@ -58,10 +59,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-28 — Phase 13 Plan 02, Tasks 1-2 complete (PAUSED at Task 3 GUI checkpoint)
-Stopped at: Task 3 (checkpoint:human-verify) of 13-02-PLAN.md — GUI verify in a real VMD session. Tasks 1 (entry script: 963e201) + 2 (headless smoke BCHM_SMOKE_RESULT PASS=1: 8bca26b) committed. STATE.md updated but NOT committed (continuation agent commits STATE + SUMMARY after checkpoint approval).
+Last session: 2026-08-29 — Phase 13 complete (2/2 plans; 13-02 checkpoint approved)
+Stopped at: Phase 13 complete. 13-02 commits: 963e201 (entry script), 8bca26b (headless smoke), 57bcc53 (tk_version scoping fix during checkpoint). ENTRY-01/02/03 + TEST-01 satisfied.
 Resume file: None
-Next: After checkpoint approval -> continuation agent creates 13-02-SUMMARY.md + final docs(13-02) commit; if checkpoint FAILS, revise entry script (Task 1) and re-run headless smoke.
+Next: `/gsd-execute-phase 13` verification (if any), or `/gsd-discuss-phase 14` (Setup Tab & Bundled Demos) — Phase 13 is the first v2 phase, now complete.
 
 ## v1 Milestone Reference (archived)
 
@@ -71,4 +72,4 @@ Next: After checkpoint approval -> continuation agent creates 13-02-SUMMARY.md +
 - **Known v1 tech debt considered for v2:** Phase 9 SSL fallback (check_hostname=False); Phase 11 SS-inheritance (cosmetic). v1.1 quick-008 (random total distribution) baked into v2 from the start (SETUP-06).
 
 ---
-*Updated: 2026-08-28 after 13-01-PLAN.md completion*
+*Updated: 2026-08-29 after 13-02-PLAN.md completion (Phase 13 complete)*

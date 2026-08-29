@@ -44,7 +44,7 @@ Full phase details, plans, and summaries: [`milestones/v1-ROADMAP.md`](milestone
 **Goal**: The script loads cleanly into VMD and opens a modeless dialog — the stable shell every later phase builds on, with the 3D viewer kept interactive for click-to-find.
 **Depends on**: Nothing (first v2 phase)
 **Requirements**: ENTRY-01, ENTRY-02, ENTRY-03, TEST-01, TEST-02
-**Plans:** 2 plans
+**Plans:** 2 plans (complete)
 
 **Success Criteria** (what must be TRUE):
 1. Sourcing `biochemeleon.tcl` in a VMD session registers an "bioCHEMeleon" item in the Extensions menu (via `vmd_install_extension`) with no errors, and re-sourcing the script does not reset state or duplicate the dialog (re-source guard works).
@@ -54,7 +54,7 @@ Full phase details, plans, and summaries: [`milestones/v1-ROADMAP.md`](milestone
 
 Plans:
 - [x] 13-01-PLAN.md — Pure-layer tcl (lib/setup_state.tcl + lib/registry.tcl) + tcltest harness under headless VMD [TEST-02, half ENTRY-03] — completed 2026-08-28
-- [ ] 13-02-PLAN.md — Entry script (biochemeleon.tcl) + headless smoke + GUI human-verify checkpoint [ENTRY-01, ENTRY-02, half ENTRY-03, TEST-01]
+- [x] 13-02-PLAN.md — Entry script (biochemeleon.tcl) + headless smoke + GUI human-verify checkpoint [ENTRY-01, ENTRY-02, half ENTRY-03, TEST-01] — completed 2026-08-29
 
 ### Phase 14: Setup Tab & Bundled Demos
 
@@ -238,7 +238,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 13. Bootstrap & Sourced Entry | v2.0 | 1/2 | In progress | - |
+| 13. Bootstrap & Sourced Entry | v2.0 | 2/2 | ✓ Complete | 2026-08-29 |
 | 14. Setup Tab & Bundled Demos | v2.0 | 0/TBD | Not started | - |
 | 15. Mutation Safety & Hider Registry | v2.0 | 0/TBD | Not started | - |
 | 16. MVP Core Loop (Sphere) | v2.0 | 0/TBD | Not started | - |
@@ -252,4 +252,4 @@ Plans:
 | 23. Documentation (Multi-viewer READMEs) | v2.0 | 0/TBD | Not started | - |
 
 ---
-*Roadmap updated: 2026-08-22 (revised: Phase 17 split into 17.1/17.2 by generator complexity tier, Phase 23 docs added) for milestone v2.0 (VMD tcl port). v1 archived to `milestones/v1-ROADMAP.md`.*
+*Roadmap updated: 2026-08-29 (Phase 13 complete; revised 2026-08-22: Phase 17 split into 17.1/17.2 by generator complexity tier, Phase 23 docs added) for milestone v2.0 (VMD tcl port). v1 archived to `milestones/v1-ROADMAP.md`.*
