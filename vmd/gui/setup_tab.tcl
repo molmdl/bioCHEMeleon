@@ -4,9 +4,12 @@
 #
 # Builds the full Setup form (4 groups: Target / Hiders / Difficulty / Actions)
 # + state plumbing (collect_state / apply_state with the _loading guard) +
-# switch_page. Callback procs are STUBS (body = `return`) in THIS plan -- Plan 04
-# fills them with full impls (refresh_mol_menu, select_demo, do_save, do_load,
-# on_rep_toggled, etc.) + adds the WM_DELETE_WINDOW handler (trace vdelete).
+# switch_page. Callback procs (Plan 04): full impls -- refresh_mol_menu (trace
+# -> repopulate the loaded-mol menu), select_demo / select_loaded_mol (set
+# target + update cap), on_rep_toggled (enable/disable per-rep spinbox),
+# update_cap / recompute_per_rep_maxes (spinbox -to caps), do_reset /
+# do_randomize / do_save / do_load (action buttons). The WM_DELETE_WINDOW
+# handler (collect_state + trace cleanup + destroy) lives in gui/dialog.tcl.
 #
 # Tcl 8.5.6 constraints (vmd/AGENTS.md): uses foreach+lappend + catch (no 8.6
 # control-flow idioms). Brace all expr. `variable` inside procs for namespace
@@ -18,8 +21,7 @@
 # ttk::radiobuttons + frame-`raise` for the mode selector (QStackedWidget
 # analog). Save/Load uses ::biochemeleon::demos::save_setup/load_setup
 # (key-value format, LOCKED DECISION #1) with the `.bcm` extension -- the
-# do_save/do_load stubs here just `return`; Plan 04 fills them with
-# tk_getSaveFile/tk_getOpenFile + the bridge.
+# do_save/do_load procs use tk_getSaveFile / tk_getOpenFile + the bridge.
 
 namespace eval ::biochemeleon::setup_tab {
     # Live widget-bound state (read by collect_state, set by apply_state).
@@ -83,11 +85,11 @@ proc ::biochemeleon::setup_tab::build {parent} {
         apply_state $::biochemeleon::setup_state::DEFAULTS
     }
 
-    # Register the molecule-menu refresh trace (refresh_mol_menu is a STUB in
-    # this plan; Plan 04 makes it real). vmd_molecule is a VMD global array
+    # Register the molecule-menu refresh trace (refresh_mol_menu repopulates
+    # the loaded-mol menu on mol add/delete). vmd_molecule is a VMD global array
     # (FEATURES.md:40). `global` resolves it; `trace variable` on a not-yet-
-    # existing variable is allowed (creates the trace). Plan 04's
-    # WM_DELETE_WINDOW handler does the matching `trace vdelete`.
+    # existing variable is allowed (creates the trace). The WM_DELETE_WINDOW
+    # handler (gui/dialog.tcl) does the matching trace cleanup on close.
     global vmd_molecule
     trace variable vmd_molecule w ::biochemeleon::setup_tab::refresh_mol_menu
     ::biochemeleon::setup_tab::refresh_mol_menu
@@ -300,8 +302,10 @@ proc ::biochemeleon::setup_tab::apply_state {state} {
                 set rep_cnt($rep) 0
             }
         }
-        # on_rep_toggled re-enables spinboxes for selected reps (guarded by
-        # _loading in Plan 04's real impl; the stub here is a no-op).
+        # on_rep_toggled re-enables spinboxes for selected reps. It runs
+        # OUTSIDE the _loading guard (see the callback) so the spinbox
+        # enable/disable is applied here; the recompute it triggers is itself
+        # guarded (a no-op during this pass).
         foreach rep $::biochemeleon::setup_state::GAME_REPS {
             ::biochemeleon::setup_tab::on_rep_toggled $rep
         }
@@ -323,17 +327,193 @@ proc ::biochemeleon::setup_tab::switch_page {} {
 }
 
 # ---------------------------------------------------------------------------
-# STUB callbacks -- body = `return`. Plan 04 replaces each with a full impl.
-# refresh_mol_menu takes `args` because the trace callback signature is
-# `{name1 name2 op}` (Pitfall 2); the `args` form accepts and ignores them.
+# Callbacks (Plan 04) -- full implementations. refresh_mol_menu takes `args`
+# because the trace callback signature is `{name1 name2 op}` (Pitfall 2); the
+# `args` form accepts and ignores them. update_cap / recompute_per_rep_maxes
+# are guarded by `_loading` (they reconfigure widget -to caps, which is a UI
+# affordance; the authoritative clamp is the pure-layer validate_state on
+# Save/Start). on_rep_toggled deliberately runs OUTSIDE the `_loading` guard so
+# apply_state's per-rep pass enables the spinboxes for checked reps (without
+# that, a loaded/reset state would show checked boxes with disabled spinboxes);
+# the recompute it triggers is itself guarded.
 # ---------------------------------------------------------------------------
-proc ::biochemeleon::setup_tab::refresh_mol_menu {args} { return }
-proc ::biochemeleon::setup_tab::select_demo {demo_id} { return }
-proc ::biochemeleon::setup_tab::select_loaded_mol {molid} { return }
-proc ::biochemeleon::setup_tab::on_rep_toggled {rep} { return }
-proc ::biochemeleon::setup_tab::update_cap {} { return }
-proc ::biochemeleon::setup_tab::recompute_per_rep_maxes {} { return }
-proc ::biochemeleon::setup_tab::do_reset {} { return }
-proc ::biochemeleon::setup_tab::do_randomize {} { return }
-proc ::biochemeleon::setup_tab::do_save {} { return }
-proc ::biochemeleon::setup_tab::do_load {} { return }
+
+# refresh_mol_menu -- repopulate the loaded-molecule menu from [molinfo list].
+# Called by the `trace variable vmd_molecule w` (registered in build) and by
+# the Refresh button. Skips `graphics`-filetype mols (clonerep pattern). Adds a
+# radiobutton per mol whose -command selects it + updates the cap. Adds a
+# disabled "None loaded" entry when no mols are loaded.
+proc ::biochemeleon::setup_tab::refresh_mol_menu {args} {
+    variable w
+    if {![info exists w] || $w eq ""} { return }
+    set menu $w.nb.setup.target.pages.loaded.mol.menu
+    if {![winfo exists $menu]} { return }
+    $menu delete 0 end
+    set any 0
+    foreach id [molinfo list] {
+        if {[catch {molinfo $id get filetype} ft]} { continue }
+        if {$ft eq "graphics"} { continue }
+        set any 1
+        $menu add radiobutton -value $id \
+            -label "$id [molinfo $id get name]" \
+            -variable ::biochemeleon::setup_tab::selected_mol \
+            -command [list ::biochemeleon::setup_tab::select_loaded_mol $id]
+    }
+    if {!$any} {
+        $menu add command -label "None loaded" -state disabled
+    }
+}
+
+# select_demo -- load a bundled demo via the mol bridge, set mode=demo, and
+# update the hider-count cap. On error the bridge returns -code error; show a
+# warning. The parameter `demo_id` shadows the namespace var of the same name,
+# so the ns var is set via its fully-qualified path (Pitfall 7 -- build runtime
+# values with [list], not string interpolation; here the FQ set avoids the
+# shadow so the menubutton -textvariable updates correctly).
+proc ::biochemeleon::setup_tab::select_demo {demo_id} {
+    variable w
+    variable mode
+    variable current_molid
+    set ::biochemeleon::setup_tab::demo_id $demo_id
+    set mode "demo"
+    switch_page
+    if {[catch {::biochemeleon::demos::load_demo $demo_id} molid]} {
+        tk_messageBox -icon warning -parent $w -message "Could not load demo: $molid"
+        return
+    }
+    set current_molid $molid
+    update_cap
+}
+
+# select_loaded_mol -- pick an already-loaded molecule as the target. Set
+# mode=loaded + current_molid + the menubutton textvariable, then update cap.
+proc ::biochemeleon::setup_tab::select_loaded_mol {molid} {
+    variable selected_mol
+    variable current_molid
+    variable mode
+    set selected_mol $molid
+    set current_molid $molid
+    set mode "loaded"
+    switch_page
+    update_cap
+}
+
+# on_rep_toggled -- enable/disable a per-rep spinbox when its checkbutton is
+# toggled. Unchecked reps get count 0. Runs outside the `_loading` guard (see
+# the block comment above) so apply_state's pass enables checked-rep spinboxes.
+# Resolves the spinbox path from the row index (lsearch GAME_REPS).
+proc ::biochemeleon::setup_tab::on_rep_toggled {rep} {
+    variable w
+    variable rep_sel
+    variable rep_cnt
+    set row [lsearch -exact $::biochemeleon::setup_state::GAME_REPS $rep]
+    if {$row < 0} { return }
+    if {![info exists w] || $w eq ""} { return }
+    set sp $w.nb.setup.hiders.perrep.s$row
+    if {![winfo exists $sp]} { return }
+    if {[info exists rep_sel($rep)] && $rep_sel($rep)} {
+        $sp configure -state normal
+    } else {
+        $sp configure -state disabled
+        set rep_cnt($rep) 0
+    }
+    recompute_per_rep_maxes
+}
+
+# update_cap -- reconfigure the hider-count spinbox -to from the current
+# molecule's atom count (demos::atom_count + hider_count_cap), then clamp the
+# current value into range. Suppressed during apply_state. No-op if no
+# molecule is selected yet (current_molid unset/empty).
+proc ::biochemeleon::setup_tab::update_cap {} {
+    variable _loading
+    variable current_molid
+    variable hider_count
+    variable w
+    if {$_loading} { return }
+    if {![info exists current_molid] || $current_molid eq ""} { return }
+    set atom_count [::biochemeleon::demos::atom_count $current_molid]
+    set cap [::biochemeleon::setup_state::hider_count_cap $atom_count]
+    if {![info exists w] || $w eq ""} { return }
+    set sp $w.nb.setup.hiders.top.hcspin
+    if {[winfo exists $sp]} {
+        $sp configure -to [expr {max(1,$cap)}]
+    }
+    if {[info exists hider_count] && $hider_count > $cap} { set hider_count $cap }
+}
+
+# recompute_per_rep_maxes -- reconfigure each per-rep spinbox -to to the
+# current hider_count (per-rep counts can't exceed the total). Suppressed
+# during apply_state. The authoritative clamp is the pure-layer validate_state
+# (called on Save/Start); this is a UI affordance.
+proc ::biochemeleon::setup_tab::recompute_per_rep_maxes {} {
+    variable _loading
+    variable hider_count
+    variable w
+    if {$_loading} { return }
+    if {![info exists w] || $w eq ""} { return }
+    set pr $w.nb.setup.hiders.perrep
+    if {![winfo exists $pr]} { return }
+    set hc 50
+    if {[info exists hider_count] && $hider_count ne ""} { set hc $hider_count }
+    if {$hc < 1} { set hc 1 }
+    set row 0
+    foreach rep $::biochemeleon::setup_state::GAME_REPS {
+        set sp $pr.s$row
+        if {[winfo exists $sp]} {
+            $sp configure -to $hc
+        }
+        incr row
+    }
+}
+
+# do_reset -- restore the DEFAULTS state to all widgets (BTN-01).
+proc ::biochemeleon::setup_tab::do_reset {} {
+    apply_state $::biochemeleon::setup_state::DEFAULTS
+}
+
+# do_randomize -- produce a random valid state (BTN-02). No seed = random
+# (non-deterministic; Plan 01's randomize_state). The current atom_count feeds
+# the cap; lock_source preserves the target; collect_state is the locked_state.
+# quick-008 (random non-empty per_rep subset) is baked into randomize_state.
+proc ::biochemeleon::setup_tab::do_randomize {} {
+    variable current_molid
+    variable lock_source
+    set atom_count 0
+    if {[info exists current_molid] && $current_molid ne ""} {
+        set atom_count [::biochemeleon::demos::atom_count $current_molid]
+    }
+    set lock_src 0
+    if {[info exists lock_source]} { set lock_src $lock_source }
+    apply_state [::biochemeleon::setup_state::randomize_state "" $atom_count $lock_src [collect_state]]
+}
+
+# do_save -- write the current setup to a .bcm file via the mol bridge
+# (BTN-03; LOCKED DECISION #1 -- key-value format, NOT [list]+source).
+proc ::biochemeleon::setup_tab::do_save {} {
+    variable w
+    set fname [tk_getSaveFile -defaultextension ".bcm" \
+        -title "Save bioCHEMeleon Setup" \
+        -filetypes [list {{bioCHEMeleon} {.bcm}} {{All files} {*}}] \
+        -parent $w]
+    if {$fname eq ""} { return }
+    if {[catch {::biochemeleon::demos::save_setup [collect_state] $fname} err]} {
+        tk_messageBox -icon warning -parent $w -message "Save failed: $err"
+    }
+}
+
+# do_load -- read a .bcm setup file via the mol bridge (BTN-04). load_setup
+# calls validate_state internally (Plan 02), so $result is a validated dict;
+# apply_state repopulates the widgets from it.
+proc ::biochemeleon::setup_tab::do_load {} {
+    variable w
+    set fname [tk_getOpenFile -defaultextension ".bcm" \
+        -title "Load bioCHEMeleon Setup" \
+        -filetypes [list {{bioCHEMeleon} {.bcm}} {{All files} {*}}] \
+        -parent $w]
+    if {$fname eq ""} { return }
+    if {[catch {::biochemeleon::demos::load_setup $fname} result]} {
+        tk_messageBox -icon warning -parent $w -message "Load failed: $result"
+        return
+    }
+    apply_state $result
+}

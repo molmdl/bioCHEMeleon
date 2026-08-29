@@ -34,8 +34,8 @@ source [file join [file dirname [info script]] setup_tab.tcl]
 # autoionizegui.tcl:46-49, ramaplot.tcl:125-128, mergestructs.tcl:44-47).
 #
 # Phase 14: populates the Setup tab via setup_tab::build (replacing the Phase 13
-# placeholder). NO WM_DELETE_WINDOW handler yet -- Plan 04 adds it (it calls
-# collect_state + trace vdelete which reference Plan 04 callbacks).
+# placeholder). The WM_DELETE_WINDOW handler (::biochemeleon::on_close, defined
+# below) preserves in-progress edits + cleans up the refresh trace on close.
 # ---------------------------------------------------------------------------
 proc ::biochemeleon::open_dialog {} {
     variable w
@@ -57,4 +57,33 @@ proc ::biochemeleon::open_dialog {} {
     pack $nb.game.placeholder -padx 20 -pady 20
 
     pack $nb -fill both -expand yes
+
+    # Wire the window-manager close (X button) to ::biochemeleon::on_close so
+    # in-progress edits are preserved and the refresh trace is cleaned up.
+    wm protocol $w WM_DELETE_WINDOW ::biochemeleon::on_close
+}
+
+# ---------------------------------------------------------------------------
+# on_close -- the WM_DELETE_WINDOW handler (Plan 04). Preserves any in-progress
+# (un-applied) edits by snapshotting the widgets via collect_state + persisting
+# the result to ::biochemeleon::state setup, so close+reopen keeps the user's
+# form. (collect_state itself only RETURNS the dict; apply_state is what
+# persists on action buttons, so on_close persists explicitly here.) Cleans up
+# the molecule-menu refresh trace -- a leaked trace fires on later mol
+# add/delete and touches a destroyed widget. Both steps are catch-guarded so a
+# half-built form or an already-absent trace can't error. Then destroys the
+# toplevel. NO blocking grab anywhere -- the viewer stays interactive.
+# ---------------------------------------------------------------------------
+proc ::biochemeleon::on_close {} {
+    variable w
+    # Preserve in-progress edits (collect_state returns the widget snapshot;
+    # persist it to the entry's state dict so close+reopen keeps them).
+    if {![catch {::biochemeleon::setup_tab::collect_state} snapshot]} {
+        catch {dict set ::biochemeleon::state setup $snapshot}
+    }
+    # Clean up the refresh trace (no-op if absent). vmd_molecule is a VMD global;
+    # `global` resolves it so the delete targets the same trace build registered.
+    global vmd_molecule
+    catch {trace vdelete vmd_molecule w ::biochemeleon::setup_tab::refresh_mol_menu}
+    destroy $w
 }
