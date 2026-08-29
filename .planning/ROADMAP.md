@@ -61,7 +61,7 @@ Plans:
 **Goal**: The user can fully configure every game parameter in the Setup tab and load bundled demo molecules — the entire pre-game configuration experience, before touching the risky PDB-rebuild.
 **Depends on**: Phase 13
 **Requirements**: SETUP-01, SETUP-02, SETUP-03, SETUP-04, SETUP-05, SETUP-06, BTN-01, BTN-02, BTN-03, BTN-04, DEMO-01
-**Plans**: TBD
+**Plans:** 4 plans
 
 **Success Criteria** (what must be TRUE):
 1. The Setup tab shows a molecule dropdown (loaded molecules via `molinfo list` + bundled demos + PDB-fetch option); selecting a bundled demo loads it into VMD via `mol new` (1znf, 1xdn, 5E54, 1K8P, 2QBZ, 4WB3).
@@ -70,7 +70,10 @@ Plans:
 4. The pure setup-state model is unit-tested via `tcltest` in WSL (DEFAULTS, hider-count cap, randomize_state, validate_state, GAME_REPS, DEMO_MANIFEST).
 
 Plans:
-- [ ] 14-01: TBD
+- [ ] 14-01-PLAN.md — Pure-layer setup-state logic (validate_state full + randomize_state + randomize_per_rep quick-008) via TDD [SETUP-02, SETUP-04, SETUP-06, half SETUP-05]
+- [ ] 14-02-PLAN.md — Mol bridge demos.tcl (load_demo, get_active_reps, save/load_setup, fetch_pdb stub) + headless smoke [DEMO-01, half SETUP-01, BTN-03/04 backend]
+- [ ] 14-03-PLAN.md — GUI structure: extract open_dialog to dialog.tcl + build setup_tab.tcl form (3-mode selector, dropdown, spinbox, per-rep rows, 4 buttons) + collect_state/apply_state [SETUP-01/03/05, BTN-01/02/03/04 UI]
+- [ ] 14-04-PLAN.md — Wire GUI callbacks (refresh_mol_menu trace, select_demo, do_reset/randomize/save/load, WM_DELETE handler) + GUI human-verify checkpoint [SETUP-01..06, BTN-01..04, DEMO-01]
 
 ### Phase 15: Mutation Safety & Hider Registry ⚠️ HIGHEST RISK
 
@@ -239,7 +242,7 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 13. Bootstrap & Sourced Entry | v2.0 | 2/2 | ✓ Complete | 2026-08-29 |
-| 14. Setup Tab & Bundled Demos | v2.0 | 0/TBD | Not started | - |
+| 14. Setup Tab & Bundled Demos | v2.0 | 0/4 | Not started | - |
 | 15. Mutation Safety & Hider Registry | v2.0 | 0/TBD | Not started | - |
 | 16. MVP Core Loop (Sphere) | v2.0 | 0/TBD | Not started | - |
 | 17.1. Rep Setup Infrastructure & Simple Rep Generators | v2.0 | 0/TBD | Not started | - |
