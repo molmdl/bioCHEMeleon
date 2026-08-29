@@ -9,7 +9,7 @@
 
 The PDB-rebuild mechanism is **PROVEN end-to-end by headless probe** (this session, `tmp/probe15a/probe.tcl` + `probe2.tcl`, both reached `BCHM_SMOKE_RESULT ...DONE=1`). The flow is: `atomselect $m "all" writepdb` the originals → read the file, strip the trailing `END` → append hand-written hider `ATOM` records with **strict 78-column PDB format** (`resname=GAM`, `beta=-999.0`, `segid=GAME`, `chain=G`, `resseq=9001`, `element=C`) → write `END` → `mol delete $orig` + `mol new <combined.pdb>`. The result is ONE molecule holding original + hider atoms together (probe: 555 + 5 = 560 atoms, `resname GAM and beta < 0` selects exactly 5, indices 555–559). Sentinels are then SET IN-PLACE via `atomselect` (`$sel set beta -999; $sel set segid GAME; $sel set user <id>`) so they are robust against any PDB-column quirk.
 
-**Primary recommendation:** Build `mutation.tcl` as a standalone mol bridge with 6 procs (`make_placeholder_hiders`, `write_combined_pdb`, `tag_sentinels`, `fetch_hider_indices`, `mutate`, `cleanup`). Use the **writepdb-then-splice** approach (NOT hand-write-all — `atomselect get` lacks `icode` and risks dropping fields). Format hider beta as **`%6.1f` → `-999.0`** (6 cols, fits, no overflow — proven to let `segid=GAME` survive in the PDB columns) AND set sentinels in-place after load (belt-and-suspenders, per spec). `mutation.tcl` OWNS the `mol delete`/`mol new` lifecycle; `backup.tcl` owns viewpoint+reps; `game.tcl` orchestrates.
+**Primary recommendation:** Build `mutation.tcl` as a standalone mol bridge with 5 procs (`make_placeholder_hiders`, `write_combined_pdb`, `tag_sentinels`, `fetch_hider_indices`, `mutate`) — it owns the **forward** mutate-reload only (write combined PDB → `mol delete` original → `mol new` combined → tag sentinels). The **restore/cleanup** reload (`mol delete` game + `mol new` original + re-apply reps + restore viewpoint) is `backup.tcl`'s `restore` proc (researchers B & C agree — atomic restore, no backup→mutation coupling; reconciled below). Use the **writepdb-then-splice** approach (NOT hand-write-all — `atomselect get` lacks `icode` and risks dropping fields). Format hider beta as **`%6.1f` → `-999.0`** (6 cols, fits, no overflow — proven to let `segid=GAME` survive in the PDB columns) AND set sentinels in-place after load (belt-and-suspenders, per spec).
 
 ## API Findings (every claim verified by probe — cite probe output line)
 
@@ -77,9 +77,12 @@ namespace eval ::biochemeleon::mutation {
     variable HID_OCC     1.00
     variable script_dir [file dirname [info script]]  ;# frozen at source time (proc bodies can't use [info script] under `vmd -e`)
     namespace export make_placeholder_hiders write_combined_pdb tag_sentinels \
-                     fetch_hider_indices mutate cleanup
+                     fetch_hider_indices mutate
 }
 ```
+:::note
+**No `cleanup` proc in mutation.tcl.** The restore/cleanup reload is `backup.tcl::restore` (researchers B & C). mutation.tcl owns the **forward** mutate-reload only. This keeps backup self-contained for restore (mol delete + mol new + reps + viewpoint in one atomic proc) and avoids backup→mutation coupling. See "clean split" below.
+:::
 
 ### Proc signatures (prescriptive — the planner turns these into tasks)
 
@@ -165,7 +168,7 @@ proc ::biochemeleon::mutation::fetch_hider_indices {molid} {
 }
 ```
 
-**5. `mutate {molid hider_records out_path}` → backup-friendly rebuild; returns new molid**
+**5. `mutate {molid hider_records out_path}` → forward rebuild; returns new game molid**
 - Writes the combined PDB, `mol delete $molid`, `mol new <combined> type pdb waitfor all`, tags sentinels in-place, returns the new molid. **Does NOT save/restore reps/viewpoint** (backup.tcl's job — game.tcl calls `backup::snapshot` BEFORE `mutate` and `backup::restore` AFTER).
 ```tcl
 proc ::biochemeleon::mutation::mutate {molid hider_records out_path} {
@@ -177,21 +180,15 @@ proc ::biochemeleon::mutation::mutate {molid hider_records out_path} {
 }
 ```
 
-**6. `cleanup {game_molid original_path}` → restore the original; returns new molid**
-- `mol delete $game_molid; set new_m [mol new $original_path type pdb waitfor all]`. `original_path` is the path `backup.tcl` captured at snapshot time (`molinfo $orig get filename` — A4). **Does NOT restore reps/viewpoint** (backup.tcl's job). Asserts no hider residue remains (optional, in the smoke).
-```tcl
-proc ::biochemeleon::mutation::cleanup {game_molid original_path} {
-    mol delete $game_molid
-    set new_m [mol new $original_path type pdb waitfor all]
-    return $new_m
-}
-```
+**No `cleanup` proc in mutation.tcl** — the restore/cleanup reload (`mol delete` game + `mol new` original + re-apply reps + restore viewpoint) is `backup.tcl::restore` (researcher B). mutation.tcl owns the forward mutate-reload only. See the clean split below.
 
-### The clean split between mutation.tcl and backup.tcl (the open question — RECOMMENDATION)
-- **`mutation.tcl` OWNS the molecule lifecycle** — the ONLY component that calls `mol delete`/`mol new`/`writepdb`. Procs: `make_placeholder_hiders`, `write_combined_pdb`, `tag_sentinels`, `fetch_hider_indices`, `mutate`, `cleanup`. It NEVER touches reps, viewpoint, or `mol addrep`/`molinfo ... matrix`.
-- **`backup.tcl` OWNS the scene state** — the ONLY component that reads/writes viewpoint matrices (`molinfo $m get {rotate_matrix center_matrix scale_matrix global_matrix}`, per `save_state.tcl:52-60`) and the rep list (clonerep form: `molinfo $m get "{rep $i} {selection $i} {color $i} {material $i}"` + `mol delrep 0` loop + `mol representation/color/selection/material; mol addrep`, per `clonerep.tcl:103,127` / `save_state.tcl:80-137`) and captures `molinfo $m get filename`. Procs: `snapshot {molid}`, `restore {new_molid snapshot}`.
-- **`game.tcl` orchestrates** (researcher C): `set snap [backup::snapshot $m]; set hiders [mutation::make_placeholder_hiders $m $count]; set new_m [mutation::mutate $m $hiders $out_path]; backup::restore $new_m $snap; ::biochemeleon::registry::reconstruct_from_sentinels [list ::biochemeleon::mutation::fetch_hider_indices $new_m]`.
-- **Rationale:** encapsulates every destructive mol op in one tested module; `game.tcl` stays a thin orchestrator; `backup.snapshot` brackets `mutate` (save before, restore after). mutation.tcl and backup.tcl do NOT import each other.
+### The clean split between mutation.tcl, backup.tcl, and game.tcl (RECONCILED with researchers B & C)
+- **`mutation.tcl` OWNS the forward mutate-reload** — the only component that calls `writepdb`, builds the combined PDB, and does the forward `mol delete`-original + `mol new`-combined. Procs: `make_placeholder_hiders`, `write_combined_pdb`, `tag_sentinels`, `fetch_hider_indices`, `mutate`. It NEVER touches reps, viewpoint, `mol addrep`, or `molinfo ... matrix`, and NEVER does the restore-reload.
+- **`backup.tcl` OWNS the restore-reload (cleanup) + scene state** — the only component that does the restore `mol delete`-game + `mol new`-original, re-applies reps, and restores viewpoint. It reads/writes viewpoint matrices (`molinfo $m get {rotate_matrix center_matrix scale_matrix global_matrix}`, per `save_state.tcl:52-60`) and the rep list (clonerep form: `molinfo $m get "{rep $i} {selection $i} {color $i} {material $i}"` + `mol delrep 0` loop + `mol addrep`/`mol mod*`, per `clonerep.tcl:103,127` / `save_state.tcl:80-137`) and captures `molinfo $m get filename`. Procs: `snapshot {molid}` (returns `{filename viewpoint reps}`), `restore {snapshot}` (does `mol delete` + `mol new` + reps + viewpoint → returns new molid). Researcher B's `restore` is the FULL cleanup (atomic — no window where the new molid has no reps).
+- **`game.tcl` orchestrates** (researcher C), owns the `game_state` dict, owns **no** `mol delete`/`mol new` directly:
+  - start: `set snap [backup::snapshot $m]; set hiders [mutation::make_placeholder_hiders $m $count]; set new_m [mutation::mutate $m $hiders $out_path]; backup::restore_reps_viewpoint $new_m $snap; ::biochemeleon::registry::reconstruct_from_sentinels <DI fn $new_m>` (restore reps/viewpoint on the game molid after mutate — see B's doc for whether `restore` is split vs a `restore_reps_viewpoint` helper that takes a pre-existing molid)
+  - cleanup/restart: `set new_m [backup::restore $snap]; ::biochemeleon::registry::reset` (restore = mol delete game + mol new original + reps + viewpoint)
+- **Rationale for backup owning the restore-reload (not mutation):** atomic restore (reps/viewpoint applied to the SAME new molid in one proc — no inter-module handoff of a bare new molid); backup self-contained for restore; no backup→mutation coupling. This matches researchers B & C. mutation.tcl and backup.tcl do NOT import each other.
 
 ### Exact PDB hider record (the line the planner needs — copy verbatim)
 78-char `ATOM` record, 0-indexed columns: record 0–5=`ATOM  `, serial 6–10, blank 11, name 12–15, altLoc 16, resname 17–19=`GAM`, blank 20, chain 21=`G`, resSeq 22–25=`9001`, iCode 26, blank 27–29, x 30–37, y 38–45, z 46–53, occ 54–59, beta 60–65=`-999.0` (**`%6.1f`**), blank 66–71, segid 72–75=`GAME`, element 76–77=` C`.
@@ -273,8 +270,10 @@ set m1 [::biochemeleon::mutation::mutate $m0 $hiders $outpdb]   ;# mol delete m0
 ::biochemeleon::registry::reconstruct_from_sentinels \
     [list ::biochemeleon::mutation::fetch_hider_indices $m1]
 #   ::biochemeleon::registry::is_hider 555 -> 1,  is_hider 0 -> 0
-# cleanup:
-set m2 [::biochemeleon::mutation::cleanup $m1 $pdb]     ;# mol delete m1; mol new original
+# cleanup (backup.tcl::restore owns the full reload + reps + viewpoint; this is
+# the underlying mechanism it wraps):
+mol delete $m1
+set m2 [mol new $pdb type pdb waitfor all]   ;# = backup::restore's mol delete + mol new
 #   molinfo $m2 get numatoms == 555, [atomselect $m2 "resname GAM" num] == 0
 ```
 
@@ -329,8 +328,11 @@ if {![::biochemeleon::registry::is_hider 555]} { _bail reg_555 "not registered" 
 if {![::biochemeleon::registry::is_hider 559]} { _bail reg_559 "not registered" }
 if {[::biochemeleon::registry::is_hider 0]}   { _bail reg_0 "real atom 0 wrongly registered" }
 
-# ---- 3. cleanup: restore original exactly, no hider residue ----
-set m2 [::biochemeleon::mutation::cleanup $m1 $pdb]
+# ---- 3. cleanup MECHANISM: raw mol delete + mol new original -> no hider residue.
+# (In the real game, backup.tcl::restore owns this reload + re-applies reps/viewpoint;
+#  this smoke proves the underlying mechanism since it tests mutation.tcl ALONE.)
+mol delete $m1
+set m2 [mol new $pdb type pdb waitfor all]
 if {$m2 <= $m1} { _bail cleanup_molid "m2=$m2 <= m1=$m1" }
 if {[molinfo $m2 get numatoms] != 555} { _bail cleanup_atoms "exp=555 got=[molinfo $m2 get numatoms]" }
 set left [atomselect $m2 "resname GAM and beta < 0"]
@@ -360,9 +362,13 @@ else { puts "BCHM_SMOKE_RESULT PASS=0 FAIL=[join $failures ,]" }
 ## Open Questions (need a human decision or later phase)
 
 1. **Temp PDB location for the combined file in real (non-smoke) use.** Phase 15's smoke uses `[pwd]`-relative. For game.tcl, options: (a) next to the original PDB (`<orig>.game.pdb` — guarantees Windows-visible but writes to the user's dir), (b) `$env(TEMP)/biochemeleon_game.pdb` (system temp, always writable), (c) a plugin-local cache dir. **Recommendation:** (b) `$env(TEMP)` — clean, always writable, doesn't pollute the user's PDB dir. The planner should confirm with researcher C (game.tcl). mutation.tcl itself is path-agnostic (takes `out_path`).
-2. **Should `mutate`/`cleanup` own `mol delete`/`mol new`, or should `game.tcl`?** — **RECOMMENDATION (this doc):** mutation.tcl owns them (encapsulates all destructive mol ops in one tested module; game.tcl stays a thin orchestrator; backup.tcl's snapshot/restore bracket the call). The planner should confirm this matches researcher C's game.tcl design.
-3. **`tclsh` is NOT installed in WSL** — contradicts `vmd/AGENTS.md` ("tclsh is available in WSL"). `which tclsh` → `command not found`; no `/usr/bin/tcl*`. This affects the **pure-layer registry tcltest** (`vmd/tests/test_registry.test`) which AGENTS.md says runs via `tclsh`. **For MY smoke (mutation.tcl), headless VMD works (proven this session).** For the registry pure tests (researcher C), options: run tcltest under headless VMD (`vmd -dispdev text -e test_registry.test`), or flag for a human to install `tcl-dev`. **Recommendation:** flag this discrepancy to the orchestrator; researcher C decides. (Not a mutation.tcl blocker.)
-4. **`ATOM` vs `HETATM` record type for hiders.** Probe used `ATOM` (loaded fine). `HETATM` is more PDB-correct for a non-standard residue `GAM`, and the sentinel selector `resname GAM` is record-type-agnostic. **Recommendation:** `ATOM` (proven) is fine; `HETATM` is an equivalent drop-in if the planner prefers PDB-correctness. Low impact.
+2. **Who owns `mol delete`/`mol new`? — RESOLVED (reconciled with B & C).** mutation.tcl owns the **forward** mutate-reload (`mutate`: mol delete original + mol new combined + tag sentinels). backup.tcl owns the **restore** reload (`restore`: mol delete game + mol new original + re-apply reps + restore viewpoint — atomic). game.tcl owns **neither** `mol delete`/`mol new` directly. This doc originally proposed a `cleanup` proc in mutation.tcl; it has been REMOVED in favor of backup.tcl's `restore` (cleaner: atomic restore, no backup→mutation coupling, matches B & C). See "The clean split" above.
+3. **DI style for `reconstruct_from_sentinels`: proc-prefix (this doc) vs `apply`-lambda (researcher C).** Both work with the existing `registry.tcl:34` `foreach idx [{*}$fetch_hider_ids]` DI shape:
+   - **This doc (proc-prefix):** `fetch_hider_indices` lives in mutation.tcl (the mol bridge — natural home for atomselect); game.tcl injects `[list ::biochemeleon::mutation::fetch_hider_indices $new_m]`. Keeps game.tcl a pure orchestrator (no inline atomselect); `fetch_hider_indices` is reusable (the smoke asserts it directly).
+   - **Researcher C (apply-lambda):** game.tcl injects `[list apply {{molid} { ...atomselect inline... }} $game_molid]` (C probed this: `BCHM_SMOKE_RESULT PASS=1`). Keeps the atomselect in game.tcl (the composition root, allowed to be mol-coupled); mutation.tcl has no public `fetch_hider_indices`.
+   - **Recommendation:** the proc-prefix style (this doc) — atomselect belongs in the mol bridge (mutation.tcl), not the orchestrator; `fetch_hider_indices` is reusable and directly smoke-testable. **The planner should reconcile this with researcher C** (it's a stylistic DI choice; both are functionally correct and probe-verified). Either way, `registry.tcl` stays pure (the `{*}$fetch_hider_ids` expansion is DI-agnostic).
+4. **`tclsh` is NOT installed in WSL** — contradicts `vmd/AGENTS.md` ("tclsh is available in WSL"). `which tclsh` → `command not found`; no `/usr/bin/tcl*`. This affects the **pure-layer registry tcltest** (`vmd/tests/test_registry.test`) which AGENTS.md says runs via `tclsh`. **For MY smoke (mutation.tcl), headless VMD works (proven this session).** For the registry pure tests (researcher C), options: run tcltest under headless VMD (`vmd -dispdev text -e test_registry.test`), or flag for a human to install `tcl-dev`. **Recommendation:** flag this discrepancy to the orchestrator; researcher C decides. (Not a mutation.tcl blocker.)
+5. **`ATOM` vs `HETATM` record type for hiders.** Probe used `ATOM` (loaded fine). `HETATM` is more PDB-correct for a non-standard residue `GAM`, and the sentinel selector `resname GAM` is record-type-agnostic. **Recommendation:** `ATOM` (proven) is fine; `HETATM` is an equivalent drop-in if the planner prefers PDB-correctness. Low impact.
 
 ## Sources
 
@@ -395,7 +401,7 @@ else { puts "BCHM_SMOKE_RESULT PASS=0 FAIL=[join $failures ,]" }
 - Sentinel in-place tagging + misalignment mitigation: HIGH — P5/P6 proven.
 - Cleanup (restore original exactly): HIGH — P7 proven (new molid, 555 atoms, 0 hider residue).
 - Bounding box (`molinfo center`): HIGH (nested-list pitfall documented); `measure minmax`: LOW (returned zeros — do NOT use).
-- mutation/backup proc split: MEDIUM — recommended by design (not probe-verified; the smoke + game.tcl integration will confirm).
+- mutation/backup proc split: MEDIUM — reconciled with researchers B & C (mutation owns forward mutate-reload; backup owns restore-reload/cleanup; game owns neither). Design choice, not probe-verified as a whole; the Phase 15 capstone smoke + game.tcl integration confirm.
 
 **Research date:** 2026-08-30
 **Valid until:** 2026-09-29 (30 days — stable VMD 1.9.3 target; no upstream changes)
