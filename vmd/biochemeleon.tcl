@@ -112,7 +112,9 @@ proc ::biochemeleon::open_dialog {} {
 # autoionize dual-proc pattern (autoionize.tcl:50) + ramaplot.tcl:109-111.
 # ---------------------------------------------------------------------------
 proc biochemeleon {args} {
-    if {![info exists tk_version]} {
+    # ::tk_version (global qualifier) — inside a proc, bare `tk_version`
+    # checks LOCAL scope only and is always absent (tcl scoping trap).
+    if {![info exists ::tk_version]} {
         vmdcon -warn "bioCHEMeleon: GUI requires Tk (not available in -dispdev text)."
         return
     }
