@@ -7,7 +7,8 @@
 # switch_page. Callback procs (Plan 04): full impls -- refresh_mol_menu (trace
 # -> repopulate the loaded-mol menu), select_demo / select_loaded_mol (set
 # target + update cap), on_rep_toggled (enable/disable per-rep spinbox),
-# update_cap / recompute_per_rep_maxes (spinbox -to caps), do_reset /
+# update_cap / recompute_per_rep_maxes (spinbox -to caps + live per-rep sum
+# capping so the per-rep sum never exceeds hider_count), do_reset /
 # do_randomize / do_save / do_load (action buttons). The WM_DELETE_WINDOW
 # handler (collect_state + trace cleanup + destroy) lives in gui/dialog.tcl.
 #
@@ -351,13 +352,16 @@ proc ::biochemeleon::setup_tab::switch_page {} {
 # ---------------------------------------------------------------------------
 # Callbacks (Plan 04) -- full implementations. refresh_mol_menu takes `args`
 # because the trace callback signature is `{name1 name2 op}` (Pitfall 2); the
-# `args` form accepts and ignores them. update_cap / recompute_per_rep_maxes
-# are guarded by `_loading` (they reconfigure widget -to caps, which is a UI
-# affordance; the authoritative clamp is the pure-layer validate_state on
-# Save/Start). on_rep_toggled deliberately runs OUTSIDE the `_loading` guard so
-# apply_state's per-rep pass enables the spinboxes for checked reps (without
-# that, a loaded/reset state would show checked boxes with disabled spinboxes);
-# the recompute it triggers is itself guarded.
+# `args` form accepts and ignores them. update_cap / recompute_per_rep_maxes /
+# on_rep_toggled's live-cap are guarded by `_loading` (they reconfigure widget
+# -to caps + clamp counts; the authoritative clamp is the pure-layer
+# validate_state on Save/Start). on_rep_toggled itself runs OUTSIDE `_loading`
+# (so apply_state's per-rep pass enables checked-rep spinboxes), but its
+# live-cap clamp is guarded so apply_state's validated values aren't fought.
+# recompute_per_rep_maxes dynamically caps the per-rep SUM (Issue 2): each
+# checked rep's -to = hider_count - sum(other checked reps), so the sum can
+# never exceed hider_count via arrow interaction. do_save runs validate_state
+# + warns if clamping occurred (Issue 1: covers the entry-typing bypass).
 # ---------------------------------------------------------------------------
 
 # refresh_mol_menu -- repopulate the loaded-molecule menu from [molinfo list].
@@ -424,8 +428,17 @@ proc ::biochemeleon::setup_tab::select_loaded_mol {molid} {
 # toggled. Unchecked reps get count 0. Runs outside the `_loading` guard (see
 # the block comment above) so apply_state's pass enables checked-rep spinboxes.
 # Resolves the spinbox path from the row index (lsearch GAME_REPS).
+#
+# Issue 2 live-cap: when ENABLING a rep (user-checked the box), cap its count
+# to the REMAINING allowance = hider_count - sum(all OTHER checked per-rep
+# counts) so the per-rep sum can NEVER exceed hider_count in the GUI. The
+# live-cap is guarded by `_loading` so apply_state (which sets validated values
+# directly from a clean dict) isn't fighting the clamp. The spinbox enable/
+# disable itself runs unguarded (apply_state needs it to enable checked reps).
 proc ::biochemeleon::setup_tab::on_rep_toggled {rep} {
+    variable _loading
     variable w
+    variable hider_count
     variable rep_sel
     variable rep_cnt
     set row [lsearch -exact $::biochemeleon::setup_state::GAME_REPS $rep]
@@ -435,6 +448,27 @@ proc ::biochemeleon::setup_tab::on_rep_toggled {rep} {
     if {![winfo exists $sp]} { return }
     if {[info exists rep_sel($rep)] && $rep_sel($rep)} {
         $sp configure -state normal
+        # Live-cap (Issue 2): clamp this rep's count to the remaining allowance
+        # so the per-rep sum stays <= hider_count. Only during user interaction
+        # (NOT during apply_state, which already sets validated values).
+        if {!$_loading} {
+            set hc 0
+            if {[info exists hider_count] && $hider_count ne ""} { set hc $hider_count }
+            if {$hc < 1} { set hc 1 }
+            set total_others 0
+            foreach r $::biochemeleon::setup_state::GAME_REPS {
+                if {$r ne $rep && [info exists rep_sel($r)] && $rep_sel($r)} {
+                    set c 0
+                    if {[info exists rep_cnt($r)]} { set c $rep_cnt($r) }
+                    incr total_others $c
+                }
+            }
+            set remaining [expr {$hc - $total_others}]
+            if {$remaining < 0} { set remaining 0 }
+            set cur 0
+            if {[info exists rep_cnt($rep)]} { set cur $rep_cnt($rep) }
+            if {$cur > $remaining} { set rep_cnt($rep) $remaining }
+        }
     } else {
         $sp configure -state disabled
         set rep_cnt($rep) 0
@@ -446,10 +480,18 @@ proc ::biochemeleon::setup_tab::on_rep_toggled {rep} {
 # molecule's atom count (demos::atom_count + hider_count_cap), then clamp the
 # current value into range. Suppressed during apply_state. No-op if no
 # molecule is selected yet (current_molid unset/empty).
+#
+# Issue 2: when a smaller molecule is loaded (cap shrinks), the existing per-rep
+# sum may now exceed the new hider_count. Clamp the per-rep counts in insertion
+# order (keep early reps, reduce later ones) so the sum fits, then call
+# recompute_per_rep_maxes to update the per-rep spinbox -to values. Guarded by
+# _loading. The authoritative clamp is validate_state on Save/Start.
 proc ::biochemeleon::setup_tab::update_cap {} {
     variable _loading
     variable current_molid
     variable hider_count
+    variable rep_sel
+    variable rep_cnt
     variable w
     if {$_loading} { return }
     if {![info exists current_molid] || $current_molid eq ""} { return }
@@ -460,16 +502,43 @@ proc ::biochemeleon::setup_tab::update_cap {} {
     if {[winfo exists $sp]} {
         $sp configure -to [expr {max(1,$cap)}]
     }
-    if {[info exists hider_count] && $hider_count > $cap} { set hider_count $cap }
+    if {![info exists hider_count] || $hider_count eq ""} { return }
+    if {$hider_count > $cap} { set hider_count $cap }
+    # Clamp the per-rep sum to the (possibly reduced) hider_count. Insertion-
+    # order keep + reduce: early reps keep their count, later reps are reduced
+    # to fit. This matches validate_state's drop-overflow intent but is gentler
+    # (reduce instead of drop) so the user keeps some distribution.
+    set running 0
+    foreach r $::biochemeleon::setup_state::GAME_REPS {
+        if {![info exists rep_sel($r)] || !$rep_sel($r)} { continue }
+        set c 0
+        if {[info exists rep_cnt($r)]} { set c $rep_cnt($r) }
+        if {$c <= 0} { continue }
+        if {$running + $c > $hider_count} {
+            set rep_cnt($r) [expr {$hider_count - $running}]
+            if {$rep_cnt($r) < 0} { set rep_cnt($r) 0 }
+            set running $hider_count
+        } else {
+            set running [expr {$running + $c}]
+        }
+    }
+    ::biochemeleon::setup_tab::recompute_per_rep_maxes
 }
 
-# recompute_per_rep_maxes -- reconfigure each per-rep spinbox -to to the
-# current hider_count (per-rep counts can't exceed the total). Suppressed
-# during apply_state. The authoritative clamp is the pure-layer validate_state
-# (called on Save/Start); this is a UI affordance.
+# recompute_per_rep_maxes -- reconfigure each per-rep spinbox -to so the
+# per-rep SUM can never exceed hider_count (Issue 2 live-cap). For each CHECKED
+# rep, the -to = hider_count - sum(all OTHER checked per-rep counts) (min 0);
+# this makes the remaining reps' maxes shrink as the user increases one rep.
+# Unchecked reps get -to 0 (their spinbox is disabled anyway). If a count
+# exceeds its dynamic cap (e.g. hider_count decreased via arrows), clamp it
+# down. Suppressed during apply_state. The authoritative clamp is the pure-
+# layer validate_state (called on Save/Start); this is a GUI-level prevention
+# so the user never sees an inconsistent state via normal arrow interaction.
 proc ::biochemeleon::setup_tab::recompute_per_rep_maxes {} {
     variable _loading
     variable hider_count
+    variable rep_sel
+    variable rep_cnt
     variable w
     if {$_loading} { return }
     if {![info exists w] || $w eq ""} { return }
@@ -482,7 +551,27 @@ proc ::biochemeleon::setup_tab::recompute_per_rep_maxes {} {
     foreach rep $::biochemeleon::setup_state::GAME_REPS {
         set sp $pr.s$row
         if {[winfo exists $sp]} {
-            $sp configure -to $hc
+            if {[info exists rep_sel($rep)] && $rep_sel($rep)} {
+                # Dynamic cap: hider_count minus the sum of all OTHER checked
+                # reps' counts. This ensures the SUM stays within hider_count.
+                set total_others 0
+                foreach r2 $::biochemeleon::setup_state::GAME_REPS {
+                    if {$r2 ne $rep && [info exists rep_sel($r2)] && $rep_sel($r2)} {
+                        set c 0
+                        if {[info exists rep_cnt($r2)]} { set c $rep_cnt($r2) }
+                        incr total_others $c
+                    }
+                }
+                set remaining [expr {$hc - $total_others}]
+                if {$remaining < 0} { set remaining 0 }
+                $sp configure -to $remaining
+                # Clamp the current count down if it exceeds the dynamic cap.
+                set cur 0
+                if {[info exists rep_cnt($rep)]} { set cur $rep_cnt($rep) }
+                if {$cur > $remaining} { set rep_cnt($rep) $remaining }
+            } else {
+                $sp configure -to 0
+            }
         }
         incr row
     }
@@ -511,14 +600,70 @@ proc ::biochemeleon::setup_tab::do_randomize {} {
 
 # do_save -- write the current setup to a .bcm file via the mol bridge
 # (BTN-03; LOCKED DECISION #1 -- key-value format, NOT [list]+source).
+#
+# Issue 1 fix: BEFORE saving, run the collected widget state through
+# validate_state. If clamping occurred (collected != validated), show a popup
+# warning detailing what changed, apply_state the validated dict (so the
+# WIDGETS reflect the clamped values immediately), and save the VALIDATED state.
+# This makes save->load perfectly consistent (the saved file contains the same
+# values the user sees on screen after the warning). Covers the entry-typing
+# bypass (the spinbox -to only clamps arrow clicks, not direct text entry -- a
+# future minor UX refinement could add -validatecmd to the entry; this popup is
+# the immediate safety net).
 proc ::biochemeleon::setup_tab::do_save {} {
     variable w
+    variable current_molid
     set fname [tk_getSaveFile -defaultextension ".bcm" \
         -title "Save bioCHEMeleon Setup" \
         -filetypes [list {{bioCHEMeleon} {.bcm}} {{All files} {*}}] \
         -parent $w]
     if {$fname eq ""} { return }
-    if {[catch {::biochemeleon::demos::save_setup [collect_state] $fname} err]} {
+    # Collect the widget state + validate it against the current molecule's cap.
+    set collected [collect_state]
+    set atom_count 0
+    if {[info exists current_molid] && $current_molid ne ""} {
+        set atom_count [::biochemeleon::demos::atom_count $current_molid]
+    }
+    set validated [::biochemeleon::setup_state::validate_state $collected $atom_count]
+    # Both dicts are in DEFAULTS key order, so `eq` (string comparison) is a
+    # reliable equality check (Pitfall 5: tcl dict eq is ORDER-SENSITIVE, but
+    # the order matches here). If they differ, build a human-readable diff.
+    if {$collected eq $validated} {
+        set toSave $collected
+    } else {
+        set msg "Some values were out of range and have been adjusted:\n\n"
+        # Compare scalar keys; build a human-readable line for each difference.
+        foreach key {target_mode pdb_code demo_id hider_count lock_scene difficulty_easy lock_source} {
+            set cv [_dget $collected $key ""]
+            set vv [_dget $validated $key ""]
+            if {$cv ne $vv} {
+                switch -- $key {
+                    target_mode     { set label "Target mode" }
+                    pdb_code        { set label "PDB code" }
+                    demo_id         { set label "Demo" }
+                    hider_count     { set label "Hider count" }
+                    lock_scene      { set label "Lock scene" }
+                    difficulty_easy { set label "Difficulty" }
+                    lock_source     { set label "Lock source" }
+                    default         { set label $key }
+                }
+                append msg "$label: $cv -> $vv\n"
+            }
+        }
+        # per_rep: if the sub-dict differs, report as a single line.
+        set pc [_dget $collected per_rep [dict create]]
+        set pv [_dget $validated per_rep [dict create]]
+        if {$pc ne $pv} {
+            append msg "Per-rep counts: adjusted to fit the hider count total\n"
+        }
+        append msg "\nThe saved file will contain the adjusted (valid) values."
+        tk_messageBox -icon info -parent $w -title "Values Adjusted" -message $msg
+        # Update widgets to reflect the clamped state so the screen matches the
+        # saved file.
+        apply_state $validated
+        set toSave $validated
+    }
+    if {[catch {::biochemeleon::demos::save_setup $toSave $fname} err]} {
         tk_messageBox -icon warning -parent $w -message "Save failed: $err"
     }
 }
