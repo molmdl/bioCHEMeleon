@@ -42,7 +42,7 @@ namespace eval ::biochemeleon::setup_state {
     # Export the public symbols so callers may `namespace import` them.
     # Tests and the entry script use fully-qualified names; the export
     # list documents the public contract.
-    namespace export GAME_REPS SETUP_FORMAT DEFAULTS DEMO_MANIFEST hider_count_cap validate_state randomize_state randomize_per_rep
+    namespace export GAME_REPS SETUP_FORMAT DEFAULTS DEMO_MANIFEST hider_count_cap validate_state randomize_state randomize_per_rep format_remaining
 }
 
 # Hider-count cap (port of v1 setup_state.py:233-244).
@@ -290,4 +290,36 @@ proc ::biochemeleon::setup_state::randomize_state {{seed {}} {atom_count {}} {lo
         difficulty_easy $difficulty_easy \
         lock_source     [_to_bool $lock_source] \
         pdb_pool        [_validate_pdb_pool $pdb_pool]]
+}
+
+# ---- Remaining-hiders label formatter (Phase 16 GAME-03) ----
+# Port of v1 setup_state.py:418-447 (pure; no viewer API, no GUI toolkit).
+# The Game tab's update_remaining writes the returned string straight onto
+# its remaining-count label.
+#
+# Format: "Remaining: %d" in hard mode; in easy mode with a NON-EMPTY
+# counts dict, "Remaining: %d  (Rep: n, ...)" -- EXACTLY TWO SPACES before
+# the opening paren, entries in GAME_REPS order (never dict insertion
+# order), count > 0 only, comma-space separated. An empty counts dict (or
+# an all-zero win state) yields the total-only form so the label never
+# shows an empty parenthetical. Unknown rep keys are skipped defensively:
+# iteration runs over GAME_REPS, never over the input dict.
+proc ::biochemeleon::setup_state::format_remaining {total counts_by_rep easy_mode} {
+    variable GAME_REPS
+    if {![_to_bool $easy_mode] || [catch {dict size $counts_by_rep}] || [dict size $counts_by_rep] == 0} {
+        return "Remaining: $total"
+    }
+    set parts [list]
+    foreach rep $GAME_REPS {
+        if {[dict exists $counts_by_rep $rep]} {
+            set cnt [dict get $counts_by_rep $rep]
+            if {[string is integer -strict $cnt] && $cnt > 0} {
+                lappend parts "$rep: $cnt"
+            }
+        }
+    }
+    if {[llength $parts] == 0} {
+        return "Remaining: $total"
+    }
+    return "Remaining: $total  ([join $parts {, }])"
 }
