@@ -72,6 +72,75 @@ test reconstruct_with_bound_arg_lambda {} -body {
          [::biochemeleon::registry::count_hiders]
 } -result {1 1 2}
 
+# ---- Phase 16 additions: found-state surface (status_of / count_remaining /
+# ---- remaining_by_rep) + the optional rep arg on reconstruct_from_sentinels.
+
+# 2-arg reconstruct stamps every record with the given rep ("VDW" = the
+# Phase-16 sphere tier's GAME_REPS name). status_of + remaining_by_rep see it.
+test reconstruct_with_rep_arg {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 6} }}] "VDW"
+    list [expr {[::biochemeleon::registry::status_of 5] eq "hidden"}] \
+         [expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create VDW 2]}]
+} -result {1 1}
+
+test status_of_unregistered_is_empty {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return [list] }}]
+    ::biochemeleon::registry::status_of 999
+} -result {}
+
+test status_of_after_mark_found {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    ::biochemeleon::registry::mark_found 5
+    ::biochemeleon::registry::status_of 5
+} -result {found}
+
+test count_remaining_counts_hidden_only {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 10 15} }}]
+    ::biochemeleon::registry::mark_found 5
+    ::biochemeleon::registry::count_remaining
+} -result 2
+
+test count_remaining_after_reset {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {1 2} }}]
+    ::biochemeleon::registry::reset
+    ::biochemeleon::registry::count_remaining
+} -result 0
+
+test remaining_by_rep_groups_and_sums {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {1 2 3} }}] "VDW"
+    ::biochemeleon::registry::mark_found 1
+    set sum 0
+    dict for {r c} [::biochemeleon::registry::remaining_by_rep] { incr sum $c }
+    list [expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create VDW 2]}] \
+         [expr {$sum eq [::biochemeleon::registry::count_remaining]}]
+} -result {1 1}
+
+# 1-arg reconstruct leaves rep "" — per-rep remaining skips those records even
+# though the total hidden count is non-zero (v1 registry.py:274-295 parity).
+test remaining_by_rep_skips_empty_rep {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {3 4} }}]
+    list [expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create]}] \
+         [::biochemeleon::registry::count_remaining]
+} -result {1 2}
+
+# mark_found is a silent idempotent overwrite (probe F19) — double-marking
+# neither errors nor double-decrements; the three-way guard lives in the caller.
+test mark_found_idempotent {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 6} }}] "VDW"
+    set rc [catch {::biochemeleon::registry::mark_found 5} err]
+    ::biochemeleon::registry::mark_found 5
+    list $rc [::biochemeleon::registry::count_remaining] [::biochemeleon::registry::is_hider 5]
+} -result {0 1 1}
+
+# The original 1-arg call form keeps working (backward-compat proof):
+# records exist and are counted hidden, but remaining_by_rep is empty (rep "").
+test one_arg_reconstruct_still_works {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {42} }}]
+    list [::biochemeleon::registry::is_hider 42] \
+         [expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create]}] \
+         [::biochemeleon::registry::count_remaining]
+} -result {1 1 1}
+
 # CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
 # Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
 # ($? is always 0 from VMD), so the harness MUST parse this marker line.
