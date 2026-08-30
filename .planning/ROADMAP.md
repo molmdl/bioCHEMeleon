@@ -89,11 +89,11 @@ Plans:
 4. Viewpoint and rep list are saved before mutation and restored on the new molid after reload (viewmaster-style save/restore round-trip).
 
 Plans:
-- [ ] 15-01-PLAN.md — Pure-layer registry real logic (count_hiders + reset) via TDD + tcltest under headless VMD [SC3]
-- [ ] 15-02-PLAN.md — mutation.tcl mol bridge: PDB-rebuild engine (5 procs) + headless smoke [SC1, SC3-DI]
-- [ ] 15-03-PLAN.md — backup.tcl mol bridge: viewpoint + rep save/restore on a NEW molid (snapshot/apply/restore) + headless smoke [SC2, SC4]
-- [ ] 15-04-PLAN.md — game.tcl composition root (start/cleanup/restart) + wire entry source order + headless smoke [SC2, SC3, SC4 integration]
-- [ ] 15-05-PLAN.md — Phase-15 capstone smoke: full backup→mutate→reconstruct→cleanup→restore pipeline proving SC1-SC4 end-to-end
+- [x] 15-01-PLAN.md — Pure-layer registry real logic (count_hiders + reset) via TDD + tcltest under headless VMD [SC3] — completed 2026-08-30
+- [x] 15-02-PLAN.md — mutation.tcl mol bridge: PDB-rebuild engine (5 procs) + headless smoke [SC1, SC3-DI] — completed 2026-08-30
+- [x] 15-03-PLAN.md — backup.tcl mol bridge: viewpoint + rep save/restore on a NEW molid (snapshot/apply/restore) + headless smoke [SC2, SC4] — completed 2026-08-30
+- [x] 15-04-PLAN.md — game.tcl composition root (start/cleanup/restart) + wire entry source order + headless smoke [SC2, SC3, SC4 integration] — completed 2026-08-30
+- [x] 15-05-PLAN.md — Phase-15 capstone smoke: full backup→mutate→reconstruct→cleanup→restore pipeline proving SC1-SC4 end-to-end — completed 2026-08-30 (verification PASSED 4/4 SCs)
 
 ### Phase 16: MVP Core Loop (Sphere) ⚠️ PICK MECHANISM HUMAN-VERIFY
 
@@ -247,7 +247,7 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 13. Bootstrap & Sourced Entry | v2.0 | 2/2 | ✓ Complete | 2026-08-29 |
 | 14. Setup Tab & Bundled Demos | v2.0 | 4/4 | ✓ Complete | 2026-08-29 |
-| 15. Mutation Safety & Hider Registry | v2.0 | 0/5 | Not started | - |
+| 15. Mutation Safety & Hider Registry | v2.0 | 5/5 | ✓ Complete | 2026-08-30 |
 | 16. MVP Core Loop (Sphere) | v2.0 | 0/TBD | Not started | - |
 | 17.1. Rep Setup Infrastructure & Simple Rep Generators | v2.0 | 0/TBD | Not started | - |
 | 17.2. Cartoon/NewCartoon Generators | v2.0 | 0/TBD | Not started | - |
@@ -259,4 +259,4 @@ Plans:
 | 23. Documentation (Multi-viewer READMEs) | v2.0 | 0/TBD | Not started | - |
 
 ---
-*Roadmap updated: 2026-08-29 (Phase 13 complete; revised 2026-08-22: Phase 17 split into 17.1/17.2 by generator complexity tier, Phase 23 docs added) for milestone v2.0 (VMD tcl port). v1 archived to `milestones/v1-ROADMAP.md`.*
+*Roadmap updated: 2026-08-30 (Phase 15 complete — HIGHEST RISK de-risked; revised 2026-08-22: Phase 17 split into 17.1/17.2 by generator complexity tier, Phase 23 docs added) for milestone v2.0 (VMD tcl port). v1 archived to `milestones/v1-ROADMAP.md`.*

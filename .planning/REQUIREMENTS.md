@@ -36,8 +36,8 @@ Requirements for the VMD 1.9.3 tcl port. Each maps to exactly one roadmap phase 
 
 ### Hider Generation
 
-- [ ] **HIDER-01**: Hider generation via PDB-rebuild (Option D) — write a combined PDB (real + hider atoms with strict column alignment), `mol new` reload as a single molecule; hiders live in the SAME molecule as real atoms (player can't isolate them by toggling molecule visibility)
-- [ ] **HIDER-02**: Hider sentinel `resname=GAM` + `beta=-999` + `segid=GAME` set in-place via `atomselect` after load (robust against PDB column bugs); hider registry keyed by atom `index` (stable within a molid's lifetime), reconstructable from sentinels on reload
+- [x] **HIDER-01**: Hider generation via PDB-rebuild (Option D) — write a combined PDB (real + hider atoms with strict column alignment), `mol new` reload as a single molecule; hiders live in the SAME molecule as real atoms (player can't isolate them by toggling molecule visibility)
+- [x] **HIDER-02**: Hider sentinel `resname=GAM` + `beta=-999` + `segid=GAME` set in-place via `atomselect` after load (robust against PDB column bugs); hider registry keyed by atom `index` (stable within a molid's lifetime), reconstructable from sentinels on reload
 - [ ] **HIDER-03**: Sphere/VDW hiders — place anywhere in the bounding region (simplest generator; MVP)
 - [ ] **HIDER-04**: Line/Licorice hiders — new atoms mimic connected atoms or alternate positions
 - [ ] **HIDER-05**: Cartoon/NewCartoon hiders — splice a full residue (Cα + neighbors) with `mol ssrecalc`, OR use Tube/Trace as SS-independent alternatives to sidestep the STRIDE `ss='L'` caveat for fake `GAM` residues
@@ -121,8 +121,8 @@ Which phases cover which requirements. v2.0 phases are numbered 13-23 (continuin
 | BTN-03 | Phase 14 | Complete |
 | BTN-04 | Phase 14 | Complete |
 | DEMO-01 | Phase 14 | Complete |
-| HIDER-01 | Phase 15 | Pending |
-| HIDER-02 | Phase 15 | Pending |
+| HIDER-01 | Phase 15 | Complete |
+| HIDER-02 | Phase 15 | Complete |
 | HIDER-03 | Phase 16 | Pending |
 | LOOP-01 | Phase 16 | Pending |
 | LOOP-02 | Phase 16 | Pending |
