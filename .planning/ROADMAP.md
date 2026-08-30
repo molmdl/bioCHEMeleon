@@ -100,7 +100,7 @@ Plans:
 **Goal**: The player can play a complete hide-and-seek round with sphere hiders — the PROJECT.md core value. If nothing else works, this loop works. The VMD pick-callback contract is locked here via a GUI human-verify checkpoint.
 **Depends on**: Phase 14 (Setup tab + demos), Phase 15 (mutation safety)
 **Requirements**: HIDER-03, LOOP-01, LOOP-02, LOOP-03, BTN-07, GAME-01, GAME-02, GAME-03
-**Plans**: TBD
+**Plans**: 12 plans
 
 **Success Criteria** (what must be TRUE):
 1. Clicking Start generates sphere hiders per setup (PDB-rebuild), switches to the Game tab, counts down 3-2-1, and starts the timer.
@@ -110,7 +110,18 @@ Plans:
 5. A pick-vs-rotate control is available so the player can rotate the view between picks (VMD pick/rotate are mutually exclusive mouse modes).
 
 Plans:
-- [ ] 16-01: TBD
+- [ ] 16-01-PLAN.md — Pure sphere-position sampler `generators.tcl` (TDD, 8 cases)
+- [ ] 16-02-PLAN.md — Registry found-state surface: status_of / count_remaining / remaining_by_rep + rep arg (TDD)
+- [ ] 16-03-PLAN.md — Pure game_logic.tcl: idle→countdown→playing→won state machine + drift-free timer + log model (TDD)
+- [ ] 16-04-PLAN.md — setup_state format_remaining (GAME-03 display string) (TDD)
+- [ ] 16-05-PLAN.md — hiders.tcl mol bridge: hidden/found VDW reps + user2 found-marking with modselect re-assert (+ smoke)
+- [ ] 16-06-PLAN.md — pick_bridge.tcl: trace ::vmd_pick_event + mouse mode pick 2 + label hygiene (+ headless machinery smoke)
+- [ ] 16-07-PLAN.md — make_placeholder_hiders body-swap to real bbox placement (measure minmax + sampler) (+ smoke)
+- [ ] 16-08-PLAN.md — game.tcl controller: hider-rep step in start_game + on_pick three-way guard + win flow + callbacks (+ smoke)
+- [ ] 16-09-PLAN.md — game_tab.tcl GUI: countdown/timer/log/remaining/win + Rotate-Pick radios + after-discipline (+ load-gate smoke)
+- [ ] 16-10-PLAN.md — Entry/dialog wiring: source order, Game-tab build, BTN-07 Start + on_start fan-in, on_close cleanup (+ load gate)
+- [ ] 16-11-PLAN.md — Phase-16 headless capstone: full loop end-to-end through the public surface + regression sweep
+- [ ] 16-12-PLAN.md — GUI human-verify checkpoint: LOCK the pick contract (9-step session) + post-lock doc updates
 
 ### Phase 17.1: Rep Setup Infrastructure & Simple Rep Generators
 
