@@ -7,9 +7,26 @@
 # "After the lock").
 #
 # WHAT THIS IS: a SOURCE-ONCE checklist for a REAL VMD GUI session. Sourcing
-# it prints step prompts (vmdcon -info) + the exact one-liners to paste into
-# the Tk console, and defines small pv_* helper procs for state dumps.
+# it prints step prompts (vmdcon -info) + the exact paste blocks for the Tk
+# console, and defines small pv_* helper procs for state dumps.
 # IT EXECUTES NO STEPS ITSELF -- every step needs a human with a real mouse.
+#
+# RE-VERIFY EDITION (16-12 session-1 lessons, 2026-08-30 -- see
+# .planning/phases/16-mvp-core-loop-sphere/16-VERIFICATION.md):
+#   - STEP 2 uses a TWO-PASTE observer (a multi-line proc block + one short
+#     trace line). The session-1 ONE-LINER had its [info exists ...] split by
+#     a terminal wrap during copy -> a newline inside the bracketed
+#     substitution parses as a command separator -> the apply body errored on
+#     every fire -> output swallowed (step 2 ruled INCONCLUSIVE, not a
+#     disproof). Every printed line here is kept SHORT (< ~70 cols) so a
+#     terminal wrap can never split a bracketed substitution.
+#   - STEP 4 is now an explicit `mouse callback` off/on two-click A/B test
+#     (session-1 leading hypothesis: finds correlated with VMD's `User Pick:`
+#     output, i.e. callback ON; UG 9.3.23 documents only callback on/off --
+#     no query form -- so the test SETS the state before each click).
+#   - STEP 9c uses the console helper pv_cleanup (the Game tab has NO Cleanup
+#     button in the MVP -- Phase 19 scope; session-1 step 9c was over-reach).
+#     pv_state stashes the round's game_state (::pv_gs) right after Start.
 #
 # HEADLESS SAFETY: the WHOLE body lives inside `if {[info exists
 # ::tk_version]}`. A top-level `return` guard is NOT sufficient: under
@@ -73,7 +90,14 @@ proc pv_game_mol {} {
 # pv_state -- the all-purpose dump (STEP 1 post-Start and STEP 9 pre-cleanup):
 # mouse globals, pick_bridge vars, game_logic state/timer, registry remaining,
 # hider indices, and the two hider reps (shown-state + selection + color).
+# Also STASHES the round's game_state (::pv_gs) for pv_cleanup (STEP 9c):
+# idempotent -- the FIRST dump after Start captures it while game_tab's
+# variable is live; pv_cleanup falls back to the live value if unset.
 proc pv_state {} {
+    if {![info exists ::pv_gs]
+            && [info exists ::biochemeleon::game_tab::game_state]} {
+        set ::pv_gs $::biochemeleon::game_tab::game_state
+    }
     set L [list "--- bioCHEMeleon pick-verify state dump ---"]
     # Mouse globals + pick bridge.
     if {[info exists ::vmd_mouse_mode]} {
@@ -181,6 +205,48 @@ proc pv_release_labels {} {
     }
     set ::biochemeleon::pick_bridge::label_base $::pv_saved_base
     vmdcon -info "pv: baseline restored to $::pv_saved_base -- the held label will be auto-cleaned on the next processed pick or at Cleanup."
+    return
+}
+
+# pv_callback_state -- STEP 4 helper: report the `mouse callback` state before
+# each A/B click. UG 9.3.23 documents ONLY `callback on/off` (no query form),
+# so the query below is belt-and-suspenders and must NEVER be load-bearing:
+# the A/B test SETS the state explicitly right before each click (off before
+# click A, on before click B), which is what makes the comparison valid even
+# if this query is unsupported (or has side effects) on some builds.
+proc pv_callback_state {} {
+    if {[catch {mouse callback} st]} {
+        vmdcon -info {pv: 'mouse callback' has no query form (UG 9.3.23 documents only on/off) -- the state is what STEP 4 just SET: OFF before click A, ON before click B.}
+    } else {
+        vmdcon -info "pv: mouse callback = $st"
+    }
+    return
+}
+
+# pv_cleanup -- STEP 9c console cleanup (the MVP-era path: the Game tab has
+# NO Cleanup button until Phase 19 -- session-1 step 9c pressed a button
+# that does not exist). Order per 16-RESEARCH-pick.md 2.5: deactivate the
+# pick bridge FIRST (idempotent -- early-returns when already inactive, e.g.
+# after a win), THEN the Phase-15 game cleanup (original molecule restored,
+# registry reset). Uses the game_state pv_state stashed right after Start
+# (::pv_gs); falls back to the live game_tab state if the stash is missing.
+proc pv_cleanup {} {
+    set gs {}
+    if {[info exists ::pv_gs]} { set gs $::pv_gs }
+    if {$gs eq {} && [info exists ::biochemeleon::game_tab::game_state]} {
+        set gs $::biochemeleon::game_tab::game_state
+    }
+    if {$gs eq {}} {
+        vmdcon -warn {pv: no game_state to clean -- press Start (STEP 1) first.}
+        return
+    }
+    catch {::biochemeleon::pick_bridge::deactivate}
+    if {[catch {::biochemeleon::game::cleanup $gs} err]} {
+        vmdcon -err "pv: cleanup failed: $err (already cleaned? a second pv_cleanup on the same round fails harmlessly)"
+        return
+    }
+    catch {unset ::pv_gs}
+    vmdcon -info {pv: CLEANUP done (pick bridge off, original molecule restored, registry reset). The Game tab may look stale -- Phase 19 owns the real button. Now paste:  pv_cleanup_check}
     return
 }
 
@@ -296,7 +362,8 @@ vmdcon -info {  b. On the Setup tab: set Hider count to 3, then press Start.}
 vmdcon -info {  c. WATCH during Start: the 3-2-1 countdown in the Game tab log,}
 vmdcon -info {     then GO -- and check the VMD menu Mouse: it should now show}
 vmdcon -info {     Pick -> Pick Atom selected (clicking an atom creates a label).}
-vmdcon -info {  d. After GO, paste:  pv_state}
+vmdcon -info {  d. After GO, paste:  pv_state   (this dump also STASHES the}
+vmdcon -info {     round's game_state -- pv_cleanup needs it in STEP 9c)}
 vmdcon -info {Record: did the mouse switch to pick mode? Did the Game tab activate}
 vmdcon -info {and the timer start at GO? Paste the pv_state dump into VERIFICATION.md.}
 # EXPECTED: Mouse menu shows Pick -> Pick Atom; Game tab active with
@@ -309,20 +376,41 @@ vmdcon -info {and the timer start at GO? Paste the pv_state dump into VERIFICATI
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {== STEP 2 of 9 -- THE LOCK: does a real click fire the trace?}
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {Paste this ONE line into the Tk console (an observer trace that}
-vmdcon -info {coexists with the game's own; leave it registered for steps 3-9):}
-vmdcon -info {trace add variable ::vmd_pick_event write {apply {{args} {global vmd_pick_atom vmd_pick_mol vmd_pick_shift_state; vmdcon -info "PICK ev=$args atom=$vmd_pick_atom mol=$vmd_pick_mol shift=[info exists vmd_pick_shift_state]"}}}}
+vmdcon -info {TWO-PASTE observer (session-1 lesson: the old ONE-LINER had its}
+vmdcon -info {'info exists' query split by a terminal wrap during copy, which}
+vmdcon -info {silently broke the observer -- keep every paste SHORT).}
+vmdcon -info {Paste 1 of 2 -- the observer proc. Paste the WHOLE block as ONE}
+vmdcon -info {piece (ignore the Info) label the console prints; if the console}
+vmdcon -info {echoes an error, re-paste this ONE block before clicking):}
+vmdcon -info {proc pv_observe {args} {
+    global vmd_pick_atom vmd_pick_mol vmd_pick_shift_state
+    set a "?"
+    catch {set a $vmd_pick_atom}
+    set m "?"
+    catch {set m $vmd_pick_mol}
+    set s "?"
+    catch {set s [info exists vmd_pick_shift_state]}
+    vmdcon -info "PICK ev=$args"
+    vmdcon -info "PICK atom=$a mol=$m shift=$s"
+}}
+vmdcon -info {Paste 2 of 2 -- register it (one SHORT line; leave it registered}
+vmdcon -info {for steps 3-9 -- it coexists with the game's own trace):}
+vmdcon -info {trace add variable ::vmd_pick_event write pv_observe}
 vmdcon -info {Then click a hider VDW sphere (see the HIDER indices in your pv_state}
 vmdcon -info {dump; if a sphere is hard to spot, click ANY atom -- the trace fires}
 vmdcon -info {for any pick, and the Game tab log tells you hit vs miss).}
-vmdcon -info {Record: did a line 'PICK ev=...' appear? Copy it EXACTLY: the ev=}
-vmdcon -info {args triple, atom=<index> (expect a 0-based index; a hider hit is}
-vmdcon -info {one of the HIDER indices), mol=<molid> (expect the game molid),}
-vmdcon -info {shift=1/0 (press+hold Shift for one of the clicks to see shift=1).}
+vmdcon -info {Record: did TWO lines appear per click -- 'PICK ev=...' AND 'PICK}
+vmdcon -info {atom=... mol=... shift=...'? Copy them EXACTLY: the ev= args triple,}
+vmdcon -info {atom=<index> (expect a 0-based index; a hider hit is one of the}
+vmdcon -info {HIDER indices), mol=<molid> (expect the game molid), shift=1/0}
+vmdcon -info {(press+hold Shift for one of the clicks to see shift=1). If SOME}
+vmdcon -info {clicks print NO PICK lines, note exactly which -- STEP 4 tests why.}
 # EXPECTED (this single step locks Mechanism A -- trace ::vmd_pick_event):
-# one 'PICK ev=::vmd_pick_event {} write' line per click; vmd_pick_atom =
-# 0-based atom index; vmd_pick_mol = the game molid; shift present (0, or 1
-# with Shift held). A hider click ALSO logs 'Found one! N remaining'.
+# two 'PICK ...' lines per click; vmd_pick_atom = 0-based atom index;
+# vmd_pick_mol = the game molid; shift present (0, or 1 with Shift held).
+# A hider click ALSO logs 'Found one! N remaining'. The observer body is
+# catch-guarded per value (prints ? instead of erroring) so a missing
+# global can NEVER swallow the output the way session-1's apply did.
 
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {== STEP 3 of 9 -- submode check: query mode (pick 0)}
@@ -336,15 +424,28 @@ vmdcon -info {(or click the Pick radio on the Game tab panel).}
 # be dead there). Either answer is fine -- record what you saw.
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== STEP 4 of 9 -- mouse callback independence}
+vmdcon -info {== STEP 4 of 9 -- THE CALLBACK HYPOTHESIS (two-click A/B test)}
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {Paste:  mouse callback off}
-vmdcon -info {(This is VMD's default state; this step proves it stays default.)}
-vmdcon -info {Click an atom again. Record: did PICK still fire? Did the find work?}
-# EXPECTED: still fires -- www.tcl (VMD's own pick consumer) never enables
-# mouse callback, and UG 9.3.23 says callback gates only the HOVER
-# (_silent) variables. If a click only fired WITH callback on, PickBridge
-# must add `mouse callback on` at activate (Task 3 decision table).
+vmdcon -info {Session-1 hypothesis: finds worked only when VMD printed 'User}
+vmdcon -info {Pick: molN atomN' lines (mouse callback ON); callback-off clicks}
+vmdcon -info {gave labels without finds. THIS 2-CLICK TEST DECIDES IT.}
+vmdcon -info {A. Paste:  mouse callback off}
+vmdcon -info {   Paste:  pv_callback_state}
+vmdcon -info {   Click ONE UNFOUND hider sphere.}
+vmdcon -info {   Record: PICK line? find worked? 'User Pick:' line in console?}
+vmdcon -info {B. Paste:  mouse callback on}
+vmdcon -info {   Paste:  pv_callback_state}
+vmdcon -info {   Click ANOTHER UNFOUND hider sphere.}
+vmdcon -info {   Record: the same three questions as A.}
+vmdcon -info {C. Restore VMD's default state:  mouse callback off}
+vmdcon -info {If B finds and A does not, PickBridge must add 'mouse callback on'}
+vmdcon -info {at activate / 'off' at deactivate (decided AFTER this re-verify).}
+# EXPECTED (research prediction): fires in BOTH states -- www.tcl (VMD's own
+# pick consumer) never enables mouse callback, and UG 9.3.23 says callback
+# gates only the HOVER (_silent) variables. The session-1 correlation
+# CONTRADICTS that prediction (finds only when 'User Pick:' lines printed),
+# so this A/B test is decisive. Record find-or-not for EACH state exactly --
+# only a B-finds/A-does-not result adds `mouse callback on` to pick_bridge.
 
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {== STEP 5 of 9 -- Rotate/Pick toggle (hotkey + panel)}
@@ -404,7 +505,12 @@ vmdcon -info {   Record: found spheres turn GREEN? Remaining counter hits 0?}
 vmdcon -info {   Timer stops? Does the 'You win!' box appear WITH the time?}
 vmdcon -info {b. After the win box, paste:  pv_state    (record timer frozen at}
 vmdcon -info {   the win time, remaining=0, state=won).}
-vmdcon -info {c. Press Cleanup (Game tab), then paste:  pv_cleanup_check}
+vmdcon -info {c. The Game tab has NO Cleanup button in the MVP (Phase 19 scope)}
+vmdcon -info {   -- session 1 pressed a button that does not exist. Use the}
+vmdcon -info {   console helper instead: paste  pv_cleanup   (deactivates the}
+vmdcon -info {   pick bridge, restores the original molecule, resets the}
+vmdcon -info {   registry -- it uses the game_state pv_state stashed at Start),}
+vmdcon -info {   then paste:  pv_cleanup_check}
 vmdcon -info {   Record: mouse mode restored to what you had before Start}
 vmdcon -info {   (fresh session: rotate / -1)? Labels back to baseline?}
 # EXPECTED: green found spheres (ColorID 7 rep), remaining 0, timer stops
