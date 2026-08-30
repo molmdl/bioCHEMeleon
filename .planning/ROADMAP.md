@@ -100,7 +100,7 @@ Plans:
 **Goal**: The player can play a complete hide-and-seek round with sphere hiders — the PROJECT.md core value. If nothing else works, this loop works. The VMD pick-callback contract is locked here via a GUI human-verify checkpoint.
 **Depends on**: Phase 14 (Setup tab + demos), Phase 15 (mutation safety)
 **Requirements**: HIDER-03, LOOP-01, LOOP-02, LOOP-03, BTN-07, GAME-01, GAME-02, GAME-03
-**Plans**: 12 plans
+**Plans**: 17 plans
 
 **Success Criteria** (what must be TRUE):
 1. Clicking Start generates sphere hiders per setup (PDB-rebuild), switches to the Game tab, counts down 3-2-1, and starts the timer.
@@ -122,6 +122,11 @@ Plans:
 - [ ] 16-10-PLAN.md — Entry/dialog wiring: source order, Game-tab build, BTN-07 Start + on_start fan-in, on_close cleanup (+ load gate)
 - [ ] 16-11-PLAN.md — Phase-16 headless capstone: full loop end-to-end through the public surface + regression sweep
 - [ ] 16-12-PLAN.md — GUI human-verify checkpoint: LOCK the pick contract (9-step session) + post-lock doc updates
+- [ ] 16-13-PLAN.md — GAP (16-VERIFICATION Truth 7): active-game guard in game.tcl start_game — auto-restart at the single choke point, no stacked generations
+- [ ] 16-14-PLAN.md — GAP (Truth 7 GUI half): dialog.tcl on_start pick-bridge teardown + game_tab start_round view reset
+- [ ] 16-15-PLAN.md — GAP (Truth 7 headless proof): phase16_restart_smoke.tcl — double-start mid-round + after-win + different-target regression gate
+- [ ] 16-16-PLAN.md — GAP (Truth 3 + Truth 7 GUI re-check): ONE GUI re-verify session (callback A/B, exact PICK values, freeze probe, pv_cleanup restore, double-Start guard)
+- [ ] 16-17-PLAN.md — GAP (Truth 3 close-out): apply the A/B verdict to pick_bridge.tcl (callback pairing or recorded non-requirement) + close the caveat in AGENTS.md/STATE.md
 
 ### Phase 17.1: Rep Setup Infrastructure & Simple Rep Generators
 
