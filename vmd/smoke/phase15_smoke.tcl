@@ -72,13 +72,16 @@ set vp_orig [list]
 set gs [list]
 
 # ---- Source the lib files in dependency order ([pwd]-relative; [info script]
-#      is empty under -e). Mirrors the entry's source order minus dialog.tcl. ----
+#      is empty under -e). Mirrors the entry's source order minus dialog.tcl.
+#      Phase 16 (16-08): hiders.tcl is sourced too -- start_game now calls
+#      hiders::add_hider_reps (call-time resolution needs the namespace). ----
 foreach {nm path} [list \
     setup_state [file join [pwd] vmd lib setup_state.tcl] \
     registry     [file join [pwd] vmd lib registry.tcl] \
     demos        [file join [pwd] vmd lib demos.tcl] \
     backup       [file join [pwd] vmd lib backup.tcl] \
     mutation     [file join [pwd] vmd lib mutation.tcl] \
+    hiders       [file join [pwd] vmd lib hiders.tcl] \
     game         [file join [pwd] vmd lib game.tcl]] {
     if {![file exists $path]} {
         _bail "${nm}_not_found" $path
@@ -156,8 +159,14 @@ if {![catch {::biochemeleon::game::start_game $orig_molid 5} gs]} {
         }
         if {[::biochemeleon::registry::is_hider 0]} { _bail is_hider_false "idx 0" }
         # SC4 forward: backup::apply restored the saved reps on the game_molid.
+        # Phase 16 (16-08): start_game now ALSO adds the 2 hider reps
+        # (hiders::add_hider_reps after apply -- research SS5.5), so the game
+        # molid carries saved_numreps + 2. The restored molid below still has
+        # EXACTLY the saved reps (cleanup restores the original, no hider reps).
         set gn [molinfo $game_molid get numreps]
-        if {$gn != $saved_numreps} { _bail game_numreps "exp=$saved_numreps got=$gn" }
+        if {$gn != $saved_numreps + 2} {
+            _bail game_numreps "exp=$saved_numreps + 2 got=$gn"
+        }
 
         # ---- 3. CLEANUP: game::cleanup -> restore the original + reset the
         #      registry (backup::restore $snapshot $game_molid + registry::reset). ----
