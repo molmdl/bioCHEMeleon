@@ -142,18 +142,37 @@ proc ::biochemeleon::game_tab::build {parent} {
 
 # ---------------------------------------------------------------------------
 # start_round {game_state} -- entry from the Start handler (Plan 16-10).
-# Sequence: stop_all_timers FIRST (defensive restart parity) -> stash the
-# round state -> register the controller callbacks -> reset the pure model +
-# arm the countdown -> clear the log view + log "Get ready..." -> pull the
-# remaining count ONCE (GAME-03 initial display) -> fire the first countdown
-# step DIRECTLY (no delay for "3" -- v1 parity).
+# Sequence: stop_all_timers FIRST (defensive restart parity) -> reset the
+# PREVIOUS round's stale view state (16-14: the frozen timer and the pick
+# mouse-mode indicators cannot leak into the new countdown window) -> stash
+# the round state -> register the controller callbacks -> reset the pure
+# model + arm the countdown -> clear the log view + log "Get ready..." ->
+# pull the remaining count ONCE (GAME-03 initial display) -> fire the first
+# countdown step DIRECTLY (no delay for "3" -- v1 parity).
 # ---------------------------------------------------------------------------
 proc ::biochemeleon::game_tab::start_round {game_state} {
     variable w
+    variable timer_text
+    variable mode_text
+    variable mouse_mode
 
     # 1. Defensive first: cancel any pending timers (Restart mid-game /
     #    repeated Start; v1 gui_game.py:285 "stop any prior timer").
     stop_all_timers
+
+    # 1.5 (16-14, gap-1 GUI half): reset the PREVIOUS round's view state so
+    # it cannot leak into the new round's countdown window: the frozen timer
+    # and the pick mouse-mode indicators (the bridge is DOWN until GO --
+    # on_start deactivated it; the panel must reflect reality). The observed
+    # double-Start session left the frozen "5:14" timer and "Mouse: Pick"
+    # panel showing during the new countdown while the bridge was down.
+    # remain_text needs no reset (update_remaining runs in step 6) and the
+    # log is already cleared in step 5. Programmatic variable sets do NOT
+    # fire -command (no viewer call happens -- see the countdown_step
+    # GO-branch note).
+    set timer_text "0:00"
+    set mode_text "Mouse: Rotate"
+    set mouse_mode "rotate"
 
     # 2. Stash the round state. NOTE: the parameter shadows the namespace var
     #    of the same name (the setup_tab::select_demo lesson, Pitfall 7 --
