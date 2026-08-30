@@ -59,37 +59,50 @@ namespace eval ::biochemeleon {
 package provide biochemeleon $::biochemeleon::version
 
 # ---------------------------------------------------------------------------
-# (4) Source the pure layer (BOTH files -- 13-01 created both).
+# (4) Source the pure layer (BOTH Phase-13 files + the two Phase-16 pure
+# modules).
 # `[file dirname [info script]]` works because this entry is always SOURCED
 # (by the smoke, by .vmdrc, by the user), never -e'd directly in tests, so
 # [info script] is correctly set inside it (Pitfall 3 in 13-RESEARCH-testing.md).
-# NOTE: the 13-RESEARCH-entry.md skeleton only sourced setup_state.tcl; this
-# plan ADDS the registry.tcl line (13-01 created both pure-layer files).
 # Use ::biochemeleon::setup_state (NOT ::biochemeleon::setup) -- locked decision.
+# Phase 16 (Plan 10) added the PURE game-loop modules to this block:
+# generators (16-01, sphere placement sampler) + game_logic (16-03, round
+# state machine / timer / log model). Both are stdlib-only (no mol, no Tk).
 # ---------------------------------------------------------------------------
 set _dir [file dirname [info script]]
 source [file join $_dir lib setup_state.tcl]
 source [file join $_dir lib registry.tcl]
-# Phase 14 + Phase 15: source the mol bridges + composition root + the GUI layer.
+source [file join $_dir lib generators.tcl]
+source [file join $_dir lib game_logic.tcl]
+# Phase 14 + Phase 15 + Phase 16: source the mol bridges + composition root +
+# the GUI layer.
 # Phase 14 added demos.tcl (mol bridge, Plan 02) + gui/dialog.tcl (Plan 03;
-# dialog.tcl in turn sources gui/setup_tab.tcl). The GUI needs the mol bridge
-# for every molecule operation (load_demo, save/load_setup, atom_count,
-# list_loaded_molecules, get_active_reps).
+# dialog.tcl in turn sources gui/setup_tab.tcl AND gui/game_tab.tcl). The GUI
+# needs the mol bridge for every molecule operation (load_demo, save/load_setup,
+# atom_count, list_loaded_molecules, get_active_reps).
 # Phase 15 added backup.tcl + mutation.tcl (mol bridges, Plans 03/02) +
 # game.tcl (composition root, Plan 04) in dependency order AFTER demos.tcl and
 # BEFORE gui/dialog.tcl.
-# Order matters: setup_state (pure) -> registry (pure) -> demos (mol bridge,
-# sources setup_state) -> backup (mol) -> mutation (mol) -> game (composition
-# root, references backup+mutation+registry namespaces -- sourced after them) ->
-# dialog (GUI, sources setup_tab which uses both).
-source [file join $_dir lib demos.tcl]
-# Phase 15: mol bridges + composition root (dep order: backup, mutation, game).
-# registry.tcl is sourced ONCE above -- backup/mutation/game do NOT re-source it
+# Phase 16 (Plan 10) added hiders.tcl (16-05, the 2-rep found-visual layer --
+# after mutation.tcl it depends on nothing but is called by game.tcl) and
+# pick_bridge.tcl (16-06, the click-to-find bridge -- after game.tcl, whose
+# on_pick it forwards to).
+# Order matters: setup_state (pure) -> registry (pure) -> generators (pure) ->
+# game_logic (pure) -> demos (mol bridge, sources setup_state) -> backup (mol)
+# -> mutation (mol; also re-sources setup_state + generators itself, harmless
+# constant re-init) -> hiders (mol) -> game (composition root, references
+# backup+mutation+registry+hiders+game_logic namespaces -- sourced after them)
+# -> pick_bridge (mol bridge; forwards picks to game::on_pick at CALL time) ->
+# dialog (GUI, sources setup_tab + game_tab which use the above).
+# registry is sourced EXACTLY ONCE here -- no module below re-sources it
 # (re-sourcing would WIPE a populated _records dict). game.tcl references
 # ::biochemeleon::registry::* at CALL time (proc resolution is call-time in tcl).
+source [file join $_dir lib demos.tcl]
 source [file join $_dir lib backup.tcl]
 source [file join $_dir lib mutation.tcl]
+source [file join $_dir lib hiders.tcl]
 source [file join $_dir lib game.tcl]
+source [file join $_dir lib pick_bridge.tcl]
 source [file join $_dir gui dialog.tcl]
 unset _dir
 
