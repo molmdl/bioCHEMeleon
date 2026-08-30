@@ -24,10 +24,13 @@
 #
 # Sources the lib files in dependency order (mirrors the entry, NOT the entry
 # itself -- avoids GUI/dialog baggage): setup_state, registry, demos, backup,
-# mutation, game. registry is sourced EXACTLY ONCE (re-sourcing would WIPE
-# _records); demos + mutation re-source setup_state themselves (harmless
+# mutation, hiders, game. registry is sourced EXACTLY ONCE (re-sourcing would
+# WIPE _records); demos + mutation re-source setup_state themselves (harmless
 # constant re-init). mutation.tcl sources generators.tcl itself (the 16-07
-# source line -- exercising it here IS part of the test).
+# source line -- exercising it here IS part of the test). hiders.tcl is
+# sourced since the 16-08 start_game hider-rep step (research SS5.5):
+# start_game calls hiders::add_hider_reps at CALL time, so the namespace must
+# exist before the first start_game call.
 #
 # -e'd by VMD -> [info script] is EMPTY (Phase 13 Pitfall 3) -> use [pwd]
 # (VMD cwd = staging root) to locate the lib files. VMD does NOT propagate
@@ -64,6 +67,7 @@ foreach {nm path} [list \
     demos        [file join [pwd] vmd lib demos.tcl] \
     backup       [file join [pwd] vmd lib backup.tcl] \
     mutation     [file join [pwd] vmd lib mutation.tcl] \
+    hiders       [file join [pwd] vmd lib hiders.tcl] \
     game         [file join [pwd] vmd lib game.tcl]] {
     if {![file exists $path]} {
         _bail "${nm}_not_found" $path
