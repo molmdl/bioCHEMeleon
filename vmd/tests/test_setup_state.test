@@ -276,6 +276,38 @@ test randomize_state_per_rep_non_empty_when_hider_count_positive {} -body {
     set ok
 } -result 1
 
+# ---------------------------------------------------------------------------
+# Phase 16 (GAME-03): format_remaining — pure remaining-count formatter.
+# Port of v1 setup_state.py:418-447. Exact-string assertions: TWO spaces
+# before the opening paren, GAME_REPS order wins over dict insertion order,
+# >0 counts only, unknown rep keys skipped, hard mode / empty counts /
+# all-zero counts -> total-only form.
+# ---------------------------------------------------------------------------
+
+test format_remaining_hard_mode {} -body {
+    ::biochemeleon::setup_state::format_remaining 3 [dict create] 0
+} -result {Remaining: 3}
+
+test format_remaining_easy_no_counts {} -body {
+    ::biochemeleon::setup_state::format_remaining 3 [dict create] 1
+} -result {Remaining: 3}
+
+test format_remaining_easy_single_rep {} -body {
+    ::biochemeleon::setup_state::format_remaining 5 [dict create VDW 5] 1
+} -result {Remaining: 5  (VDW: 5)}
+
+test format_remaining_easy_multi_rep_game_reps_order {} -body {
+    ::biochemeleon::setup_state::format_remaining 7 [dict create VDW 4 Lines 3] 1
+} -result {Remaining: 7  (Lines: 3, VDW: 4)}
+
+test format_remaining_ignores_zero_and_unknown {} -body {
+    ::biochemeleon::setup_state::format_remaining 4 [dict create VDW 0 Lines 4 Bogus 9] 1
+} -result {Remaining: 4  (Lines: 4)}
+
+test format_remaining_easy_all_zero_total_only {} -body {
+    ::biochemeleon::setup_state::format_remaining 2 [dict create VDW 0 Lines 0] 1
+} -result {Remaining: 2}
+
 # CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
 # Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
 # ($? is always 0 from VMD), so the harness MUST parse this marker line.
