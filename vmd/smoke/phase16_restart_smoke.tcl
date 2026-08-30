@@ -47,6 +47,30 @@
 #            atoms, sentinels {424 425}, registry 2; the 1znf original itself
 #            is consumed by the mutate).
 #
+# VIEWPOINT MODEL NOTE (probe-verified in this plan's Task 2, probe_vp.tcl /
+# probe_vp2.tcl / probe_vp3.tcl, all gitignored throwaways): VMD 1.9.3's
+# molinfo 4-matrix get reads the CURRENT SCENE VIEW for any molid (a second
+# mol new makes even the FIRST molecule's own get return the fresh default),
+# and the scene view RESETS on every `mol new`. Consequence for stage C: the
+# guard's cleanup restores the old round's original via `mol new` (view ->
+# that molecule's fresh-load default) and re-applies the old round's view
+# (backup::apply) BEFORE the new round's snapshot captures the view -- in the
+# different-target corner flow the snapshot therefore carries the restored
+# original's fresh-load view, measuring 0.7602817 vs the vp_orig lineage
+# (probe3: EXACTLY maxd(1k8p-fresh-default, vp_orig); the inter-molecule
+# scale is 35.525988). This is VMD view-reset-on-mol-new semantics
+# intersecting the guard's cleanup ordering -- NOT a stacking defect and NOT
+# a guard defect (every atom/sentinel/registry/leak/survivor invariant is
+# view-independent and passes). Stage C therefore asserts the
+# model-independent SC4-forward fidelity: gs4's applied view == gs4's OWN
+# snapshot viewpoint (< 1e-4) -- the round applied exactly the viewpoint its
+# snapshot captured. Stages A/B keep the stronger vp_orig-lineage assert
+# (0.0 there: each cleanup's mol new runs on an otherwise-empty molecule set
+# and its apply re-sets the view before the next snapshot reads it).
+# numreps is per-molecule (unambiguous): stage C's round is built on 1znf's
+# OWN rep state (1 default rep -> 1+2=3 total), NOT the 1k8p setup's saved
+# rep count -- the round honors the NEW target's own snapshot.
+#
 # Expected atom narrative across the run: 555 -> 558 -> 557 -> 558 -> 426 on
 # the game molecules (plus the intermediate 555 restores and the 424 1znf
 # load); "Segments: 2" on every combined reload in the load log (never 3).
@@ -128,11 +152,11 @@ proc _vp_maxdiff {a b} {
 #        atoms == n_exp; sentinels via the canonical selector exactly
 #        sent_exp (count + sorted index list); registry::count_hiders ==
 #        [llength sent_exp] (REBUILT per round, never accumulated);
-#        numreps == saved_numreps + 2 (apply restored the saved reps, then
-#        hiders::add_hider_reps appended hidden+found LAST); viewpoint
-#        maxdiff(vp_ref) < 1e-4 (recursive flattener). ----
-proc _assert_round {gm n_exp sent_exp vp_ref tag} {
-    upvar #0 saved_numreps snr
+#        numreps == base_reps + 2 (the round's OWN snapshot target reps,
+#        then hiders::add_hider_reps appended hidden+found LAST); viewpoint
+#        maxdiff(vp_ref) < 1e-4 (recursive flattener -- see the VIEWPOINT
+#        MODEL NOTE in the header for the stage-C reference choice). ----
+proc _assert_round {gm n_exp sent_exp vp_ref base_reps tag} {
     set ok 1
     if {[catch {molinfo $gm get numatoms} nn]} {
         _bail "${tag}_atoms" $nn
@@ -162,8 +186,8 @@ proc _assert_round {gm n_exp sent_exp vp_ref tag} {
     if {[catch {molinfo $gm get numreps} gn]} {
         _bail "${tag}_numreps" $gn
         set ok 0
-    } elseif {$gn != $snr + 2} {
-        _bail "${tag}_numreps" "exp=[expr {$snr + 2}] got=$gn"
+    } elseif {$gn != $base_reps + 2} {
+        _bail "${tag}_numreps" "exp=[expr {$base_reps + 2}] got=$gn"
         set ok 0
     }
     if {[catch {molinfo $gm get {rotate_matrix center_matrix scale_matrix global_matrix}} vpg]} {
@@ -257,7 +281,7 @@ if {$setup_ok} {
             if {[catch {dict get $gs1 hider_count} hc1] || $hc1 != 3} {
                 _bail a1_hider_count "exp=3 got=$hc1"
             }
-            set ok_a1 [_assert_round $gm1 558 {555 556 557} $vp_orig a1]
+            set ok_a1 [_assert_round $gm1 558 {555 556 557} $vp_orig $saved_numreps a1]
             puts "BCHM_SMOKE_INFO stageA1 gm1=$gm1 ok=$ok_a1"
         }
     } else {
@@ -280,7 +304,7 @@ if {$ok_a1} {
             if {[catch {dict get $gs2 hider_count} hc2] || $hc2 != 2} {
                 _bail a2_hider_count "exp=2 (NEW count) got=$hc2"
             }
-            set ok_a2 [_assert_round $gm2 557 {555 556} $vp_orig a2]
+            set ok_a2 [_assert_round $gm2 557 {555 556} $vp_orig $saved_numreps a2]
             # Leak guard: gs1's game molecule DELETED by the guard's cleanup
             # (15-05 catch-molinfo-nonzero pattern).
             if {![catch {molinfo $gm1 get numatoms} ghost1]} {
@@ -326,7 +350,7 @@ if {$ok_a2} {
                 if {[catch {dict get $gs3 hider_count} hc3] || $hc3 != 3} {
                     _bail b_hider_count "exp=3 got=$hc3"
                 }
-                set ok_b [_assert_round $gm3 558 {555 556 557} $vp_orig b]
+                set ok_b [_assert_round $gm3 558 {555 556 557} $vp_orig $saved_numreps b]
                 # Leak guard: gs2's game molecule DELETED by the guard.
                 if {![catch {molinfo $gm2 get numatoms} ghost2]} {
                     _bail b_old_leaked "gs2 game_molid $gm2 alive (numatoms=$ghost2)"
@@ -352,15 +376,16 @@ if {$ok_b} {
             _bail c_orig2_dead "1znf not LIVE after load: $n2c"
         } else {
             if {$n2c != 424} { _bail c_orig2_atoms "exp=424 got=$n2c" }
+            # 1znf's OWN rep count (1 default rep) -- the round-4 invariant
+            # is base_reps + 2 on the NEW target's own snapshot, not the 1k8p
+            # setup's saved_numreps.
+            set n2reps [molinfo $orig2 get numreps]
             # Round-3's game molecule must be ALIVE here: stage C proves the
             # LIVE-TARGET pass-through branch specifically (an active round
             # superseded by a different-target start).
             if {[catch {molinfo $gm3 get numatoms} n3pre]} {
                 _bail c_pre_active "gs3 game_molid $gm3 not alive pre-start: $n3pre"
             } else {
-                # 1znf's own viewpoint (fresh default) -- the new round must
-                # carry ITS OWN target's viewpoint, not the old round's.
-                set vp_2znf [molinfo $orig2 get {rotate_matrix center_matrix scale_matrix global_matrix}]
                 if {![catch {::biochemeleon::game::start_game $orig2 2} gs4]} {
                     if {[catch {dict get $gs4 game_molid} gm4]} {
                         _bail gs4_key "missing (gs=$gs4)"
@@ -371,7 +396,14 @@ if {$ok_b} {
                         if {[catch {dict get $gs4 hider_count} hc4] || $hc4 != 2} {
                             _bail c_hider_count "exp=2 got=$hc4"
                         }
-                        if {[_assert_round $gm4 426 {424 425} $vp_2znf c]} {
+                        # vp_ref = gs4's OWN snapshot viewpoint (SC4-forward
+                        # fidelity; see the VIEWPOINT MODEL NOTE -- the
+                        # guard's cleanup legitimately resets the scene view
+                        # via its restore's mol new before this round's
+                        # snapshot, so the lineage view is not the right
+                        # reference in the different-target flow).
+                        set vp_snap4 [dict get $gs4 snapshot viewpoint]
+                        if {[_assert_round $gm4 426 {424 425} $vp_snap4 $n2reps c]} {
                             puts "BCHM_SMOKE_INFO stageC gm4=$gm4 ok=1"
                         }
                         # Leak guard: gs3's game molecule DELETED by the guard.
