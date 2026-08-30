@@ -1,0 +1,96 @@
+# vmd/tests/test_generators.test
+# tcltest suite for the pure-layer sphere-position sampler module.
+# Port of v1 pymol/tests/test_generators.py TestGenerateSpherePositions (8 cases).
+# Run under headless VMD: bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/tests/test_generators.test -eofexit < /dev/null'
+# (Or standalone tclsh if installed: tclsh vmd/tests/test_generators.test)
+
+package require tcltest
+namespace import ::tcltest::*
+configure -verbose {start pass body error}
+
+# Source the pure layer. Under `vmd -e`, [info script] is EMPTY (verified),
+# so use [pwd] (VMD cwd = the staging root) to locate files.
+source [file join [pwd] vmd lib generators.tcl]
+
+# Every randomness test passes an explicit `seed` (seeded inside the sampler
+# via expr {srand(...)}), so results NEVER depend on residual global PRNG
+# state (14-01 Pitfall-4 mitigation). Standard box: min {-10 -20 -30},
+# max {10 20 30} -- the {{xmin ymin zmin} {xmax ymax zmax}} minmax shape.
+
+test count_matches_n {} -body {
+    set pts [::biochemeleon::generators::sphere_positions {{-10 -20 -30} {10 20 30}} 25 42]
+    set ok [expr {[llength $pts] == 25}]
+    foreach p $pts {
+        if {[llength $p] != 3} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test coords_within_bounds {} -body {
+    set pts [::biochemeleon::generators::sphere_positions {{-10 -20 -30} {10 20 30}} 50 7]
+    set ok 1
+    foreach p $pts {
+        lassign $p x y z
+        if {$x < -10 || $x > 10 || $y < -20 || $y > 20 || $z < -30 || $z > 30} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test seed_determinism {} -body {
+    set a [::biochemeleon::generators::sphere_positions {{-10 -20 -30} {10 20 30}} 10 99]
+    set b [::biochemeleon::generators::sphere_positions {{-10 -20 -30} {10 20 30}} 10 99]
+    expr {$a eq $b}
+} -result 1
+
+test different_seeds_differ {} -body {
+    set a [::biochemeleon::generators::sphere_positions {{-10 -20 -30} {10 20 30}} 10 1]
+    set b [::biochemeleon::generators::sphere_positions {{-10 -20 -30} {10 20 30}} 10 2]
+    expr {$a ne $b}
+} -result 1
+
+test n_zero_returns_empty {} -body {
+    llength [::biochemeleon::generators::sphere_positions {{-10 -20 -30} {10 20 30}} 0]
+} -result 0
+
+test n_one_returns_one_point {} -body {
+    set pts [::biochemeleon::generators::sphere_positions {{-10 -20 -30} {10 20 30}} 1 5]
+    set ok [expr {[llength $pts] == 1}]
+    if {$ok} {
+        set p [lindex $pts 0]
+        lassign $p x y z
+        if {[llength $p] != 3 || $x < -10 || $x > 10 || $y < -20 || $y > 20 || $z < -30 || $z > 30} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test degenerate_box_no_crash {} -body {
+    set pts [::biochemeleon::generators::sphere_positions {{5 5 5} {5 5 5}} 4 3]
+    set ok [expr {[llength $pts] == 4}]
+    foreach p $pts {
+        lassign $p x y z
+        if {abs($x - 5.0) >= 1e-9 || abs($y - 5.0) >= 1e-9 || abs($z - 5.0) >= 1e-9} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test returns_list_of_triples {} -body {
+    set pts [::biochemeleon::generators::sphere_positions {{-10 -20 -30} {10 20 30}} 12 11]
+    set ok 1
+    foreach p $pts {
+        if {[llength $p] != 3} { set ok 0; continue }
+        foreach c $p {
+            if {![string is double -strict $c]} { set ok 0 }
+        }
+    }
+    set ok
+} -result 1
+
+# CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
+# Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
+# ($? is always 0 from VMD), so the harness MUST parse this marker line.
+set total $::tcltest::numTests(Total)
+set passed $::tcltest::numTests(Passed)
+set failed $::tcltest::numTests(Failed)
+set skipped $::tcltest::numTests(Skipped)
+puts "BCHM_TEST_RESULT Total=$total Passed=$passed Failed=$failed Skipped=$skipped"
+cleanupTests
