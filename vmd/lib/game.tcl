@@ -58,8 +58,21 @@ namespace eval ::biochemeleon::game {
 # start_game signature, the game_state shape, and the DI injection line stay
 # identical.
 #
+# SELF-GUARDING (16-13, VERIFICATION gap 1): an active/prior round (non-empty
+# current_state stash) is cleaned up FIRST -- auto-restart with the CALLER's
+# new settings (this call's molid + hider_count, NOT the old round's). A stale
+# stash (game molecule deleted externally) cannot corrupt the new round: the
+# catch branch re-does registry::reset + the stash clear, and the target is
+# remapped to the restored original by LIVENESS when the requested target was
+# the old game molecule. Both the console path and dialog.tcl on_start go
+# through here, so stacked hider generations are impossible at this single
+# choke point.
+#
 # Ordering is NON-NEGOTIABLE (15-RESEARCH-registry-game.md section "Recommended
-# approach 4"; 16-RESEARCH-sphere.md SS5.5 adds the hider-rep step):
+# approach 4"; 16-RESEARCH-sphere.md SS5.5 adds the hider-rep step). The 16-13
+# active-game guard runs BEFORE step 1: the snapshot must capture the LIVE
+# original of the NEW round, which only exists after the old round's cleanup
+# restored it.
 #   1. backup::snapshot BEFORE any mutation (captures original pdb_path +
 #      viewpoint + reps from the LIVE original -- must run before
 #      mutation::mutate mol-deletes it).
@@ -77,6 +90,50 @@ namespace eval ::biochemeleon::game {
 # (on_pick's data source) before being returned.
 proc ::biochemeleon::game::start_game {molid hider_count} {
     variable current_state
+    # ---- ACTIVE-GAME GUARD (16-13, VERIFICATION gap 1) --------------------
+    # A Start during an in-flight round or after a won round must NOT stack
+    # hider generations (the observed defect: 561-atom combined PDB from a
+    # 558-atom game molecule, Segments: 3). Auto-restart semantics: clean up
+    # the existing round FIRST, then start fresh with THIS call's settings
+    # (NOT the old round's hider_count -- the user pressed Start with the
+    # CURRENT Setup form; restart {game_state} stays Phase 19's same-count
+    # Restart). Both the console path and dialog.tcl on_start go through
+    # here, so stacked generations are impossible at this single choke point.
+    if {[dict size $current_state] > 0} {
+        set old_gs $current_state
+        catch {vmdcon -info {bioCHEMeleon: active game found -- cleaning it up before the new round}}
+        if {[catch {::biochemeleon::game::cleanup $old_gs} restored]} {
+            # Stale stash: the game molecule is already gone (deleted
+            # externally). cleanup's backup::restore errored before its
+            # registry::reset + stash clear ran -- do both here so no ghost
+            # state leaks into the new round.
+            catch {::biochemeleon::registry::reset}
+            set current_state [dict create]
+            set restored {}
+        }
+        # Target remap by LIVENESS (molids are monotonic, never reused, so
+        # the restored original never collides with the old game molid). If
+        # the requested target WAS the old game molecule, cleanup just killed
+        # it -- start on the restored original instead. A live different
+        # target passes through unchanged.
+        # hider_count is NOT re-clamped in the remap branch: pass-through
+        # matches restart's own semantics (restart also reuses hider_count
+        # on the restored original); validate_state in on_start already
+        # clamped it against the user-selected target.
+        if {[catch {molinfo $molid get numatoms} natoms]
+                || ![string is integer -strict $natoms]
+                || $natoms <= 0} {
+            if {[catch {molinfo $restored get numatoms} rnatoms] == 0
+                    && [string is integer -strict $rnatoms] && $rnatoms > 0} {
+                set molid $restored
+                catch {vmdcon -info {bioCHEMeleon: Start target was the previous game molecule -- starting on the restored original}}
+            }
+            # If restored is dead too, keep $molid: the normal body's
+            # backup::snapshot errors naturally and the caller (on_start)
+            # surfaces "Could not start the game" -- degraded but NOT corrupt.
+        }
+    }
+    # ---- end guard ---------------------------------------------------------
     # 1. Snapshot BEFORE any mutation (captures original pdb_path + viewpoint + reps).
     set snapshot [::biochemeleon::backup::snapshot $molid]
     # 2. Build placeholder hider records (Phase 16 swaps this for real sphere placement).
