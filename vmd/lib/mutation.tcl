@@ -6,11 +6,15 @@
 #
 # Sources setup_state.tcl (same lib/ dir) -- mirrors the demos.tcl pattern; its
 # `namespace eval` re-inits CONSTANTS to identical values (harmless re-init).
-# Does NOT source registry.tcl -- the entry sources registry exactly ONCE;
-# re-sourcing would WIPE _records. The DI fn (fetch_hider_indices) is injected
-# INTO registry::reconstruct_from_sentinels by the composition root (game.tcl /
-# the smoke), never called by mutation.tcl itself.
+# Also sources generators.tcl (PURE, same lib/ dir) -- Phase 16 real sphere
+# placement feeds make_placeholder_hiders; pure re-init is harmless (the entry
+# sources generators too). Does NOT source registry.tcl -- the entry sources
+# registry exactly ONCE; re-sourcing would WIPE _records. The DI fn
+# (fetch_hider_indices) is injected INTO registry::reconstruct_from_sentinels
+# by the composition root (game.tcl / the smoke), never called by mutation.tcl
+# itself.
 source [file join [file dirname [info script]] setup_state.tcl]
+source [file join [file dirname [info script]] generators.tcl]
 
 namespace eval ::biochemeleon::mutation {
     # Sentinel constants (mol-domain; registry.tcl stays pure with only
@@ -35,25 +39,29 @@ namespace eval ::biochemeleon::mutation {
 }
 
 # make_placeholder_hiders {molid count} -> list of {name x y z} records.
-# Pure data prep: READS coords only, does NOT write or load. Phase 16 swaps this
-# for real sphere placement; the signature + record shape stay identical.
-# Center via the NESTED-list-safe form (Pitfall 5: `molinfo $m get center` is
-# `{{x y z}}`, NOT flat; `molinfo $m get {center x}` does NOT exist). Wrap molinfo
-# in catch (bad molid -> center {0 0 0}). Coords = center + deterministic jitter
-# so hiders aren't coincident. Names G01..GNN (2-digit zero-padded; cap=50).
+# Phase 16 REAL sphere placement (HIDER-03): uniform-random points inside the
+# molecule's bounding box. Bbox via `measure minmax` on "all" (returns
+# {{xmin ymin zmin} {xmax ymax zmax}} -- 2 elements, each a 3-float list;
+# probe-verified) fed to the PURE sampler in vmd/lib/generators.tcl (v1
+# formula ported 1:1: min + rand*span per axis; NO min-distance, NO overlap
+# avoidance, NO clamping/inset -- overlapping a real atom is harmless). NO
+# seed passed: the call continues the global PRNG stream (same convention as
+# randomize_state; reseeding per call would correlate placements with prior
+# rand() consumers). Names G01..GNN (2-digit zero-padded). Signature + record
+# shape FROZEN (Phase 15 contract, 15-05): only the coordinate math changed.
+# No molinfo call remains, so no catch-wrapping: `measure minmax` on a bad
+# molid raises naturally and game.tcl propagates (caller aborts -- 15-05).
 proc ::biochemeleon::mutation::make_placeholder_hiders {molid count} {
-    if {[catch {molinfo $molid get center} c]} {
-        lassign {0 0 0} cx cy cz
-    } else {
-        lassign [lindex $c 0] cx cy cz
-    }
+    set all [atomselect $molid "all"]
+    set mm [measure minmax $all]
+    $all delete
+    set pts [::biochemeleon::generators::sphere_positions $mm $count]
     set recs [list]
-    for {set i 0} {$i < $count} {incr i} {
-        set nm [format "G%02d" [expr {$i + 1}]]
-        set x  [expr {$cx + 0.5 * $i}]
-        set y  [expr {$cy + 0.3 * $i}]
-        set z  [expr {$cz + 0.2 * $i}]
-        lappend recs [list $nm $x $y $z]
+    set i 0
+    foreach p $pts {
+        incr i
+        lassign $p x y z
+        lappend recs [list [format "G%02d" $i] $x $y $z]
     }
     return $recs
 }
