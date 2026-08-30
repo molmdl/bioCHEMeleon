@@ -70,13 +70,26 @@ package provide biochemeleon $::biochemeleon::version
 set _dir [file dirname [info script]]
 source [file join $_dir lib setup_state.tcl]
 source [file join $_dir lib registry.tcl]
-# Phase 14: source the mol bridge (demos.tcl, Plan 02) + the GUI layer
-# (gui/dialog.tcl, Plan 03). dialog.tcl in turn sources gui/setup_tab.tcl.
-# The GUI needs the mol bridge for every molecule operation (load_demo,
-# save/load_setup, atom_count, list_loaded_molecules, get_active_reps).
+# Phase 14 + Phase 15: source the mol bridges + composition root + the GUI layer.
+# Phase 14 added demos.tcl (mol bridge, Plan 02) + gui/dialog.tcl (Plan 03;
+# dialog.tcl in turn sources gui/setup_tab.tcl). The GUI needs the mol bridge
+# for every molecule operation (load_demo, save/load_setup, atom_count,
+# list_loaded_molecules, get_active_reps).
+# Phase 15 added backup.tcl + mutation.tcl (mol bridges, Plans 03/02) +
+# game.tcl (composition root, Plan 04) in dependency order AFTER demos.tcl and
+# BEFORE gui/dialog.tcl.
 # Order matters: setup_state (pure) -> registry (pure) -> demos (mol bridge,
-# sources setup_state) -> dialog (GUI, sources setup_tab which uses both).
+# sources setup_state) -> backup (mol) -> mutation (mol) -> game (composition
+# root, references backup+mutation+registry namespaces -- sourced after them) ->
+# dialog (GUI, sources setup_tab which uses both).
 source [file join $_dir lib demos.tcl]
+# Phase 15: mol bridges + composition root (dep order: backup, mutation, game).
+# registry.tcl is sourced ONCE above -- backup/mutation/game do NOT re-source it
+# (re-sourcing would WIPE a populated _records dict). game.tcl references
+# ::biochemeleon::registry::* at CALL time (proc resolution is call-time in tcl).
+source [file join $_dir lib backup.tcl]
+source [file join $_dir lib mutation.tcl]
+source [file join $_dir lib game.tcl]
 source [file join $_dir gui dialog.tcl]
 unset _dir
 
