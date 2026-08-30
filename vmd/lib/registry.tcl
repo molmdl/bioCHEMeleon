@@ -64,14 +64,14 @@ proc ::biochemeleon::registry::mark_found {idx} {
 }
 
 # Phase 15: number of registered hiders (dict size of _records).
-# The capstone smoke asserts count_hiders == N after start_game (SC3)
-# and == 0 after cleanup (proves no over/under-population).
+# The capstone smoke asserts count_hiders == N post-start_game (SC3)
+# and == 0 post-cleanup (proves no over/under-population).
 proc ::biochemeleon::registry::count_hiders {} {
     variable _records
     return [dict size $_records]
 }
 
-# Phase 15: clear the registry (game::cleanup calls this after restore so
+# Phase 15: clear the registry (game::cleanup calls this post-restore so
 # post-cleanup is_hider/count_hiders return 0 — v1 parity). Overwrites
 # _records with an empty dict.
 proc ::biochemeleon::registry::reset {} {
