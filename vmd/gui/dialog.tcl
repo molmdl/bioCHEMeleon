@@ -109,3 +109,94 @@ proc ::biochemeleon::on_close {} {
     catch {::biochemeleon::pick_bridge::deactivate}
     destroy $w
 }
+
+# ---------------------------------------------------------------------------
+# on_start -- the BTN-07 Start handler (Plan 16-10; the v1
+# PluginDialog._on_start fan-in, __init__.py:242-261). Lives at DIALOG scope
+# (research SS7.5: it needs setup_tab state + game_tab + game.tcl -- dialog
+# scope avoids cross-tab reach-ins). Flow:
+#   1. collect_state           (snapshot the Setup form)
+#   2. resolve the target      (loaded -> live-molecule check; demo ->
+#                              demos::load_demo; fetch -> the Phase-21 stub
+#                              errors, surface its message)
+#   3. validate/clamp          (setup_state::validate_state with the target's
+#                              atom count -- the do_save precedent)
+#   4. game::start_game        (snapshot -> spheres -> PDB-rebuild -> reps ->
+#                              registry; catch -> abort, no partial game state)
+#   5. game_tab::set_difficulty (feeds update_remaining's easy/hard format)
+#   6. game_tab::raise_tab     (notebook SELECT -- never raise on the child)
+#   7. game_tab::start_round   (stash game_state + register callbacks +
+#                              countdown; the pick bridge arms at GO)
+# EVERY failure path shows a tk_messageBox parented to the dialog and RETURNS
+# -- no partial game state, the dialog stays open (v1 QMessageBox.warning
+# parity). Tcl 8.5: braced expr, catch (no 8.6 control-flow idioms).
+# ---------------------------------------------------------------------------
+proc ::biochemeleon::on_start {} {
+    variable w
+    # 1. Snapshot the Setup-tab widgets.
+    if {[catch {::biochemeleon::setup_tab::collect_state} state]} {
+        tk_messageBox -parent $w -icon warning -title "bioCHEMeleon" \
+            -message "Could not read the Setup form: $state"
+        return
+    }
+    # 2. Resolve the target molecule per target_mode.
+    set mode [dict get $state target_mode]
+    if {$mode eq "loaded"} {
+        # selected_object is the molid string set by the loaded-mol menu
+        # (setup_tab::refresh_mol_menu -value). It must name a LIVE molecule:
+        # molinfo on a deleted molid errors, and an empty selection or a
+        # 0-atom molecule is not a playable target.
+        set selobj [dict get $state selected_object]
+        if {$selobj eq ""
+                || [catch {molinfo $selobj get numatoms} natoms]
+                || ![string is integer -strict $natoms]
+                || $natoms <= 0} {
+            tk_messageBox -parent $w -icon warning -title "bioCHEMeleon" \
+                -message "No live loaded molecule is selected.\nLoad a molecule or pick a bundled demo first."
+            return
+        }
+        set molid $selobj
+    } elseif {$mode eq "demo"} {
+        if {[catch {::biochemeleon::demos::load_demo [dict get $state demo_id]} molid]} {
+            tk_messageBox -parent $w -icon warning -title "bioCHEMeleon" \
+                -message "Could not load demo \"[dict get $state demo_id]\": $molid"
+            return
+        }
+    } else {
+        # fetch: a real network fetch is Phase 21 (VMD 1.9.3 lacks tls) --
+        # demos::fetch_pdb is a STUB that errors. Surface its message and
+        # abort; on a future real implementation $res is the new molid.
+        if {[catch {::biochemeleon::demos::fetch_pdb [dict get $state pdb_code]} res]} {
+            tk_messageBox -parent $w -icon warning -title "bioCHEMeleon" \
+                -message "Could not fetch PDB \"[dict get $state pdb_code]\": $res"
+            return
+        }
+        set molid $res
+    }
+    # 3. Clamp the collected state against the target's atom count (the pure
+    #    layer is authoritative -- same call do_save makes before persisting).
+    if {[catch {::biochemeleon::setup_state::validate_state $state \
+                    [::biochemeleon::demos::atom_count $molid]} state]} {
+        tk_messageBox -parent $w -icon warning -title "bioCHEMeleon" \
+            -message "Invalid setup: $state"
+        return
+    }
+    # 4. Start the game (all-or-nothing at the controller level: snapshot ->
+    #    sphere placement -> PDB-rebuild -> hider reps -> registry). Catch ->
+    #    abort: no partial game state, the dialog stays open.
+    if {[catch {::biochemeleon::game::start_game $molid \
+                    [dict get $state hider_count]} gs]} {
+        tk_messageBox -parent $w -icon warning -title "bioCHEMeleon" \
+            -message "Could not start the game: $gs"
+        return
+    }
+    # 5. Difficulty feeds update_remaining's easy/hard formatting (GAME-03).
+    ::biochemeleon::game_tab::set_difficulty [dict get $state difficulty_easy]
+    # 6. Bring the Game tab to the front (notebook select, see raise_tab).
+    ::biochemeleon::game_tab::raise_tab
+    # 7. Arm the round: start_round stashes the game_state, registers the
+    #    controller callbacks, and starts the 3-2-1 countdown (the pick bridge
+    #    engages at GO, not here).
+    ::biochemeleon::game_tab::start_round $gs
+    return
+}

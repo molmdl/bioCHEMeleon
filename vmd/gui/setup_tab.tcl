@@ -72,7 +72,7 @@ proc ::biochemeleon::setup_tab::build {parent} {
     set hg [build_hiders_group $parent]
     # Difficulty group (SETUP-05).
     set dg [build_diff_group $parent]
-    # Actions group (BTN-01..04).
+    # Actions group (BTN-01..04 + BTN-07 Start).
     set ag [build_actions $parent]
     pack $tg $hg $dg $ag -side top -fill x -padx 8 -pady 6
 
@@ -224,8 +224,12 @@ proc ::biochemeleon::setup_tab::build_diff_group {parent} {
 }
 
 # ---------------------------------------------------------------------------
-# build_actions -- BTN-01..04: Reset / Randomize / Save Setup... / Load Setup...
-# The -command scripts reference the do_* stubs (this plan); Plan 04 fills them.
+# build_actions -- BTN-01..04 + BTN-07: Reset / Randomize / Save Setup... /
+# Load Setup... / Start. The -command scripts reference the do_* procs; Start
+# (BTN-07, Phase 16-10) invokes ::biochemeleon::on_start -- the dialog-level
+# fan-in (resolve target -> game::start_game -> raise the Game tab -> start
+# the countdown). Defined in gui/dialog.tcl (it needs setup_tab state +
+# game_tab + game.tcl; dialog scope avoids cross-tab reach-ins).
 # ---------------------------------------------------------------------------
 proc ::biochemeleon::setup_tab::build_actions {parent} {
     set f [ttk::frame $parent.actions]
@@ -233,7 +237,8 @@ proc ::biochemeleon::setup_tab::build_actions {parent} {
     ttk::button $f.random -text "Randomize"     -command {::biochemeleon::setup_tab::do_randomize}
     ttk::button $f.save   -text "Save Setup..." -command {::biochemeleon::setup_tab::do_save}
     ttk::button $f.load   -text "Load Setup..." -command {::biochemeleon::setup_tab::do_load}
-    pack $f.reset $f.random $f.save $f.load -side left -padx 4 -pady 4
+    ttk::button $f.start  -text "Start"         -command {::biochemeleon::on_start}
+    pack $f.reset $f.random $f.save $f.load $f.start -side left -padx 4 -pady 4
     return $f
 }
 
