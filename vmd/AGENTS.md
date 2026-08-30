@@ -88,12 +88,25 @@ Extension entry point lives in `vmd/biochemeleon.tcl`:
 - **Random total distribution across all reps from start** (v1.1 quick-008 fix baked in — never default to all-spheres when only a total count is set).
 - WSL→VMD path guard: `to_vmd_path()` converts `/mnt/c/...` → `C:/...` (forward slashes, NOT backslashes). Windows VMD cannot resolve `/mnt/c/`, `/tmp/`, or `~/`.
 
-### Picking mechanism (MEDIUM confidence — GUI human-verify required)
+### Picking mechanism (LOCKED-WITH-CAVEATS — GUI-verified 2026-08-30, plan 16-12)
 
-- VMD has NO direct "atom clicked" callback. Picking is a **mouse mode** (`mouse mode pick 0` = pick atom). On click, VMD creates a label (`label add Atoms <molid>/<index>`) and/or populates `vmd_pick_atom`/`vmd_pick_mol` globals (the latter only in GUI mode — absent in text mode).
-- **PickBridge** (the v2 equivalent of v1's `PickWizard`): register in `::vmd_pick_atom_callbacks` list + `mouse mode pick 0`; save/restore user's prior `vmd_mouse_mode`. Design defensively — support trace + callback-list + label-poll fallback (`label list Atoms`).
-- **Pick and rotate are MUTUALLY EXCLUSIVE mouse modes in VMD** (unlike PyMOL where picking coexisted with middle-drag rotate). Player must toggle between pick and rotate (hotkey `r` = rotate, `0` = pick). Provide an in-panel "Rotate/Pick" toggle and document it.
-- **GUI human-verify checkpoint needed** to confirm the exact pick-callback contract (does VMD call the proc with args, or populate globals?). Text mode can't fire a real pick.
+**CONFIRMED (a complete round was WON through this path in a real GUI session, 2026-08-30 — see `.planning/phases/16-mvp-core-loop-sphere/16-VERIFICATION.md`):**
+
+- Delivery path = `trace add variable ::vmd_pick_event write <proc>` with a `{args}` proc (receives `name1 name2 op` — a positional signature makes VMD's own write FAIL and loses the pick) reading globals `vmd_pick_atom` (0-based index — the registry key) + `vmd_pick_mol` (the molid), per UG Table 9.4 + shipped `www.tcl`. A full round was won through it (win box, timer frozen 5:14, remaining 0).
+- Forbidden forms unchanged: `mouse mode 4 2` = USERPOINT (UG table stale vs the 1.9.3 binary); `mouse mode pick 0` = QUERY — never the game mode; only `mouse mode pick 2` engages atom picking. Reliance on `::vmd_pick_atom_callbacks` is FORBIDDEN — phantom, falsified in-GUI 2026-08-30 (registered proc never fired on any click).
+- **Hidden reps cannot be picked** (UG node140 — GUI-confirmed: click at a hidden hider picked the real atom behind it with no find; after re-show the find worked). Found-marking must never hide a rep containing unfound hiders.
+- Pick labels are ALWAYS created on labelatom clicks (labelpoll fallback premise — GUI-confirmed: every click logged `Added new Atoms label ...`; the game's auto-clean left count at baseline).
+- **PickBridge** = `vmd/lib/pick_bridge.tcl` (trace primary + dormant labelpoll fallback via `mechanism`; save/restore of the user's `vmd_mouse_mode`/`submode`; baseline-guarded label hygiene).
+- **Pick and rotate are MUTUALLY EXCLUSIVE mouse modes in VMD** (unlike PyMOL where picking coexisted with middle-drag rotate). Player toggles between them (hotkey `r` = rotate, `1` = pick atom, or the in-panel Rotate/Pick toggle).
+
+**CAVEATS (from the 2026-08-30 session — C-side firing reliability UNRESOLVED, targeted re-verify pending):**
+
+- C-side firing showed **mode-desync flakiness**: label-only clicks until a keyboard re-arm (pressing `p` re-engaged finds); finds correlated with VMD printing `User Pick: mol1 atom:N` (⇒ `mouse callback` was ON during those picks); `ERROR) Illegal mouse mode: 0 -1` appeared twice immediately before working picks (from the interactive hotkey path); after a fresh VMD restart picks worked without any `p`.
+- Leading hypothesis (UNCONFIRMED): VMD 1.9.3's C-side pick-event delivery depends on `mouse callback` / interactive-mode re-arm — the text-command `mouse mode pick 2` alone can leave a desync where labelatom clicks create labels but never write `::vmd_pick_event`. Candidate fix: `mouse callback on` in activate/deactivate — **NOT added to pick_bridge yet** (hypothesis unconfirmed; UG says callback gates only the HOVER `_silent` variables and www.tcl never enables it). The A/B test in `vmd/tests/pick_verify.tcl` (STEP 4, re-verify session) decides.
+- Panel checkbox desync (known behavior, minor UX): pressing hotkey `r` switches VMD to rotate but the Game-tab checkbox stays "Pick" — pick_bridge does not observe hotkey-driven mode changes.
+- Do NOT treat a text-mode smoke PASS as proof of C-side firing — text mode cannot fire a real pick (that is what the GUI re-verify is for).
+
+**Phase-19 note:** the Game tab has NO Cleanup/Restart buttons yet (Phase 19 scope); until then cleanup is console-only, and `start_game` has no active-game guard (double-Start on the still-loaded game molecule stacks generations — observed 2026-08-30: 561-atom combined PDB from a 558-atom game molecule, `Segments: 3`). Setup-tab "Reset" resets setup fields only — it does NOT clear hiders (expectation mismatch, registered for gap closure).
 
 ### Mutation-safety rules (Phase 15)
 
