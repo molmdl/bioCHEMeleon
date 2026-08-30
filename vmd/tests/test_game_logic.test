@@ -1,0 +1,177 @@
+# vmd/tests/test_game_logic.test
+# tcltest suite for the PURE game-loop logic module (state machine +
+# drift-free timer + rolling-log model).
+# Run under headless VMD: bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/tests/test_game_logic.test -eofexit < /dev/null'
+# (Or standalone tclsh if installed: tclsh vmd/tests/test_game_logic.test)
+#
+# DETERMINISM: `clock seconds` is not injectable, so the timer procs accept
+# an OPTIONAL trailing `now` argument (empty = real clock). These tests
+# inject fixed values (epoch 1000 / now 1065 -> elapsed 65). Production
+# callers never pass it.
+
+package require tcltest
+namespace import ::tcltest::*
+configure -verbose {start pass body error}
+
+# Source the pure layer. Under `vmd -e`, [info script] is EMPTY (verified),
+# so use [pwd] (VMD cwd = the staging root) to locate files.
+source [file join [pwd] vmd lib game_logic.tcl]
+
+# Every body starts with round_reset: isolation — no residual state
+# (machine position, timer, log) leaks between cases.
+
+# ---- 1. round_reset initializes the whole round model ----
+
+test round_reset_initializes {} -body {
+    ::biochemeleon::game_logic::round_reset
+    list [::biochemeleon::game_logic::state] \
+         [::biochemeleon::game_logic::timer_elapsed] \
+         [llength [::biochemeleon::game_logic::log_lines]]
+} -result {idle 0 0}
+
+# ---- 2-5. countdown transitions + tick contract ----
+
+test begin_countdown_from_idle {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::begin_countdown
+    ::biochemeleon::game_logic::state
+} -result countdown
+
+test begin_countdown_twice_errors {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::begin_countdown
+    set rc [catch {::biochemeleon::game_logic::begin_countdown} err]
+    expr {$rc != 0}
+} -result 1
+
+test countdown_sequence {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::begin_countdown
+    set r1 [::biochemeleon::game_logic::countdown_tick]
+    set r2 [::biochemeleon::game_logic::countdown_tick]
+    set r3 [::biochemeleon::game_logic::countdown_tick]
+    set r4 [::biochemeleon::game_logic::countdown_tick]
+    list $r1 $r2 $r3 $r4
+} -result {{3 0} {2 0} {1 0} {GO! 1}}
+
+test countdown_tick_after_done_errors {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::begin_countdown
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    set rc [catch {::biochemeleon::game_logic::countdown_tick} err]
+    expr {$rc != 0}
+} -result 1
+
+# ---- 6-8. begin_play gate + timer arming ----
+
+test begin_play_from_idle_errors {} -body {
+    ::biochemeleon::game_logic::round_reset
+    set rc [catch {::biochemeleon::game_logic::begin_play} err]
+    expr {$rc != 0}
+} -result 1
+
+test begin_play_after_go {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::begin_countdown
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::begin_play
+    ::biochemeleon::game_logic::state
+} -result playing
+
+test timer_elapsed_zero_before_start {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::begin_countdown
+    ::biochemeleon::game_logic::timer_elapsed
+} -result 0
+
+# ---- 9-11. drift-free timer (injected now) + win freeze + double-win ----
+
+test timer_elapsed_injected_now {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::begin_countdown
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::begin_play
+    # begin_play armed the epoch with the real clock; re-arm with a fixed
+    # epoch so the delta is deterministic (tests only — production never
+    # passes the optional trailing now argument).
+    ::biochemeleon::game_logic::timer_start 1000
+    ::biochemeleon::game_logic::timer_elapsed 1065
+} -result 65
+
+test finish_win_freezes_elapsed {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::begin_countdown
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::begin_play
+    ::biochemeleon::game_logic::timer_start 1000
+    ::biochemeleon::game_logic::finish_win 1100
+    # Frozen final: a later read (any injected now) must return 100, not 8999.
+    list [::biochemeleon::game_logic::state] \
+         [::biochemeleon::game_logic::timer_elapsed 9999]
+} -result {won 100}
+
+test finish_win_twice_errors {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::begin_countdown
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::countdown_tick
+    ::biochemeleon::game_logic::begin_play
+    ::biochemeleon::game_logic::finish_win 1100
+    set rc [catch {::biochemeleon::game_logic::finish_win 1200} err]
+    expr {$rc != 0}
+} -result 1
+
+# ---- 12. M:SS formatting ----
+
+test format_mmss_cases {} -body {
+    ::biochemeleon::game_logic::round_reset
+    list [::biochemeleon::game_logic::format_mmss 0] \
+         [::biochemeleon::game_logic::format_mmss 65] \
+         [::biochemeleon::game_logic::format_mmss 600] \
+         [::biochemeleon::game_logic::format_mmss 3725]
+} -result {0:00 1:05 10:00 62:05}
+
+# ---- 13-15. log model formats ----
+
+test log_append_found_format {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::log_append found 3
+} -result {Found one! 3 remaining}
+
+test log_append_miss_and_already {} -body {
+    ::biochemeleon::game_logic::round_reset
+    list [::biochemeleon::game_logic::log_append miss ""] \
+         [::biochemeleon::game_logic::log_append already ""]
+} -result {Miss! {Already found!}}
+
+test log_reset_clears {} -body {
+    ::biochemeleon::game_logic::round_reset
+    ::biochemeleon::game_logic::log_append miss ""
+    ::biochemeleon::game_logic::log_append found 2
+    ::biochemeleon::game_logic::log_reset
+    llength [::biochemeleon::game_logic::log_lines]
+} -result 0
+
+# CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
+# Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
+# ($? is always 0 from VMD), so the harness MUST parse this marker line.
+set total $::tcltest::numTests(Total)
+set passed $::tcltest::numTests(Passed)
+set failed $::tcltest::numTests(Failed)
+set skipped $::tcltest::numTests(Skipped)
+puts "BCHM_TEST_RESULT Total=$total Passed=$passed Failed=$failed Skipped=$skipped"
+cleanupTests
