@@ -81,7 +81,7 @@ if {![file exists $outpdb]} {
         # Hider records carry chain+resseq "G9001" (disjoint from real resids).
         if {[regexp {G9001} $l]} {
             incr nhider
-            if {![regexp {GAM} $l] || ![regexp {-999\.0} $l] || ![regexp {GAME} $l]} {
+            if {![regexp {GAM} $l] || ![regexp -- {-999\.0} $l] || ![regexp {GAME} $l]} {
                 incr hider_bad
             }
         }
