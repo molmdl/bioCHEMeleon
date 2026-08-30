@@ -121,6 +121,15 @@ proc ::biochemeleon::on_close {} {
 #                              errors, surface its message)
 #   3. validate/clamp          (setup_state::validate_state with the target's
 #                              atom count -- the do_save precedent)
+#   3.5 pick_bridge::deactivate (16-14 gap-1 GUI half: tear down the PREVIOUS
+#                              round's bridge BEFORE the new Start --
+#                              activate is idempotent, so without this a
+#                              mid-round double-Start would leave it bound
+#                              to the DEAD old game_molid and every pick on
+#                              the new molecule would be silently dropped;
+#                              idempotent no-op when no round is live; after
+#                              the abort paths so a failed validation leaves
+#                              a running game untouched)
 #   4. game::start_game        (snapshot -> spheres -> PDB-rebuild -> reps ->
 #                              registry; catch -> abort, no partial game state)
 #   5. game_tab::set_difficulty (feeds update_remaining's easy/hard format)
@@ -181,6 +190,17 @@ proc ::biochemeleon::on_start {} {
             -message "Invalid setup: $state"
         return
     }
+    # 3.5 (16-14, gap-1 GUI half): tear down the PREVIOUS round's pick bridge
+    # BEFORE starting the new one. pick_bridge::activate is idempotent (it
+    # early-returns when already active), so without this a Start pressed
+    # mid-round would leave the bridge bound to the DEAD old game_molid --
+    # _on_event's molid filter would then silently drop every pick on the
+    # new molecule (game unplayable, no error). Idempotent no-op when no
+    # round is live (fresh session, or the round already won -- on_win
+    # deactivated it). Placed AFTER the abort paths (steps 1-3) so a failed
+    # validation leaves a running game untouched; catch-guarded like every
+    # other step.
+    catch {::biochemeleon::pick_bridge::deactivate}
     # 4. Start the game (all-or-nothing at the controller level: snapshot ->
     #    sphere placement -> PDB-rebuild -> hider reps -> registry). Catch ->
     #    abort: no partial game state, the dialog stays open.
