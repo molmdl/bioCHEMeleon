@@ -92,3 +92,131 @@ The re-verify driver is `vmd/tests/pick_verify.tcl` (fixed in plan 16-12 Task B:
 ---
 
 *Recorded by plan 16-12 (Task A) from the human checkpoint response + pasted console transcripts. Re-verify driver fixes: vmd/tests/pick_verify.tcl (Task B, same plan).*
+
+---
+
+# Phase-16 goal verification (automated, 2026-08-30)
+
+status: gaps_found
+score: 5/7 must-haves verified
+re_verification: no (initial automated goal verification; the section above is the authoritative 16-12 human checkpoint record and is preserved verbatim)
+
+**Phase Goal:** "The player can play a complete hide-and-seek round with sphere hiders — the PROJECT.md core value. If nothing else works, this loop works. The VMD pick-callback contract is locked here via a GUI human-verify checkpoint."
+**Verified:** 2026-08-30T22:02:59Z
+**Method:** All 12 plan must_haves checked against the actual code (3-level: exists / substantive / wired), 4 tcltest suites + 7 Phase-16 smokes re-run under fresh headless staging (`tmp/verify16`), full logs scanned for false-PASS (`ERROR)` / `bad switch`); the GUI verdict is taken from the human record above (no GUI re-run by the verifier).
+
+## Goal Achievement
+
+### Observable Truths (must-haves, mapped to the ROADMAP SCs)
+
+| # | Truth | Status | Evidence |
+|---|---|---|---|
+| 1 | SC1 — Start generates sphere hiders per setup, switches to Game tab, counts down 3-2-1, starts the timer | ✓ VERIFIED | `generators.tcl` (pure, 8/8 tests) + `mutation.tcl:56-58` (`measure minmax` → `sphere_positions`) + `game.tcl:78-109` (ordering incl. hider-rep step after `backup::apply`) + `dialog.tcl:134-202` `on_start` BTN-07 fan-in + `game_tab.tcl` (one-shot countdown `after 1000` with ID tracking, timer re-arms only while `playing`, epoch at `begin_play`). Placement/entry/gametab smokes PASS=1; capstone steps 2-3. GUI step 1 PASS (human record). |
+| 2 | SC2-mechanism — a click correctly identifies a registered hider and marks it found (recolor via user2 two-rep split) | ✓ VERIFIED | `pick_bridge.tcl` trace `{args}` handler → `game::on_pick` (line 152) with molid filter + index validity; `game.tcl:204-249` three-way guard + state gate; `hiders.tcl` user2 flag + mandatory modselect re-assert. Capstone drives miss/hit/already-found/winning-hit through the REAL `_on_event` (simulated `::vmd_pick_event` write) — PASS=1. A complete round was WON through this path in the GUI session (record above, steps 5-9a). |
+| 3 | SC2-lock — the pick contract is LOCKED (reliable C-side firing in a real GUI) | ✗ FAILED | Record above: **LOCKED-WITH-CAVEATS**. A round was won, labelpoll premise confirmed, phantom falsified — but C-side firing reliability is UNRESOLVED (mode-desync flakiness, `p` re-arm, finds correlated with `mouse callback` on, `Illegal mouse mode: 0 -1`, one freeze). Exact PICK values uncaptured (paste artifact). The A/B test (driver `vmd/tests/pick_verify.tcl` STEP 4, verified present) decides whether `mouse callback on/off` enters `activate`/`deactivate` — NOT yet added to `pick_bridge.tcl` (correctly, hypothesis unconfirmed). |
+| 4 | SC3 — rolling info box logs clicks/found; remaining count (total + per-rep in easy) decrements | ✓ VERIFIED | `game_logic.tcl` log model (15/15 tests: Miss!/Already found!/Found one! N remaining); `registry.tcl:88-131` `status_of`/`count_remaining`/`remaining_by_rep` (18/18); `setup_state.tcl:307` `format_remaining` (47/47); `game_tab.tcl` `on_log_line`/`update_remaining` pull model (lines 288-316). Capstone asserts decrement through the scoring loop. |
+| 5 | SC4 — all found → timer stops, winning message shows time taken | ✓ VERIFIED | `game_logic.tcl` `finish_win` (freezes elapsed, errors on double call); `game.tcl:238-243` win flow (finish_win → frozen elapsed → win log → win_cb); `game_tab.tcl:336-371` on_win → deactivate exactly once → delayed parented `tk_messageBox` with `format_mmss`. GUI steps 9a/9b PASS (win box with time; `state=won`, timer frozen 5:14, remaining=0). |
+| 6 | SC5 — pick-vs-rotate control so the player can rotate between picks | ✓ VERIFIED | `game_tab.tcl:131-134` Rotate/Pick ttk::radiobuttons → `set_mouse_mode` → `pick_bridge::set_view_mode` (`pick_bridge.tcl:215-222`: `mouse mode pick 2` / `mouse mode rotate`); the tab never issues `mouse mode` directly. GUI step 5: panel toggle works (label mode restored via panel). Known minor: checkbox does not track hotkey `r` (documented behavior, does not defeat the control). |
+| 7 | Loop integrity — the core loop is robust in a normal session ("if nothing else works, this loop works") | ✗ FAILED | **No active-game guard.** `game::start_game` (game.tcl:78-109) runs snapshot→mutate→reps→registry unconditionally; `on_start` (dialog.tcl:134-202) has no guard either. Confirmed live in the GUI session: Start after a won round (no Cleanup available) ran on the still-loaded GAME molecule → 561-atom combined PDB, Segments: 3, stacked sentinel generations (HIDER 555-559). A second Start during an in-flight round hits the same path — loop state is corrupted rather than aborted/restarted. |
+
+**Score:** 5/7 truths verified
+
+### Required Artifacts (all 12 plans; level 1-3 summary)
+
+| Artifact | Expected | Status | Details |
+|---|---|---|---|
+| `vmd/lib/generators.tcl` | pure sphere sampler | ✓ VERIFIED | 45 lines, pure (no mol/tk), exported; 8/8 tests |
+| `vmd/lib/registry.tcl` (ext) | status_of / count_remaining / remaining_by_rep + rep arg | ✓ VERIFIED | exports line 23; 18/18 tests; backward compat green |
+| `vmd/lib/game_logic.tcl` | pure state machine + drift-free timer + log model | ✓ VERIFIED | 257 lines; 15/15 tests; double-win prevention present |
+| `vmd/lib/setup_state.tcl` (ext) | `format_remaining` | ✓ VERIFIED | line 307, exported, pure; 47/47 tests |
+| `vmd/lib/hiders.tcl` | 2-rep found-visual layer | ✓ VERIFIED | hidden VDW/Element/user2<1 + found VDW/ColorID 7/user2>0; no showrep off; beta never written; re-assert present |
+| `vmd/lib/pick_bridge.tcl` | trace primary + dormant labelpoll + phantom shim | ✓ VERIFIED | matches 16-06 contract exactly (mouse mode pick 2, idempotent activate, snapshot/restore, baseline-guarded label hygiene); `mouse callback` correctly NOT yet added |
+| `vmd/lib/mutation.tcl` (ext) | real bbox placement body-swap | ✓ VERIFIED | `measure minmax` → `generators::sphere_positions` (lines 56-58); frozen signature/record shape |
+| `vmd/lib/game.tcl` (ext) | hider-rep step + on_pick + callbacks + stash | ✓ VERIFIED (⚠ gap) | all 16-08 must_haves hold; **no active-game guard in start_game** (the registered defect) |
+| `vmd/gui/game_tab.tcl` | countdown/timer/log/remaining/win + radios | ✓ VERIFIED | 446 lines; after-ID tracking + winfo/catch guards; never calls `mouse mode` directly |
+| `vmd/gui/dialog.tcl` (ext) | Game tab build + on_start + on_close | ✓ VERIFIED (⚠ gap) | game_tab sourced top-level + built eagerly; on_start fan-in complete; on_close stops timers + deactivates bridge before destroy; **no active-game guard in on_start** |
+| `vmd/gui/setup_tab.tcl` (ext) | Start button (BTN-07) | ✓ VERIFIED | line 240 `-command {::biochemeleon::on_start}` |
+| `vmd/biochemeleon.tcl` (ext) | extended source order | ✓ VERIFIED | pure block (generators, game_logic) then mol block (hiders, pick_bridge); registry sourced EXACTLY ONCE |
+| `vmd/smoke/phase16_*.tcl` (7) | headless proof | ✓ VERIFIED | all 7 PASS=1, zero `ERROR)`/`bad switch` on fresh staging (re-run this session) |
+| `vmd/tests/pick_verify.tcl` | re-verify driver | ✓ VERIFIED | two-paste `pv_observe`, STEP 4 `mouse callback` A/B, `pv_cleanup` + `pv_cleanup_check` all present |
+| `vmd/lib/game.tcl` + `vmd/gui/dialog.tcl` | active-game guard | ✗ MISSING | double-Start stacks generations (see Truth 7) |
+
+### Key Link Verification
+
+| From | To | Via | Status |
+|---|---|---|---|
+| mutation.tcl | generators.tcl | `sphere_positions $mm $count` | ✓ WIRED |
+| game.tcl start_game | hiders.tcl | `add_hider_reps` after `backup::apply` | ✓ WIRED |
+| game.tcl on_pick | registry + hiders + game_logic | status_of guard → mark_found_visual + mark_found → count_remaining → finish_win | ✓ WIRED |
+| pick_bridge._on_event | game.tcl | `game::on_pick $vmd_pick_atom` (single arg) | ✓ WIRED |
+| game_tab radios | pick_bridge | `set_view_mode` | ✓ WIRED |
+| game_tab GO branch | pick_bridge | `activate` at `begin_play`; `deactivate` in on_win | ✓ WIRED |
+| setup_tab Start | dialog.on_start | `-command {::biochemeleon::on_start}` | ✓ WIRED |
+| dialog.on_start | game + game_tab | start_game → set_difficulty → raise_tab → start_round | ✓ WIRED |
+| dialog.on_close | pick_bridge + game_tab | deactivate + stop_all_timers before destroy | ✓ WIRED |
+| entry | all modules | source order, registry once | ✓ WIRED |
+
+### Requirements Coverage
+
+| Requirement | Status | Blocking Issue |
+|---|---|---|
+| HIDER-03 (sphere/VDW hiders in bbox) | ✓ SATISFIED | — |
+| LOOP-01 (click-to-find) | ✓ SATISFIED (caveat) | mechanism proven; C-side firing reliability unresolved (re-verify pending) |
+| LOOP-02 (single found-state truth) | ✓ SATISFIED | — |
+| LOOP-03 (win condition) | ✓ SATISFIED | — |
+| BTN-07 (Start flow) | ✓ SATISFIED | double-Start guard missing (loop-integrity defect) |
+| GAME-01 (rolling info box) | ✓ SATISFIED | — |
+| GAME-02 (timer) | ✓ SATISFIED | — |
+| GAME-03 (remaining count) | ✓ SATISFIED | — |
+
+### Dynamic Verification (re-run this session, fresh staging `tmp/verify16`)
+
+| Suite | Result | `ERROR)`/`bad switch` scan |
+|---|---|---|
+| test_generators (16-01) | Total=8 Passed=8 Failed=0 | clean |
+| test_registry (16-02) | Total=18 Passed=18 Failed=0 | clean |
+| test_game_logic (16-03) | Total=15 Passed=15 Failed=0 | clean |
+| test_setup_state (16-04) | Total=47 Passed=47 Failed=0 | clean |
+| phase16_hiders_smoke (16-05) | PASS=1 FAIL=none | clean |
+| phase16_pick_smoke (16-06) | PASS=1 FAIL=none | clean |
+| phase16_placement_smoke (16-07) | PASS=1 FAIL=none | clean |
+| phase16_onpick_smoke (16-08) | PASS=1 FAIL=none | clean |
+| phase16_gametab_smoke (16-09) | PASS=1 FAIL=none | clean |
+| phase16_entry_smoke (16-10) | PASS=1 FAIL=none | clean |
+| phase16_smoke capstone (16-11) | PASS=1 FAIL=none | clean; verified REAL failure-list mechanism (`$failures`; PASS=1 only when empty) and REAL `_on_event`-driven scoring (steps 5-8), deactivate no-delivery (step 9), cleanup (step 10), purity/8.6 gates (step 11) |
+
+88/88 tcltest cases + 7/7 smokes green. Capstone is NOT a false-PASS: assertions accumulate into `$failures` and the marker reports `PASS=0 FAIL=...` when non-empty; full log exits normally.
+
+### Anti-Patterns Found
+
+| File | Line | Pattern | Severity | Impact |
+|---|---|---|---|---|
+| vmd/lib/game.tcl | 78-109 | missing active-game guard in start_game | 🛑 Blocker (loop integrity) | double-Start stacks generations (observed live) |
+| vmd/gui/dialog.tcl | 134-202 | missing active-game guard in on_start | 🛑 Blocker (loop integrity) | same defect reachable from the UI |
+| vmd/lib/pick_bridge.tcl | (whole) | `mouse callback` gating hypothesis unaddressed | ⚠️ Warning | pending A/B verdict — deliberately NOT added (correct per record §6) |
+| vmd/lib/registry.tcl / mutation.tcl / game.tcl / game_tab.tcl | comments | "placeholder" wording | ℹ️ Info | historical comments about the 16-07 body-swap / Phase-13 placeholder removal — not stubs |
+
+No TODO/FIXME/stub bodies anywhere in the Phase-16 surface.
+
+### Human Verification Required (the re-verify checklist — driver ready: `vmd/tests/pick_verify.tcl`)
+
+1. **STEP 4 — `mouse callback` A/B (THE decisive test).** Set `mouse callback off`, click an unfound hider → find or not; then `mouse callback on`, click another → find or not. Expected: a clean on/off verdict deciding whether PickBridge adds `mouse callback on/off` to activate/deactivate. Why human: real C-side pick delivery is GUI-only (text mode cannot fire a pick).
+2. **STEP 2 — exact PICK event values via the paste-safe two-paste observer (`pv_observe`).** Expected: `PICK ev=... atom=<0-based idx> mol=<game molid>` captured without the session-1 paste artifact. Why human: requires a real mouse click in the GUI.
+3. **Freeze reproduction (open question c).** Repeat the end-of-session sequence (won round + `pv_state` + labelatom clicks with bridge inactive). Expected: either repro (→ register against VMD 1.9.3 / the observer) or clean exit. Why human: GUI-session stability.
+4. **`pv_cleanup` restore check (STEP 9c).** Expected: mouse mode restored to saved rotate/-1, labels back to baseline, trace removed. Why human: GUI session.
+5. **Double-Start guard re-check (after the code fix lands).** Press Start during a round and after a won round. Expected: guarded (message or auto-restart), NO stacked generations (atom count = original + N, Segments: 2). Why human: GUI click path; headless assert accompanies the fix.
+
+### Gaps Summary
+
+Two gaps block a clean phase-16 bill:
+
+1. **No active-game guard** (Truth 7) — `start_game` and `on_start` both run unconditionally, so Start during/after a round corrupts the loop (stacked generations, observed live: 561-atom PDB, Segments: 3). This directly violates the goal's "if nothing else works, this loop works" robustness bar. Fixable in code (`game.tcl` + `dialog.tcl`), verifiable headlessly (regression assert in a smoke) + one GUI re-check.
+2. **Pick-contract reliability** (Truth 3) — the contract is locked-with-caveats: the trace mechanism demonstrably delivered a won round, but C-side firing flakiness (mode-desync, `p` re-arm, `mouse callback` correlation, one freeze) is unresolved. The fixed driver is ready; one human re-verify session (items 1-4 above) closes or confirms the `mouse callback` hypothesis, after which `pick_bridge.tcl` is either left as-is or gains the on/off pairing, and the contract is cleanly locked.
+
+Minor registered defects (do NOT block the phase SCs; carried in the record): Setup-tab Reset clears fields only (hiders remain — expectation mismatch; cleanup/restart is Phase 19 scope), Game-tab checkbox desync on hotkey `r` (documented behavior).
+
+**Recommendation:** run `/gsd-plan-phase --gaps` for gap 1 (code) and schedule the re-verify session for gap 2 (human); gap 2's code consequence (if any) should be planned together with its A/B outcome.
+
+---
+
+_Automated goal verification by OpenCode (gsd-verifier), 2026-08-30T22:02:59Z. Human checkpoint record above (plan 16-12) preserved verbatim. Not committed — orchestrator bundles._
