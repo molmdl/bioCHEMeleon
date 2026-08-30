@@ -521,9 +521,37 @@ vmdcon -info {   (fresh session: rotate / -1)? Labels back to baseline?}
 # Cleanup the user's mouse mode is restored and labels are clean.
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== END -- paste this console transcript + your 9 answers into}
-vmdcon -info {== .planning/phases/16-mvp-core-loop-sphere/16-VERIFICATION.md}
-vmdcon -info {== (OpenCode reads that file to lock the pick contract -- Task 3.)}
+vmdcon -info {== STEP 10 of 10 -- GUARD RE-CHECK: double-Start (16-13/16-14)}
+vmdcon -info {-----------------------------------------------------------------}
+vmdcon -info {a. MID-ROUND double-Start: on the Setup tab press Start AGAIN}
+vmdcon -info {   while the current round is playing (after GO).}
+vmdcon -info {   The Game tab log restarts the countdown (3-2-1-GO) -- that}
+vmdcon -info {   is the guarded auto-restart.}
+vmdcon -info {   After GO, paste:  pv_state}
+# EXPECTED (a): a NEW game molid; atom count = 555 + 3 = 558; HIDER
+# indices exactly "555 556 557" (single generation); registry
+# remaining = 3; the VMD main log's combined reload shows 558 atoms
+# / Segments: 2 (NEVER 561 / Segments: 3 / HIDER 555-559).
+vmdcon -info {b. WIN the (a) round: find all 3 hiders (click each VDW}
+vmdcon -info {   sphere; r toggles rotate to look around, the panel radios}
+vmdcon -info {   toggle back to Pick). Wait for the win box.}
+# FREEZE PROBE (the bridge is now inactive after this win):
+vmdcon -info {   click a few atoms in the viewer (labels appear), then}
+vmdcon -info {   paste:  pv_state}
+vmdcon -info {   Record: does VMD stay responsive? (session-1 froze here}
+vmdcon -info {   once -- open question c; record what you see, repro or}
+vmdcon -info {   clean).}
+vmdcon -info {c. AFTER-WIN double-Start (the exact session-1 defect): press}
+vmdcon -info {   Start on the Setup tab once more. After GO, paste:  pv_state}
+# EXPECTED (c): identical single-generation values (558 atoms,
+# HIDER 555 556 557, remaining 3) -- session 1 produced 561 atoms /
+# Segments: 3 / HIDER 555-559 here; the guard must make that
+# impossible.
+vmdcon -info {-----------------------------------------------------------------}
+vmdcon -info {== END -- paste this console transcript + your FIVE re-verify}
+vmdcon -info {== answers: (1) A/B verdict per state, (2) exact PICK values,}
+vmdcon -info {== (3) freeze outcome, (4) pv_cleanup restore result,}
+vmdcon -info {== (5) guard re-check 10a+10b results.}
 vmdcon -info {-----------------------------------------------------------------}
 
 }
