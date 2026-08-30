@@ -353,7 +353,7 @@ if {!$pv_have_1k8p} {
 # ===========================================================================
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== STEP 1 of 9 -- play setup: Start the game}
+vmdcon -info {== STEP 1 of 10 -- play setup: Start the game}
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {The extension is loaded and demo 1k8p is loaded (above). Now:}
 vmdcon -info {  a. Open the dialog: menu Extensions -> bioCHEMeleon}
@@ -374,7 +374,7 @@ vmdcon -info {and the timer start at GO? Paste the pv_state dump into VERIFICATI
 # both hider reps shown=1 (hidden: VDW/Element, found: VDW/'ColorID 7').
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== STEP 2 of 9 -- THE LOCK: does a real click fire the trace?}
+vmdcon -info {== STEP 2 of 10 -- THE LOCK: does a real click fire the trace?}
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {TWO-PASTE observer (session-1 lesson: the old ONE-LINER had its}
 vmdcon -info {'info exists' query split by a terminal wrap during copy, which}
@@ -413,7 +413,7 @@ vmdcon -info {clicks print NO PICK lines, note exactly which -- STEP 4 tests why
 # global can NEVER swallow the output the way session-1's apply did.
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== STEP 3 of 9 -- submode check: query mode (pick 0)}
+vmdcon -info {== STEP 3 of 10 -- submode check: query mode (pick 0)}
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {Paste:  mouse mode pick 0}
 vmdcon -info {Click an atom. Record: did PICK still fire? Did a label get created?}
@@ -424,7 +424,7 @@ vmdcon -info {(or click the Pick radio on the Game tab panel).}
 # be dead there). Either answer is fine -- record what you saw.
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== STEP 4 of 9 -- THE CALLBACK HYPOTHESIS (two-click A/B test)}
+vmdcon -info {== STEP 4 of 10 -- THE CALLBACK HYPOTHESIS (two-click A/B test)}
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {Session-1 hypothesis: finds worked only when VMD printed 'User}
 vmdcon -info {Pick: molN atomN' lines (mouse callback ON); callback-off clicks}
@@ -437,7 +437,10 @@ vmdcon -info {B. Paste:  mouse callback on}
 vmdcon -info {   Paste:  pv_callback_state}
 vmdcon -info {   Click ANOTHER UNFOUND hider sphere.}
 vmdcon -info {   Record: the same three questions as A.}
-vmdcon -info {C. Restore VMD's default state:  mouse callback off}
+vmdcon -info {C. Restore the state the A/B just proved necessary:}
+vmdcon -info {   if B found and A did not, paste:  mouse callback on}
+vmdcon -info {   (the game needs it for steps 5-9). Otherwise paste:}
+vmdcon -info {   mouse callback off  (VMD default).}
 vmdcon -info {If B finds and A does not, PickBridge must add 'mouse callback on'}
 vmdcon -info {at activate / 'off' at deactivate (decided AFTER this re-verify).}
 # EXPECTED (research prediction): fires in BOTH states -- www.tcl (VMD's own
@@ -448,7 +451,7 @@ vmdcon -info {at activate / 'off' at deactivate (decided AFTER this re-verify).}
 # only a B-finds/A-does-not result adds `mouse callback on` to pick_bridge.
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== STEP 5 of 9 -- Rotate/Pick toggle (hotkey + panel)}
+vmdcon -info {== STEP 5 of 10 -- Rotate/Pick toggle (hotkey + panel)}
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {a. Press  r  (or paste: mouse mode rotate). Drag to rotate the view,}
 vmdcon -info {   then click an atom. Record: view rotates? PICK fired?}
@@ -460,7 +463,7 @@ vmdcon -info {   Click an atom. Record: does finding work again?}
 # panel label should read Mouse: Rotate / Mouse: Pick accordingly.
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== STEP 6 of 9 -- label side-effects + fallback viability}
+vmdcon -info {== STEP 6 of 10 -- label side-effects + fallback viability}
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {a. After a few finds so far: did labels pile up on the clicked}
 vmdcon -info {   atoms in the viewer? (The game auto-deletes each click's label.)}
@@ -474,7 +477,7 @@ vmdcon -info {   Then paste:  pv_release_labels}
 # does on click), proving the labelpoll fallback could detect clicks.
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== STEP 7 of 9 -- phantom callbacks-list falsification}
+vmdcon -info {== STEP 7 of 10 -- phantom callbacks-list falsification}
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {Paste these TWO lines into the Tk console:}
 vmdcon -info {proc phantom_cb {args} { vmdcon -info "PHANTOM FIRED" }}
@@ -485,7 +488,7 @@ vmdcon -info {Click several atoms. Record: does 'PHANTOM FIRED' EVER appear?}
 # variable). Confirms the compat shim must stay a no-op.
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== STEP 8 of 9 -- hidden-rep caveat (UG node140)}
+vmdcon -info {== STEP 8 of 10 -- hidden-rep caveat (UG node140)}
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {Paste:  pv_hide_hidden      (hides the rep holding UNFOUND hiders)}
 vmdcon -info {Click where a hider sphere was. Record: any PICK line? Any find?}
@@ -497,7 +500,7 @@ vmdcon -info {Then paste:  pv_show_hidden   and click the hider again: find work
 # pv_state showed both hider reps shown=1).
 
 vmdcon -info {-----------------------------------------------------------------}
-vmdcon -info {== STEP 9 of 9 -- finish the round: win, then Cleanup}
+vmdcon -info {== STEP 9 of 10 -- finish the round: win, then Cleanup}
 vmdcon -info {-----------------------------------------------------------------}
 vmdcon -info {a. Find ALL 3 hiders (click each VDW sphere; r toggles rotate to}
 vmdcon -info {   look around, the panel radios toggle back to Pick).}
