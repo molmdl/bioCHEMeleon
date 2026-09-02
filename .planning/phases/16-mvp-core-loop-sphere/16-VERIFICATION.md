@@ -220,3 +220,92 @@ Minor registered defects (do NOT block the phase SCs; carried in the record): Se
 ---
 
 _Automated goal verification by OpenCode (gsd-verifier), 2026-08-30T22:02:59Z. Human checkpoint record above (plan 16-12) preserved verbatim. Not committed — orchestrator bundles._
+
+---
+
+# Re-verify session (plan 16-16, 2026-09-03) -- PARTIAL (session derailed, decisive evidence captured)
+
+**Date:** 2026-09-03
+**Plan:** 16-16 (re-verify driver `vmd/tests/pick_verify.tcl` — STEP 10 + conditional 4C; Task-1 commits c64cc37 + d60585b)
+**Session shape:** the user ran the 10-step driver session but found it too complicated and got lost at STEP 2 (paste 2 of 2) — the session DERAILED there. The user then re-ran a CLEAN CONTROL session sourcing `vmd/biochemeleon.tcl` directly. This record is distilled from the pasted logs of BOTH sessions; untested items are marked NOT COMPLETED / NOT REACHED — never guessed.
+
+**Verdict: PARTIAL** — guard re-check PASS (both paths, both sessions; Truth 7 human-verified), exact PICK values CAPTURED (session-1's INCONCLUSIVE capture artifact CLOSED), first-click-quirk root-cause facts established; A/B callback test NOT COMPLETED (derailed before STEP 4), pv_cleanup restore NOT REACHED; one freeze OBSERVED (driver session only, attribution unknown).
+
+## 1. Resume-signal verdicts (honest state)
+
+```
+REVERIFY: ab_off_finds=NOT COMPLETED (session derailed before STEP 4)
+ab_on_finds=NOT COMPLETED (same) callback_query=NOT COMPLETED (same)
+pick_values=captured: PICK ev=vmd_pick_event {} write / PICK atom=557 mol=1 shift=1 (+ atom=556, atom=36, atom=555)
+freeze=OBSERVATION: one freeze in the DRIVER session right after the post-win guard restart (log ends there, no "Exiting normally"); ZERO freezes in the clean control session, which ran the IDENTICAL guard flow repeatedly and exited normally — attribution UNKNOWN (pv_observe trace per-fire errors vs VMD 1.9.3 flakiness; open question c partially answered, no speculation)
+cleanup_restore=NOT REACHED (pv_cleanup + pv_cleanup_check never run; restore machinery still evidenced only by session-1's 9b pv_state saved rotate/-1)
+guard_midround=pass (clean session: different-target Start (1znf) with a round active — guard cleaned, restored original survived, fresh 427-atom round, then won; user: "clean restart w/ only new hiders", "clean restart, success")
+guard_afterwin=pass (BOTH sessions: after-win same-target Start — the exact session-1 defect — original reloaded (555 atoms) → fresh combined round 558 atoms, Segments: 2, NEVER 561/Segments 3)
+```
+
+## 2. STEP 1 — PASS (driver session)
+
+Start → playing. `pv_state`: `state=playing`, timer 0:34, remaining 3, game molid 1: 558 atoms, HIDER indices "555 556 557", reps intact (hidden rep VDW/Element shown, found rep VDW/ColorID 7), labels count=1 baseline=0.
+
+## 3. STEP 2 — exact PICK values CAPTURED (trace observer fired; session-1 artifact CLOSED)
+
+The paste-safe two-paste `pv_observe` observer FIRED on real clicks. Verbatim capture lines (driver session):
+
+```
+PICK ev=vmd_pick_event {} write
+PICK atom=557 mol=1 shift=1
+```
+
+Also captured: `atom=556`, `atom=36` (a real DNA atom — a miss), `atom=555`. Contract values confirmed: atom = 0-based index, mol = game molid, `shift=1` when Shift was held. **Session-1's STEP-2 INCONCLUSIVE (terminal-wrap paste artifact) is CLOSED — the trace mechanism's exact contract values are now on record.**
+
+## 4. NEW ROOT-CAUSE FACT (both sessions): the FIRST-CLICK QUIRK
+
+- Clicks BEFORE a keyboard `p` press land in the LABEL-ATOM submode — `pv_state`: `mouse: mode=labelatom submode=2` — labels ARE added ("Added new Atoms label GAM9001:G02") but the in-game count NEVER changes.
+- ONE `p` press per round arms real pick delivery for the WHOLE round ("do once can pick all" — clean session); after it, finds, count decrements, and wins happen.
+- Pasted `mouse mode pick 0` and `mouse mode pick` NEVER armed delivery; `mouse mode pick 0` produced only VMD "picked atom:" query dumps.
+- `ERROR) Illegal mouse mode: 0 -1` (and `5 -1` in the clean session) correlate with mode transitions, right before working picks — same as session 1.
+- Suspicion (unproven): the bridge engages a wrong submode — resolved by the DISPOSITION line at the end of this section.
+
+## 5. A/B callback test — NOT COMPLETED (downgrade note)
+
+The session derailed before STEP 4, so the decisive `mouse callback` on/off A/B was never run. DOWNGRADE: in the clean session, `User Pick: mol4 atom:425` echoes appeared with NO `mouse callback` command ever pasted (VMD default state), and finds worked after `p` — session-1's "`User Pick:` echo ⇒ `mouse callback` on" inference is WEAKENED to "console echo, callback-state-independent".
+
+## 6. Guard re-check — PASS (GUI, both paths; Truth 7 human-verified)
+
+(i) **After-win same-target Start** (the exact session-1 defect). Guard log lines, verbatim from the user's paste:
+
+```
+bioCHEMeleon: active game found -- cleaning it up before the new round
+bioCHEMeleon: Start target was the previous game molecule -- starting on the restored original
+```
+
+(The reload step's own log line was not preserved verbatim in the distilled paste; its effect is recorded as observed values.) Full sequence: guard line → original reloaded (555 atoms) → "previous game molecule" line → fresh combined round: 558 atoms, **Segments: 2** (NEVER 561/Segments 3 — session-1's stacked-generation defect is confirmed FIXED in the GUI).
+
+(ii) **Different-target Start with a round active** (clean session, 1znf): guard cleaned, restored original survived, fresh 427-atom round, then won. User's words: "clean restart w/ only new hiders", "clean restart, success".
+
+## 7. FREEZE — OBSERVATION (no attribution)
+
+The DRIVER session "clashed" (user's word) right after the post-win guard restart; the log ends there, no "Exiting normally". The CLEAN session ran the IDENTICAL guard flow repeatedly and exited normally. Recorded as OBSERVATION ONLY: one freeze in the driver session, none in the clean session; attribution unknown (pv_observe per-fire errors vs VMD 1.9.3 flakiness) — open question (c) partially answered, no speculation.
+
+## 8. pv_cleanup restore — NOT REACHED
+
+STEP 9c (`pv_cleanup` + `pv_cleanup_check`: mouse restored to rotate/-1, labels back to baseline, trace removed) was never reached.
+
+## 9. Cosmetic notes (Phase 19 scope, from the user)
+
+- Hiders remain visible after a win (MVP design — no Cleanup button yet).
+- Setup-Reset clears fields only (known expectation mismatch).
+- The restored-original molecules ACCUMULATE in the loaded-objects dropdown after restarts (each cleanup `mol new`s a fresh original).
+- In the driver session the target dropdown listed only `biochemeleon_game` (stale list) while the clean session showed both `1znf` and `biochemeleon_game`.
+
+## 10. USER PROCESS DIRECTIVE (standing decision for all future human-verify sessions)
+
+Future human-verify sessions MUST be simpler: the DRIVER auto-issues commands and auto-logs to a file (no user paste-into-VERIFICATION.md); the user pastes only what is strictly required before real clicks; everything probeable moves to headless tests.
+
+---
+
+DISPOSITION: BRANCH (c) -- callback A/B downgraded to non-blocking (finds fired in the untouched default callback state in the clean control session; "User Pick:" echo is callback-state-independent). The open item is the FIRST-CLICK QUIRK: keyboard p once per round is the only working re-arm; pasted mouse mode pick 0|2 never arms delivery; pv_state showed mode=labelatom submode=2 after the bridge's engagement (wrong-submode suspicion). 16-17 must headless-probe VMD 1.9.3's mouse-mode table (what `mouse mode pick 2` actually selects, and whether a mode query exists) and EITHER (c1) fix the bridge's engagement submode if a headless probe proves the wrong-submode story (GUI confirm = ONE Start + ONE click, no other pastes) OR (c2) record the p-press as the LOCKED contract's known first-click quirk (documented in vmd/AGENTS.md + the pick_bridge header), mechanism byte-untouched.
+
+---
+
+*Recorded by plan 16-16 (Task 3) from the user's checkpoint response + pasted console transcripts (driver session + clean control session). 16-VERIFICATION.md NOT committed by this plan — the orchestrator bundles it at roll-up.*
