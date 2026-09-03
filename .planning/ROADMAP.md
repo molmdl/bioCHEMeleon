@@ -133,31 +133,55 @@ Plans:
 **Goal**: Hiders can be generated for the simpler VMD representations (Lines/VDW/Licorice), with the lock-scene vs randomize infrastructure and research-driven GAME_REPS list established — the foundation all later generators build on.
 **Depends on**: Phase 16 (core loop to test generators against)
 **Requirements**: HIDER-06, HIDER-04
-**Plans**: TBD
+**Plans**: 14 plans
 
 **Success Criteria** (what must be TRUE):
-1. The research-driven 10-rep GAME_REPS list (Lines, VDW, Licorice, CPK, Cartoon, NewCartoon, Trace, Tube, Points, DynamicBond) is defined in the pure layer, with surface/volumetric reps explicitly excluded as anti-features.
+1. The research-driven 10-rep GAME_REPS list (Lines, VDW, Licorice, CPK, Cartoon, NewCartoon, Trace, Tube, Points, DynamicBonds) is defined in the pure layer, with surface/volumetric reps explicitly excluded as anti-features.
 2. "Lock current scene" detects the active reps from the loaded molecule (`molinfo $mol get numreps` + per-rep query) and generates hiders matching those reps; "randomize" distributes across the GAME_REPS list.
 3. Line/Licorice/VDW hiders generate atoms that mimic connected atoms (bonded pseudoatom analogues) and visually blend with line/licorice/VDW representations.
 4. Reps are tracked by stable name (`mol repname`/`mol repindex`), never by index (renumbers on `mol delrep`).
 
 Plans:
-- [ ] 17.1-01: TBD
+- [ ] 17.1-01-PLAN.md — PURE rep_tiers.tcl: tier table, scene-rep filter, resolve_per_rep (TDD)
+- [ ] 17.1-02-PLAN.md — Registry per-record rep API set_rep/assign_reps (TDD)
+- [ ] 17.1-03-PLAN.md — Pure bonded placement geometry (1.2–1.6 Å anchor-offset) (TDD)
+- [ ] 17.1-04-PLAN.md — hiders.tcl N-tier generalization: 2N rep pairs + user3 stamping (+ 2-tier smoke)
+- [ ] 17.1-05-PLAN.md — make_bonded_hiders: anchor mimicry + 5-field records through the PDB writer (+ chemistry smoke)
+- [ ] 17.1-06-PLAN.md — game.tcl 4-arg start_game: per-tier dispatch + snapshot-derived lock-scene (+ dispatch smoke)
+- [ ] 17.1-07-PLAN.md — VDW regression baseline: Phase-15/16 smokes restored green (8 files)
+- [ ] 17.1-08-PLAN.md — Points tier end-to-end smoke + reusable Tachyon probe template
+- [ ] 17.1-09-PLAN.md — Lines tier smoke (both-endpoints rule)
+- [ ] 17.1-10-PLAN.md — Licorice tier smoke (ball+stick render diff)
+- [ ] 17.1-11-PLAN.md — CPK tier smoke (scale-ratio check)
+- [ ] 17.1-12-PLAN.md — DynamicBonds tier smoke (explicit cutoff 1.6)
+- [ ] 17.1-13-PLAN.md — Capstone: mixed 3-tier + lock-scene rounds + FULL-suite green gate
+- [ ] 17.1-14-PLAN.md — GUI wiring + rep_verify.tcl auto-driver + ONE consolidated human-verify checkpoint
 
-### Phase 17.2: Cartoon/NewCartoon Generators ⚠️ STRIDE L-CAVEAT
+### Phase 17.2: Cartoon/NewCartoon Generators (STRIDE ss caveat RESOLVED — Option A accepted)
 
-**Goal**: Hiders can be generated for the complex cartoon representations — the hardest generator tier, de-risking the STRIDE `ss='L'` caveat for fake `GAM` residues (the v1 Phase 11 analogue).
+**Goal**: Hiders can be generated for the complex cartoon representations — the hardest generator tier, implementing the researched residue-splice mechanism for the trace-family reps (the ss caveat is resolved — see SC2).
 **Depends on**: Phase 17.1 (rep infrastructure + simple generators proven)
 **Requirements**: HIDER-05
-**Plans**: TBD
+**Plans**: 12 plans
 
 **Success Criteria** (what must be TRUE):
 1. Cartoon/NewCartoon hiders generate and visually blend with cartoon representations.
-2. The STRIDE `ss='L'` caveat for fake `GAM` residues is researched and a decision (accept vs Tube/Trace sidestep vs splice+`mol ssrecalc`) is recorded — the L-complexity item from v1 Phase 11.
+2. RESOLVED (17.2-RESEARCH, 2026-09-03): VMD has no `ss='L'` (PyMOL vocabulary) — per-atom ss is T/C/H/G/E/B via the `structure` keyword; a spliced GAM residue gets `T` (turn) from load-time STRIDE and renders as a smooth coil/turn tube (the v1-accepted loop-tube look). Decision = Option A: accept the turn-tube. `mol ssrecalc` is unnecessary (load-time STRIDE already assigns ss) and destructive (wipes manual `set structure` writes) — banned from the generation flow. Trace/Tube are sibling consumers of the same splice, not a sidestep. The ≥3-residue force-SS variant (`atomselect set structure`) is recorded as out-of-scope future polish.
 3. A game round with cartoon-blend hiders is playable end-to-end (generate → click-to-find → win) using the Phase 16 core loop.
 
 Plans:
-- [ ] 17.2-01: TBD
+- [ ] 17.2-01-PLAN.md — PURE splice geometry splice.tcl (1.0 Å ⊥ peptide bond, resid 9001+k, beta CA-only) + Option-A ss-decision header (TDD)
+- [ ] 17.2-02-PLAN.md — Registry resid-block API register_resid_block/hider_for_resid (TDD)
+- [ ] 17.2-03-PLAN.md — IMPLEMENTED_TIERS seam widening to all 10 reps + residue kind (TDD)
+- [ ] 17.2-04-PLAN.md — Splice writer/bridge: make_residue_hiders + residue PDB records + tag_sentinels_mixed (+ positive/negative Tachyon controls)
+- [ ] 17.2-05-PLAN.md — Cartoon tier Tachyon smoke (FCyl bits, structure==T)
+- [ ] 17.2-06-PLAN.md — NewCartoon tier Tachyon smoke (TriStrip mesh)
+- [ ] 17.2-07-PLAN.md — Trace tier Tachyon smoke (both-endpoints rule)
+- [ ] 17.2-08-PLAN.md — Tube tier Tachyon smoke (four-rep family complete on one splice)
+- [ ] 17.2-09-PLAN.md — Dispatch residue-kind routing + on_pick resid-block fallback (+ mixed VDW+Cartoon smoke → win)
+- [ ] 17.2-10-PLAN.md — End-to-end playable-round smoke through the public surface
+- [ ] 17.2-11-PLAN.md — Capstone: under-generation repair + full-suite regression gate (31 smokes + 8.6 gate + ssrecalc-zero check)
+- [ ] 17.2-12-PLAN.md — GUI checkpoint: rep_verify.tcl extension + consolidated human-verify (per-rep blend, N/C/O/CB pick-through)
 
 ### Phase 18: Materials Exploration (v2 Differentiator)
 
@@ -265,8 +289,8 @@ Plans:
 | 14. Setup Tab & Bundled Demos | v2.0 | 4/4 | ✓ Complete | 2026-08-29 |
 | 15. Mutation Safety & Hider Registry | v2.0 | 5/5 | ✓ Complete | 2026-08-30 |
 | 16. MVP Core Loop (Sphere) | v2.0 | 17/17 | ✓ Complete | 2026-09-03 |
-| 17.1. Rep Setup Infrastructure & Simple Rep Generators | v2.0 | 0/TBD | Not started | - |
-| 17.2. Cartoon/NewCartoon Generators | v2.0 | 0/TBD | Not started | - |
+| 17.1. Rep Setup Infrastructure & Simple Rep Generators | v2.0 | 0/14 | Planned | - |
+| 17.2. Cartoon/NewCartoon Generators | v2.0 | 0/12 | Planned | - |
 | 18. Materials Exploration | v2.0 | 0/TBD | Not started | - |
 | 19. In-game Actions | v2.0 | 0/TBD | Not started | - |
 | 20. Persistence | v2.0 | 0/TBD | Not started | - |
