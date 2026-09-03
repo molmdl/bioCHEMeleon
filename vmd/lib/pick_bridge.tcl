@@ -23,6 +23,20 @@
 #             for hypothetical other builds; NEVER read the list, NEVER
 #             gate correctness on it.
 #
+# FIRST-CLICK QUIRK (the locked contract's known first-click behavior;
+# 16-17 headless probe + the 16-16 re-verify, recorded 2026-09-03):
+# keyboard `p` ONCE per round arms real pick delivery for the whole
+# round (the shipped hotkey -- hotkeys.tcl:112 `mouse mode pick`);
+# pasted `mouse mode` commands (pick, pick 0, pick 2) never arm; a
+# fresh VMD restart also clears it (16-12). Text mode cannot fire
+# picks and offers no mode query (the `mouse` usage text is the only
+# introspection -- probe 2026-09-03), so the labelatom-2 suspicion
+# stays UNPROVEN there; the probe does map pick 2 == labelatom/2 (the
+# shipped "# atom" mode, hotkeys.tcl:118) vs pick 0 == query/0, and
+# the GUI record rules out the wrong-submode fix (the 16-12 round was
+# won on pick 2; pasted query never armed): arming is dispatch-path-
+# bound, not submode-bound. Mechanism byte-untouched (16-17 branch c2).
+#
 # FORBIDDEN FORMS (probe4 -- the 1.9.3 numeric mouse-mode space inserted
 # userpoint at index 4; the UG table is stale relative to the binary):
 #   - the numeric form "4 2" under mouse mode == USERPOINT mode (the game
