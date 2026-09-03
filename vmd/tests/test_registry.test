@@ -141,6 +141,89 @@ test one_arg_reconstruct_still_works {} -body {
          [::biochemeleon::registry::count_remaining]
 } -result {1 1 1}
 
+# ---- Phase 17.1 additions: per-record rep API (set_rep / assign_reps) ----
+# Multi-tier rounds call reconstruct_from_sentinels ONCE (it clears +
+# single-rep stamps — P17D/P8: a second call wipes prior tiers), then stamp
+# each hider's tier via the per-record API below. These cases pin the error
+# contract (exact mark_found wording), status preservation, atomicity, and
+# the multi-tier remaining_by_rep interaction BEFORE game.tcl consumes it.
+
+# set_rep stamps ONE record's rep field (1-arg reconstruct leaves rep "").
+test set_rep_sets_field {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    ::biochemeleon::registry::set_rep 5 Lines
+    expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create Lines 1]}
+} -result 1
+
+# set_rep OVERWRITES any prior rep value, including a 2-arg reconstruct stamp.
+test set_rep_overwrites {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}] "VDW"
+    ::biochemeleon::registry::set_rep 5 Lines
+    expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create Lines 1]}
+} -result 1
+
+# Unregistered idx errors with the EXACT mark_found wording.
+test set_rep_unregistered_errors {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    catch {::biochemeleon::registry::set_rep 999 X} err
+    set err
+} -result {hider 999 not registered}
+
+# set_rep changes ONLY rep — status ("found") survives the stamp, and found
+# records stay excluded from remaining_by_rep (GAME-03 contract).
+test set_rep_keeps_status {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    ::biochemeleon::registry::mark_found 5
+    ::biochemeleon::registry::set_rep 5 Lines
+    list [expr {[::biochemeleon::registry::status_of 5] eq "found"}] \
+         [expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create]}]
+} -result {1 1}
+
+# Bulk tier assignment: 2x VDW + 2x Lines — per-tier hidden counts visible.
+test assign_reps_bulk {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 6 7 8} }}]
+    ::biochemeleon::registry::assign_reps {5 VDW 6 VDW 7 Lines 8 Lines}
+    expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create VDW 2 Lines 2]}
+} -result 1
+
+# ATOMICITY: one unregistered key aborts the WHOLE assign BEFORE any record
+# is touched — idx 5's rep stays "" (skipped by remaining_by_rep) and every
+# record is still intact (count_remaining unchanged).
+test assign_reps_atomic {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 6} }}]
+    set rc [catch {::biochemeleon::registry::assign_reps {5 VDW 999 Lines}} err]
+    list $rc $err \
+         [expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create]}] \
+         [::biochemeleon::registry::count_remaining]
+} -result {1 {hider 999 not registered} 1 2}
+
+# Empty mapping is a no-op (no error, no state change).
+test assign_reps_empty_noop {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    set rc [catch {::biochemeleon::registry::assign_reps [dict create]} err]
+    list $rc [expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create]}] \
+         [::biochemeleon::registry::count_remaining]
+} -result {0 1 1}
+
+# Found records are stamped too (rep is set) but stay excluded from the
+# per-tier remaining counts (GAME-03).
+test assign_reps_after_mark_found {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 6} }}]
+    ::biochemeleon::registry::mark_found 5
+    ::biochemeleon::registry::assign_reps {5 VDW 6 Lines}
+    expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create Lines 1]}
+} -result 1
+
+# Multi-tier consistency: the per-tier remaining counts sum to the total
+# remaining (Game tab's total vs per-rep labels can never disagree).
+test multi_tier_total_consistency {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 6 7 8} }}]
+    ::biochemeleon::registry::assign_reps {5 VDW 6 VDW 7 Lines 8 Lines}
+    set sum 0
+    dict for {r c} [::biochemeleon::registry::remaining_by_rep] { incr sum $c }
+    expr {$sum eq [::biochemeleon::registry::count_remaining]}
+} -result 1
+
 # CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
 # Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
 # ($? is always 0 from VMD), so the harness MUST parse this marker line.
