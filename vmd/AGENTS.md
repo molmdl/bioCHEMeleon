@@ -88,7 +88,7 @@ Extension entry point lives in `vmd/biochemeleon.tcl`:
 - **Random total distribution across all reps from start** (v1.1 quick-008 fix baked in — never default to all-spheres when only a total count is set).
 - WSL→VMD path guard: `to_vmd_path()` converts `/mnt/c/...` → `C:/...` (forward slashes, NOT backslashes). Windows VMD cannot resolve `/mnt/c/`, `/tmp/`, or `~/`.
 
-### Picking mechanism (LOCKED-WITH-CAVEATS — GUI-verified 2026-08-30, plan 16-12)
+### Picking mechanism (LOCKED — GUI-verified 2026-08-30 plan 16-12; first-click quirk verified 2026-09-03 plans 16-16/16-17)
 
 **CONFIRMED (a complete round was WON through this path in a real GUI session, 2026-08-30 — see `.planning/phases/16-mvp-core-loop-sphere/16-VERIFICATION.md`):**
 
@@ -99,14 +99,14 @@ Extension entry point lives in `vmd/biochemeleon.tcl`:
 - **PickBridge** = `vmd/lib/pick_bridge.tcl` (trace primary + dormant labelpoll fallback via `mechanism`; save/restore of the user's `vmd_mouse_mode`/`submode`; baseline-guarded label hygiene).
 - **Pick and rotate are MUTUALLY EXCLUSIVE mouse modes in VMD** (unlike PyMOL where picking coexisted with middle-drag rotate). Player toggles between them (hotkey `r` = rotate, `1` = pick atom, or the in-panel Rotate/Pick toggle).
 
-**CAVEATS (from the 2026-08-30 session — C-side firing reliability UNRESOLVED, targeted re-verify pending):**
+**FIRST-CLICK QUIRK (known behavior, verified 2026-09-03 — 16-16 re-verify session + 16-17 headless probe; caveat CLOSED):**
 
-- C-side firing showed **mode-desync flakiness**: label-only clicks until a keyboard re-arm (pressing `p` re-engaged finds); finds correlated with VMD printing `User Pick: mol1 atom:N` (⇒ `mouse callback` was ON during those picks); `ERROR) Illegal mouse mode: 0 -1` appeared twice immediately before working picks (from the interactive hotkey path); after a fresh VMD restart picks worked without any `p`.
-- Leading hypothesis (UNCONFIRMED): VMD 1.9.3's C-side pick-event delivery depends on `mouse callback` / interactive-mode re-arm — the text-command `mouse mode pick 2` alone can leave a desync where labelatom clicks create labels but never write `::vmd_pick_event`. Candidate fix: `mouse callback on` in activate/deactivate — **NOT added to pick_bridge yet** (hypothesis unconfirmed; UG says callback gates only the HOVER `_silent` variables and www.tcl never enables it). The A/B test in `vmd/tests/pick_verify.tcl` (STEP 4, re-verify session) decides.
+- One keyboard `p` press per round arms real pick delivery for the whole round; clicks before it land in labelatom (labels ARE added, the in-game count never changes). Pasted `mouse mode pick|pick 0|pick 2` never arms delivery; a fresh VMD restart also clears the quirk (16-12: picks worked with no `p` after restart). The arming difference is the DISPATCH PATH (VMD's `user add key` hotkey binding — hotkeys.tcl:112 `p` = `mouse mode pick` — vs a pasted text command), NOT the submode value: the 16-17 headless probe maps `pick 2` = labelatom/2 (the shipped "# atom" mode, hotkeys.tcl:118) vs `pick 0` = query/0, and the GUI record rules the wrong-submode fix out (the 16-12 round was WON on pick 2; pasted query never armed). VMD 1.9.3 has NO mode-query form — the `mouse` usage text is the only introspection.
+- `mouse callback` A/B DOWNGRADED to non-blocking (2026-09-03): finds fired in the untouched default callback state; the `User Pick:` console echo is callback-state-independent. NO `mouse callback` commands in pick_bridge — mechanism byte-untouched (16-17 branch c2). Player guidance: if finds don't register, press `p` (or `1`) once on the VMD display.
 - Panel checkbox desync (known behavior, minor UX): pressing hotkey `r` switches VMD to rotate but the Game-tab checkbox stays "Pick" — pick_bridge does not observe hotkey-driven mode changes.
-- Do NOT treat a text-mode smoke PASS as proof of C-side firing — text mode cannot fire a real pick (that is what the GUI re-verify is for).
+- Do NOT treat a text-mode smoke PASS as proof of C-side firing — text mode cannot fire a real pick (that is what the GUI verification sessions are for).
 
-**Phase-19 note:** the Game tab has NO Cleanup/Restart buttons yet (Phase 19 scope); until then cleanup is console-only, and `start_game` has no active-game guard (double-Start on the still-loaded game molecule stacks generations — observed 2026-08-30: 561-atom combined PDB from a 558-atom game molecule, `Segments: 3`). Setup-tab "Reset" resets setup fields only — it does NOT clear hiders (expectation mismatch, registered for gap closure).
+**Phase-19 note:** the Game tab has NO Cleanup/Restart buttons yet (Phase 19 scope); until then cleanup is console-only. `start_game` auto-restarts via the active-game guard (landed 16-13, headless-proven 16-15, GUI-confirmed 16-16): a double-Start cleans the active round and starts fresh on the caller's settings — it can no longer stack game generations (the 2026-08-30 561-atom / `Segments: 3` defect is fixed). Setup-tab "Reset" resets setup fields only — it does NOT clear hiders (expectation mismatch, registered for gap closure).
 
 ### Mutation-safety rules (Phase 15)
 
