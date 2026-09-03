@@ -20,7 +20,7 @@ namespace eval ::biochemeleon::registry {
     variable _records [dict create]
 
     # Export the public symbols (documents the public contract).
-    namespace export reconstruct_from_sentinels is_hider mark_found count_hiders reset status_of count_remaining remaining_by_rep
+    namespace export reconstruct_from_sentinels is_hider mark_found count_hiders reset status_of count_remaining remaining_by_rep set_rep assign_reps
 }
 
 # Dependency-injected sentinel reconstruction (port of v1 registry.py:420-443).
@@ -128,4 +128,43 @@ proc ::biochemeleon::registry::remaining_by_rep {} {
         }
     }
     return $out
+}
+
+# ---- Phase 17.1: per-record rep assignment ----
+
+# Stamp ONE record's rep field — the per-record complement to the SINGLE
+# reconstruct_from_sentinels call (P17D/P8: reconstruct clears + stamps one
+# rep for ALL records, so a multi-tier round calls it ONCE, then assigns
+# each hider's tier here — NEVER a per-tier reconstruct loop).
+# Registered idx -> rep is overwritten (any prior value, including "");
+# the record's status is PRESERVED. Unregistered idx -> error with the
+# exact mark_found wording. Returns nothing.
+proc ::biochemeleon::registry::set_rep {idx rep} {
+    variable _records
+    if {![dict exists $_records $idx]} {
+        error "hider $idx not registered"
+    }
+    set rec [dict get $_records $idx]
+    dict set rec rep $rep
+    dict set _records $idx $rec
+    return
+}
+
+# Bulk per-record rep assignment: `mapping` is a dict idx -> rep applied via
+# set_rep. ATOMIC: validates EVERY key first — if ANY idx is unregistered,
+# errors "hider $k not registered" BEFORE touching any record (no partial
+# application). Rep values are stored as given — the registry does NOT
+# validate them against GAME_REPS (that is the caller's — rep_tiers /
+# game.tcl — job). Empty mapping is a no-op. Returns nothing.
+proc ::biochemeleon::registry::assign_reps {mapping} {
+    variable _records
+    dict for {k v} $mapping {
+        if {![dict exists $_records $k]} {
+            error "hider $k not registered"
+        }
+    }
+    dict for {k v} $mapping {
+        ::biochemeleon::registry::set_rep $k $v
+    }
+    return
 }
