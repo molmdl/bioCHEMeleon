@@ -110,23 +110,23 @@ Plans:
 5. A pick-vs-rotate control is available so the player can rotate the view between picks (VMD pick/rotate are mutually exclusive mouse modes).
 
 Plans:
-- [ ] 16-01-PLAN.md — Pure sphere-position sampler `generators.tcl` (TDD, 8 cases)
-- [ ] 16-02-PLAN.md — Registry found-state surface: status_of / count_remaining / remaining_by_rep + rep arg (TDD)
-- [ ] 16-03-PLAN.md — Pure game_logic.tcl: idle→countdown→playing→won state machine + drift-free timer + log model (TDD)
-- [ ] 16-04-PLAN.md — setup_state format_remaining (GAME-03 display string) (TDD)
-- [ ] 16-05-PLAN.md — hiders.tcl mol bridge: hidden/found VDW reps + user2 found-marking with modselect re-assert (+ smoke)
-- [ ] 16-06-PLAN.md — pick_bridge.tcl: trace ::vmd_pick_event + mouse mode pick 2 + label hygiene (+ headless machinery smoke)
-- [ ] 16-07-PLAN.md — make_placeholder_hiders body-swap to real bbox placement (measure minmax + sampler) (+ smoke)
-- [ ] 16-08-PLAN.md — game.tcl controller: hider-rep step in start_game + on_pick three-way guard + win flow + callbacks (+ smoke)
-- [ ] 16-09-PLAN.md — game_tab.tcl GUI: countdown/timer/log/remaining/win + Rotate-Pick radios + after-discipline (+ load-gate smoke)
-- [ ] 16-10-PLAN.md — Entry/dialog wiring: source order, Game-tab build, BTN-07 Start + on_start fan-in, on_close cleanup (+ load gate)
-- [ ] 16-11-PLAN.md — Phase-16 headless capstone: full loop end-to-end through the public surface + regression sweep
-- [ ] 16-12-PLAN.md — GUI human-verify checkpoint: LOCK the pick contract (9-step session) + post-lock doc updates
-- [ ] 16-13-PLAN.md — GAP (16-VERIFICATION Truth 7): active-game guard in game.tcl start_game — auto-restart at the single choke point, no stacked generations
-- [ ] 16-14-PLAN.md — GAP (Truth 7 GUI half): dialog.tcl on_start pick-bridge teardown + game_tab start_round view reset
-- [ ] 16-15-PLAN.md — GAP (Truth 7 headless proof): phase16_restart_smoke.tcl — double-start mid-round + after-win + different-target regression gate
-- [ ] 16-16-PLAN.md — GAP (Truth 3 + Truth 7 GUI re-check): ONE GUI re-verify session (callback A/B, exact PICK values, freeze probe, pv_cleanup restore, double-Start guard)
-- [ ] 16-17-PLAN.md — GAP (Truth 3 close-out): apply the A/B verdict to pick_bridge.tcl (callback pairing or recorded non-requirement) + close the caveat in AGENTS.md/STATE.md
+- [x] 16-01-PLAN.md — Pure sphere-position sampler `generators.tcl` (TDD, 8 cases)
+- [x] 16-02-PLAN.md — Registry found-state surface: status_of / count_remaining / remaining_by_rep + rep arg (TDD)
+- [x] 16-03-PLAN.md — Pure game_logic.tcl: idle→countdown→playing→won state machine + drift-free timer + log model (TDD)
+- [x] 16-04-PLAN.md — setup_state format_remaining (GAME-03 display string) (TDD)
+- [x] 16-05-PLAN.md — hiders.tcl mol bridge: hidden/found VDW reps + user2 found-marking with modselect re-assert (+ smoke)
+- [x] 16-06-PLAN.md — pick_bridge.tcl: trace ::vmd_pick_event + mouse mode pick 2 + label hygiene (+ headless machinery smoke)
+- [x] 16-07-PLAN.md — make_placeholder_hiders body-swap to real bbox placement (measure minmax + sampler) (+ smoke)
+- [x] 16-08-PLAN.md — game.tcl controller: hider-rep step in start_game + on_pick three-way guard + win flow + callbacks (+ smoke)
+- [x] 16-09-PLAN.md — game_tab.tcl GUI: countdown/timer/log/remaining/win + Rotate-Pick radios + after-discipline (+ load-gate smoke)
+- [x] 16-10-PLAN.md — Entry/dialog wiring: source order, Game-tab build, BTN-07 Start + on_start fan-in, on_close cleanup (+ load gate)
+- [x] 16-11-PLAN.md — Phase-16 headless capstone: full loop end-to-end through the public surface + regression sweep
+- [x] 16-12-PLAN.md — GUI human-verify checkpoint: LOCK the pick contract (9-step session) + post-lock doc updates
+- [x] 16-13-PLAN.md — GAP (16-VERIFICATION Truth 7): active-game guard in game.tcl start_game — auto-restart at the single choke point, no stacked generations
+- [x] 16-14-PLAN.md — GAP (Truth 7 GUI half): dialog.tcl on_start pick-bridge teardown + game_tab start_round view reset
+- [x] 16-15-PLAN.md — GAP (Truth 7 headless proof): phase16_restart_smoke.tcl — double-start mid-round + after-win + different-target regression gate
+- [x] 16-16-PLAN.md — GAP (Truth 3 + Truth 7 GUI re-check): ONE GUI re-verify session (callback A/B, exact PICK values, freeze probe, pv_cleanup restore, double-Start guard)
+- [x] 16-17-PLAN.md — GAP (Truth 3 close-out): apply the A/B verdict to pick_bridge.tcl (callback pairing or recorded non-requirement) + close the caveat in AGENTS.md/STATE.md
 
 ### Phase 17.1: Rep Setup Infrastructure & Simple Rep Generators
 
@@ -264,7 +264,7 @@ Plans:
 | 13. Bootstrap & Sourced Entry | v2.0 | 2/2 | ✓ Complete | 2026-08-29 |
 | 14. Setup Tab & Bundled Demos | v2.0 | 4/4 | ✓ Complete | 2026-08-29 |
 | 15. Mutation Safety & Hider Registry | v2.0 | 5/5 | ✓ Complete | 2026-08-30 |
-| 16. MVP Core Loop (Sphere) | v2.0 | 0/TBD | Not started | - |
+| 16. MVP Core Loop (Sphere) | v2.0 | 17/17 | ✓ Complete | 2026-09-03 |
 | 17.1. Rep Setup Infrastructure & Simple Rep Generators | v2.0 | 0/TBD | Not started | - |
 | 17.2. Cartoon/NewCartoon Generators | v2.0 | 0/TBD | Not started | - |
 | 18. Materials Exploration | v2.0 | 0/TBD | Not started | - |

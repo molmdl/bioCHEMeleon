@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-08-22)
 
 **Core value:** The player can load a molecule, generate blended "hider" atoms that match the local representation style, and reliably find them by clicking — with a working timer and win condition.
-**Current focus:** v2.0 — VMD tcl port. Phase 15 (Mutation Safety & Hider Registry — HIGHEST RISK) COMPLETE — 15-01 (pure registry count/reset TDD) + 15-02 (mutation.tcl PDB-rebuild) + 15-03 (backup.tcl view/rep round-trip) + 15-04 (game.tcl composition root) + 15-05 (capstone smoke, PASS=1 first run) all done; verification PASSED 4/4 SCs. Ready for Phase 16 (MVP Core Loop — Sphere; locks the pick contract via GUI human-verify).
+**Current focus:** v2.0 — VMD tcl port. Phase 16 (MVP Core Loop — Sphere) COMPLETE — all 17 plans (12 core on 2026-08-30 + 5 gap-closure on 2026-09-03); re-verification PASSED 7/7 must-haves. The core loop is playable end-to-end and the pick contract is LOCKED (first-click p-press quirk documented as known behavior). Ready for Phase 17.1 (Rep Setup Infrastructure & Simple Rep Generators).
 
 ## Current Position
 
-Phase: 15 of 23 (Mutation Safety & Hider Registry) — COMPLETE (all 5 plans)
-Plan: 5 of 5 in current phase (15-01..15-05 complete)
-Status: Phase 15 complete; HIGHEST-RISK VMD unknown (no in-place insertion → PDB-rebuild) proven de-risked. Registry (pure, TDD 9/9) + mutation.tcl (forward rebuild+sentinel) + backup.tcl (viewpoint/rep round-trip) + game.tcl (composition root) integrated; capstone proves SC1-SC4 end-to-end through game::start_game/cleanup with 11/11 assertions green. Verification PASSED (4/4 SCs; all 5 smokes + tcltest re-run against fresh staging; one W1 warning fixed post-verify).
-Last activity: 2026-08-30 — Phase 15 complete (5 plans; Wave 1 ran 3 parallel worktree executors [15-01 registry count/reset TDD, 15-02 mutation.tcl PDB-rebuild, 15-03 backup.tcl snapshot/apply/restore], merged disjoint; Wave 2 15-04 game.tcl composition root + entry wiring; Wave 3 15-05 capstone PASS=1 first run with 11/11 SC1-SC4 assertions). Orchestrator W1 fix post-verification: `regexp -- {-999\.0}` in phase15_mutation_smoke.tcl (leading-dash pattern parsed as a switch -> error -> VMD -e silently skipped the 2a hider-format assertions while still printing PASS=1; re-run PASS=1 with assertions live). 2 Phase-15 requirements satisfied: HIDER-01, HIDER-02.
+Phase: 16 of 23 (MVP Core Loop — Sphere) — COMPLETE (all 17 plans)
+Plan: 17 of 17 in current phase (16-01..16-17 complete)
+Status: Phase 16 complete; the MVP hide-and-seek loop is playable end-to-end (Start → 3-2-1 countdown → p-armed picks → win box with time; double-Start auto-restart guard-proven). Re-verification PASSED 7/7 must-haves (16-VERIFICATION-2.md; all 8 phase-16 smokes PASS=1 on fresh staging, 0 ERROR)/bad-switch). Pick contract LOCKED: trace mechanism primary (won round 16-12; exact PICK values captured 16-16: `PICK ev=vmd_pick_event {} write`, 0-based atom index, game molid, shift flag); FIRST-CLICK QUIRK locked as known behavior (keyboard `p` once per round arms C-side pick delivery; pasted `mouse mode pick 0|2` never arms — 16-17 probe: `pick 2` IS atom-pick per hotkeys.tcl `1 = pick 2 "# atom"`, 1-arg `pick` → pick/-1, NO mode-query form exists in 1.9.3 text mode; mechanism byte-untouched, ZERO `mouse callback` commands). Gap closure: 16-13 active-game guard (game.tcl choke point, cleanup-then-fresh with liveness remap) + 16-14 on_start bridge teardown + start_round view reset + 16-15 phase16_restart_smoke.tcl (555→558→557→558→426, Segments always 2, guard proven no-op-safe) + 16-16 partial GUI re-verify (guard PASS both paths IN GUI; A/B + pv_cleanup not reached) + 16-17 branch-c2 close-out.
+Last activity: 2026-09-03 — Phase 16 gap closure complete (16-13..16-17). Process notes: 16-16 Task 1 executed via two orchestrator micro-edits after two full-context executor attempts stalled (lesson: mechanical edits get exact old/new strings inline, no plan-file reading); Wave 2 ran as exec/16-14 + exec/16-15 worktrees, merged with a STATE.md union conflict resolved by orchestrator. Phase-16 requirements satisfied: HIDER-03, LOOP-01, LOOP-02, LOOP-03, BTN-07, GAME-01, GAME-02, GAME-03.
 
-Progress: ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ ~25% v2.0 (3 of ~12 phases complete; Phase 15 complete)
+Progress: ████████████████░░░░░░░░░░░░░░ ~33% v2.0 (4 of ~12 phases complete; Phase 16 complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11 (v2.0); 77 in v1 (archived)
-- Average duration: ~21 min (v2.0, 11 plans)
-- Total execution time: ~238 min (v2.0)
+- Total plans completed: 28 (v2.0); 77 in v1 (archived)
+- Average duration: ~17 min (v2.0, 28 plans; day-1 Phase-16 per-plan splits not recorded)
+- Total execution time: ~238 min (v2.0 through Phase 15) + Phase 16 (day-1 12 plans + ~71 min gap wave: 16-13 8 / 16-14 5 / 16-15 22 / 16-16 ~25 incl. 2 stalled attempts / 16-17 11)
 
 **By Phase:**
 
@@ -30,6 +30,7 @@ Progress: ████████████░░░░░░░░░░░�
 | 13. Bootstrap & Sourced Entry | 2/2 | 50 min | 25 min |
 | 14. Setup Tab & Bundled Demos | 4/4 | 87 min | 22 min |
 | 15. Mutation Safety & Hider Registry | 5/5 | ~101 min | ~20 min |
+| 16. MVP Core Loop (Sphere) | 17/17 | 12 plans (08-30) + ~71 min gap wave (09-03) | ~14 min (gap wave) |
 
 *Updated after each plan completion*
 
@@ -83,10 +84,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-08-30 — Completed Phase 15 (all 5 plans; Mutation Safety & Hider Registry — HIGHEST RISK de-risked)
-Stopped at: Phase 15 complete + verification PASSED (4/4 SCs). Commits: Wave 1 (parallel worktrees, merged disjoint): ab25dcb/b10f9a5/c0d7233 (15-01 registry count/reset TDD 9/9), 4e58e29/b64f5c0/37098c8 (15-02 mutation.tcl engine, smoke PASS=1), 013204a/441679f/0944d00 (15-03 backup.tcl round-trip, smoke PASS=1); Wave 2: f8df463/0622605/3e331a4 (15-04 game.tcl + entry wiring, game smoke PASS=1, phase14 regression clean); Wave 3: 08c321d/cfd5635 (15-05 capstone PASS=1 first run, 11/11 SC assertions). Post-verify: abc9ca4 (fix(15): regexp -- {-999\.0} — mutation smoke 2a assertions now actually run). vmd/lib/{registry,mutation,backup,game}.tcl + vmd/smoke/phase15_{mutation,backup,game,smoke}.tcl + tests/test_registry.test. VERIFICATION.md written (15-VERIFICATION.md).
+Last session: 2026-09-03 — Completed Phase 16 (all 17 plans; MVP Core Loop — Sphere; gap closure 16-13..16-17 + re-verification PASSED 7/7)
+Stopped at: Phase 16 complete + verification PASSED (16-VERIFICATION-2.md). Gap-wave commits: 95a7de4/e7d6073 (16-13 guard), f223e61/1cb5d61/53b88d0 (16-14, worktree), 926a2b9/69db365/d60c0c6 (16-15, worktree; merge f2f3141 with STATE.md union-resolved), c64cc37/d60585b (16-16 driver micro-edits), d9db83a (16-16 record), 77562b0 (orchestrator: VERIFICATION bundle + 16-17 branch-c), 3187e2e/e8f3ef5/bdb49c7 (16-17 c2 close-out). VERIFICATION-2: passed 7/7, all 8 smokes green on fresh staging.
 Resume file: None
-Next: /gsd-discuss-phase 16 (MVP Core Loop — Sphere; HIDER-03, LOOP-01..03, BTN-07, GAME-01..03). Phase 16 locks the VMD pick-callback contract via a GUI human-verify checkpoint (MEDIUM-confidence research flag: vmd_pick_* globals absent in text mode; design PickBridge defensively — trace + callback-list + label-poll fallback). Carry-forward lessons for Phase 16+: (a) `[list apply {lambda} $molid]` command-prefix DI, never bare `[apply ...]`; (b) `regexp --` for leading-dash patterns + grep `bad switch` for false-PASS detection; (c) 2-arg restore contract (delete LIVE game_molid, not snapshot.molid) — Phase 19 cleanup/restart builds on game::cleanup; (d) one-per-line `variable` declarations; (e) parallel-plan waves use git worktrees per plan (AGENTS.md protocol) — worked flawlessly in Wave 1 (3 plans, zero races, disjoint merges).
+Next: /gsd-discuss-phase 17.1 (Rep Setup Infrastructure & Simple Rep Generators; HIDER-06, HIDER-04) or /gsd-plan-phase 17.1 directly. Carry-forward lessons for Phase 17+: (a) `[list apply {lambda} $molid]` command-prefix DI, never bare `[apply ...]`; (b) `regexp --` + grep `bad switch` for false-PASS detection; (c) 2-arg restore contract (LIVE game_molid); (d) one-per-line `variable` declarations; (e) parallel waves use per-plan git worktrees, orchestrator merges in dependency order (STATE.md conflicts → union); (f) VMD 1.9.3 mouse-mode table PROBED: `pick 2` = atom-pick (hotkeys.tcl `1 = pick 2`), 1-arg `pick` = pick/-1 (the `p` hotkey form), `pick 0` = query, NO mode-query form in text mode; (g) FIRST-CLICK QUIRK (locked known behavior): hotkey `p` once per round arms C-side pick delivery — pasted `mouse mode` commands never do; per-game UX note for the help text (Phase 22); (h) USER DIRECTIVE: future human-verify sessions must auto-issue commands + auto-log to file, minimal user pastes (only what's strictly needed before real clicks); everything probeable goes headless; (i) VMD scene-view model (16-15 probes): molinfo 4-matrix get reads the CURRENT SCENE VIEW for any molid and the scene view RESETS on every `mol new` — viewpoint asserts must target the round's own snapshot.
 
 ## v1 Milestone Reference (archived)
 
@@ -96,4 +97,4 @@ Next: /gsd-discuss-phase 16 (MVP Core Loop — Sphere; HIDER-03, LOOP-01..03, BT
 - **Known v1 tech debt considered for v2:** Phase 9 SSL fallback (check_hostname=False); Phase 11 SS-inheritance (cosmetic). v1.1 quick-008 (random total distribution) baked into v2 from the start (SETUP-06).
 
 ---
-*Updated: 2026-08-30 after Phase 15 completion (5/5 plans; verification PASSED 4/4 SCs)*
+*Updated: 2026-09-03 after Phase 16 completion (17/17 plans; re-verification PASSED 7/7 must-haves)*

@@ -32,28 +32,28 @@ Requirements for the VMD 1.9.3 tcl port. Each maps to exactly one roadmap phase 
 - [ ] **BTN-04**: Load Setup — load setup parameters from a file
 - [ ] **BTN-05**: Generate & export — generate the game and save the initial state to a file for sharing / later loading (paired with GAME-04 Import)
 - [ ] **BTN-06**: Cleanup model — remove all game-generated representations/atoms not in the original molecule (via `resname GAM and beta < 0` sentinel, never generic filters)
-- [ ] **BTN-07**: Start — store the initial state, generate hiders per setup, switch to the Game status tab, and count down 3-2-1
+- [x] **BTN-07**: Start — store the initial state, generate hiders per setup, switch to the Game status tab, and count down 3-2-1
 
 ### Hider Generation
 
 - [x] **HIDER-01**: Hider generation via PDB-rebuild (Option D) — write a combined PDB (real + hider atoms with strict column alignment), `mol new` reload as a single molecule; hiders live in the SAME molecule as real atoms (player can't isolate them by toggling molecule visibility)
 - [x] **HIDER-02**: Hider sentinel `resname=GAM` + `beta=-999` + `segid=GAME` set in-place via `atomselect` after load (robust against PDB column bugs); hider registry keyed by atom `index` (stable within a molid's lifetime), reconstructable from sentinels on reload
-- [ ] **HIDER-03**: Sphere/VDW hiders — place anywhere in the bounding region (simplest generator; MVP)
+- [x] **HIDER-03**: Sphere/VDW hiders — place anywhere in the bounding region (simplest generator; MVP)
 - [ ] **HIDER-04**: Line/Licorice hiders — new atoms mimic connected atoms or alternate positions
 - [ ] **HIDER-05**: Cartoon/NewCartoon hiders — splice a full residue (Cα + neighbors) with `mol ssrecalc`, OR use Tube/Trace as SS-independent alternatives to sidestep the STRIDE `ss='L'` caveat for fake `GAM` residues
 - [ ] **HIDER-06**: Research-driven selection of which VMD representations are viable for the blend-in mechanic — 10-rep GAME_REPS list (Lines, VDW, Licorice, CPK, Cartoon, NewCartoon, Trace, Tube, Points, DynamicBonds); surface/volumetric reps are anti-features
 
 ### Core Loop
 
-- [ ] **LOOP-01**: Click-to-find — clicking an atom in the OpenGL viewer (via a VMD pick mechanism) checks if the picked atom's `index` is a registered hider → marks it "found" (recolors or hides it)
-- [ ] **LOOP-02**: Found-status tracking — a single source of truth per hider (found/hidden) that remaining-counter, found-management, reveal, and win all read
-- [ ] **LOOP-03**: Win condition — when all hiders are "found", stop the timer and show a winning message with the time taken
+- [x] **LOOP-01**: Click-to-find — clicking an atom in the OpenGL viewer (via a VMD pick mechanism) checks if the picked atom's `index` is a registered hider → marks it "found" (recolors or hides it)
+- [x] **LOOP-02**: Found-status tracking — a single source of truth per hider (found/hidden) that remaining-counter, found-management, reveal, and win all read
+- [x] **LOOP-03**: Win condition — when all hiders are "found", stop the timer and show a winning message with the time taken
 
 ### Game Status Tab
 
-- [ ] **GAME-01**: Rolling info box (status messages / log of clicks, hints, reveals)
-- [ ] **GAME-02**: Timer — counts up after the game starts, stops on win
-- [ ] **GAME-03**: Remaining hiders count — total, and per-representation when the easy difficulty toggle is set
+- [x] **GAME-01**: Rolling info box (status messages / log of clicks, hints, reveals)
+- [x] **GAME-02**: Timer — counts up after the game starts, stops on win
+- [x] **GAME-03**: Remaining hiders count — total, and per-representation when the easy difficulty toggle is set
 - [ ] **GAME-04**: Import button — import a game prepared by Generate & export
 - [ ] **GAME-05**: Hint button — change color of the N atoms/residues around a hider (colors neighbors, not the hider itself)
 - [ ] **GAME-06**: Reveal-one hider button — asks the user to confirm giving up, then marks one random hider "found" and counts the reveal use
@@ -123,14 +123,14 @@ Which phases cover which requirements. v2.0 phases are numbered 13-23 (continuin
 | DEMO-01 | Phase 14 | Complete |
 | HIDER-01 | Phase 15 | Complete |
 | HIDER-02 | Phase 15 | Complete |
-| HIDER-03 | Phase 16 | Pending |
-| LOOP-01 | Phase 16 | Pending |
-| LOOP-02 | Phase 16 | Pending |
-| LOOP-03 | Phase 16 | Pending |
-| BTN-07 | Phase 16 | Pending |
-| GAME-01 | Phase 16 | Pending |
-| GAME-02 | Phase 16 | Pending |
-| GAME-03 | Phase 16 | Pending |
+| HIDER-03 | Phase 16 | Complete |
+| LOOP-01 | Phase 16 | Complete |
+| LOOP-02 | Phase 16 | Complete |
+| LOOP-03 | Phase 16 | Complete |
+| BTN-07 | Phase 16 | Complete |
+| GAME-01 | Phase 16 | Complete |
+| GAME-02 | Phase 16 | Complete |
+| GAME-03 | Phase 16 | Complete |
 | HIDER-04 | Phase 17.1 | Pending |
 | HIDER-05 | Phase 17.2 | Pending |
 | HIDER-06 | Phase 17.1 | Pending |
