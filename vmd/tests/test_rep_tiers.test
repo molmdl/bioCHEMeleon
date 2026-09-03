@@ -1,0 +1,267 @@
+# vmd/tests/test_rep_tiers.test
+# tcltest suite for the PURE rep-tier dispatch module (Phase 17.1).
+# Run under headless VMD: bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/tests/test_rep_tiers.test -eofexit < /dev/null'
+# (Or standalone tclsh if installed: tclsh vmd/tests/test_rep_tiers.test)
+#
+# Pitfall 4 (global PRNG): EVERY randomized call below passes an EXPLICIT seed
+# (resolve_per_rep forwards it to randomize_per_rep, which reseeds internally
+# via srand($seed)), so no case relies on residual PRNG state. The seed values
+# 173 and 41 were PROBED against this VMD 1.9.3 binary's Tcl 8.5.6 PRNG so the
+# plan's pinned randomized-path expectations hold deterministically:
+#   seed 173 -> randomize_per_rep 10 IMPLEMENTED_TIERS sums to exactly 10
+#               ({Points 4 Licorice 3 VDW 2 Lines 1} pre-ordering)
+#   seed 41  -> randomize_per_rep 3 {Licorice} -> exactly {Licorice 3}
+
+package require tcltest
+namespace import ::tcltest::*
+configure -verbose {start pass body error}
+
+# Source the pure layer. Under `vmd -e`, [info script] is EMPTY (verified),
+# so use [pwd] (VMD cwd = the staging root) to locate files.
+source [file join [pwd] vmd lib rep_tiers.tcl]
+
+# backup::snapshot `reps` records are {style sel color material} 4-element
+# lists (backup.tcl:39-50) -- build one with a fixed color/material.
+proc rt_rec {style sel} { return [list $style $sel red opaque] }
+
+# ---------------------------------------------------------------------------
+# Constants + simple tier queries (implemented / tier_kind / style_args)
+# ---------------------------------------------------------------------------
+
+test implemented_game_reps_all_one {} -body {
+    set ok 1
+    foreach rep {Lines VDW Licorice CPK Points DynamicBonds} {
+        if {[::biochemeleon::rep_tiers::implemented $rep] != 1} { set ok 0; break }
+    }
+    set ok
+} -result 1
+
+test implemented_unimplemented_and_unknown_zero {} -body {
+    list [::biochemeleon::rep_tiers::implemented Cartoon] \
+         [::biochemeleon::rep_tiers::implemented NewCartoon] \
+         [::biochemeleon::rep_tiers::implemented Trace] \
+         [::biochemeleon::rep_tiers::implemented Tube] \
+         [::biochemeleon::rep_tiers::implemented Ribbons] \
+         [::biochemeleon::rep_tiers::implemented ""]
+} -result {0 0 0 0 0 0}
+
+test tier_kind_vdw_free {} -body {
+    ::biochemeleon::rep_tiers::tier_kind VDW
+} -result free
+
+test tier_kind_bonded_tiers {} -body {
+    set ok 1
+    foreach rep {Lines Licorice CPK Points DynamicBonds} {
+        if {[::biochemeleon::rep_tiers::tier_kind $rep] ne "bonded"} { set ok 0; break }
+    }
+    set ok
+} -result 1
+
+test tier_kind_unknown_empty {} -body {
+    list [::biochemeleon::rep_tiers::tier_kind Cartoon] \
+         [::biochemeleon::rep_tiers::tier_kind Ribbons] \
+         [::biochemeleon::rep_tiers::tier_kind ""]
+} -result {{} {} {}}
+
+# The explicit-cutoff rule: DynamicBonds' default cutoff (3.0 A) draws spurious
+# 2.3-2.9 A bonds on hider scenes, so the dispatch layer passes an explicit 1.6.
+test style_args_dynbonds_explicit_cutoff {} -body {
+    ::biochemeleon::rep_tiers::style_args DynamicBonds
+} -result {DynamicBonds 1.6}
+
+test style_args_single_word_tiers {} -body {
+    list [::biochemeleon::rep_tiers::style_args Lines] \
+         [::biochemeleon::rep_tiers::style_args VDW] \
+         [::biochemeleon::rep_tiers::style_args Points]
+} -result {Lines VDW Points}
+
+test style_args_unknown_empty {} -body {
+    list [::biochemeleon::rep_tiers::style_args Cartoon] \
+         [::biochemeleon::rep_tiers::style_args Ribbons]
+} -result {{} {}}
+
+# ---------------------------------------------------------------------------
+# scene_reps_to_per_rep (backup::snapshot reps list -> GAME_REPS-ordered
+# presence dict; GAME_REPS filter + sentinel-selection skip + dedup)
+# ---------------------------------------------------------------------------
+
+test scene_to_per_rep_skips_non_game_style {} -body {
+    ::biochemeleon::rep_tiers::scene_reps_to_per_rep \
+        [list [rt_rec Ribbons "all"] [rt_rec VDW "protein"]]
+} -result {VDW 1}
+
+test scene_to_per_rep_skips_sentinel_selection {} -body {
+    ::biochemeleon::rep_tiers::scene_reps_to_per_rep \
+        [list [rt_rec VDW {resname GAM and beta < 0 and user2 < 1}] [rt_rec Lines "protein"]]
+} -result {Lines 1}
+
+test scene_to_per_rep_dedups_duplicate_styles {} -body {
+    ::biochemeleon::rep_tiers::scene_reps_to_per_rep \
+        [list [rt_rec VDW "protein"] [rt_rec VDW "backbone"] [rt_rec VDW "name CA"]]
+} -result {VDW 1}
+
+test scene_to_per_rep_orders_by_game_reps {} -body {
+    ::biochemeleon::rep_tiers::scene_reps_to_per_rep \
+        [list [rt_rec DynamicBonds "protein"] [rt_rec Ribbons "all"] \
+              [rt_rec VDW "protein"] [rt_rec Lines "protein"]]
+} -result {Lines 1 VDW 1 DynamicBonds 1}
+
+test scene_to_per_rep_empty_input {} -body {
+    dict size [::biochemeleon::rep_tiers::scene_reps_to_per_rep [list]]
+} -result 0
+
+test scene_to_per_rep_degenerate_input {} -body {
+    dict size [::biochemeleon::rep_tiers::scene_reps_to_per_rep ""]
+} -result 0
+
+# ---------------------------------------------------------------------------
+# filter_per_rep_to_scene (per_rep restricted to detected keys,
+# GAME_REPS-ordered, counts preserved)
+# ---------------------------------------------------------------------------
+
+test filter_to_scene_preserves_counts {} -body {
+    ::biochemeleon::rep_tiers::filter_per_rep_to_scene \
+        [dict create VDW 2 Lines 3] [dict create VDW 1 Lines 1]
+} -result {Lines 3 VDW 2}
+
+test filter_to_scene_drops_undetected_keys {} -body {
+    ::biochemeleon::rep_tiers::filter_per_rep_to_scene \
+        [dict create VDW 2 Lines 3] [dict create VDW 1]
+} -result {VDW 2}
+
+test filter_to_scene_detected_empty {} -body {
+    dict size [::biochemeleon::rep_tiers::filter_per_rep_to_scene \
+        [dict create VDW 2 Lines 3] [dict create]]
+} -result 0
+
+# ---------------------------------------------------------------------------
+# resolve_per_rep, lock_scene=0 (clean -> restrict -> drop-overflow clamp ->
+# empty randomizes over IMPLEMENTED_TIERS -> GAME_REPS-ordered rebuild)
+# ---------------------------------------------------------------------------
+
+test resolve_l0_empty_randomizes_subset_and_sum {} -body {
+    set r [::biochemeleon::rep_tiers::resolve_per_rep 10 {} [dict create] 0 173]
+    set ok [expr {[dict size $r] >= 1}]
+    if {$ok} {
+        dict for {rep cnt} $r {
+            if {![string is integer -strict $cnt] || $cnt <= 0} { set ok 0 }
+            if {[::biochemeleon::rep_tiers::implemented $rep] != 1} { set ok 0 }
+        }
+    }
+    if {$ok} {
+        set sum 0
+        dict for {rep cnt} $r { incr sum $cnt }
+        set ok [expr {$sum == 10}]
+    }
+    set ok
+} -result 1
+
+test resolve_l0_fixed_seed_deterministic {} -body {
+    set r1 [::biochemeleon::rep_tiers::resolve_per_rep 10 {} [dict create] 0 173]
+    set r2 [::biochemeleon::rep_tiers::resolve_per_rep 10 {} [dict create] 0 173]
+    expr {$r1 eq $r2}
+} -result 1
+
+test resolve_l0_explicit_kept_verbatim {} -body {
+    ::biochemeleon::rep_tiers::resolve_per_rep 10 [dict create VDW 2 Lines 3] [dict create] 0 ""
+} -result {Lines 3 VDW 2}
+
+test resolve_l0_drops_unimplemented_key {} -body {
+    set r [::biochemeleon::rep_tiers::resolve_per_rep 5 [dict create Cartoon 2] [dict create] 0 42]
+    list [dict exists $r Cartoon] [expr {[dict size $r] >= 1}]
+} -result {0 1}
+
+# Drop-overflow clamp, validate_state semantics (keep entries that fit in the
+# cleaned dict's own order, DROP the rest -- never truncate): VDW 8 fits in
+# hider_count 10, Lines 8 does not fit the remainder.
+test resolve_l0_clamp_drop_overflow {} -body {
+    ::biochemeleon::rep_tiers::resolve_per_rep 10 [dict create VDW 8 Lines 8] [dict create] 0 ""
+} -result {VDW 8}
+
+test resolve_l0_unimplemented_only_randomizes {} -body {
+    set r [::biochemeleon::rep_tiers::resolve_per_rep 4 [dict create Cartoon 4] [dict create] 0 42]
+    set ok [expr {[dict size $r] >= 1}]
+    if {$ok} {
+        dict for {rep cnt} $r {
+            if {[::biochemeleon::rep_tiers::implemented $rep] != 1} { set ok 0; break }
+        }
+    }
+    set ok
+} -result 1
+
+# ---------------------------------------------------------------------------
+# resolve_per_rep, lock_scene=1 (allowed = detected INTERSECT
+# IMPLEMENTED_TIERS, falling back to IMPLEMENTED_TIERS when empty)
+# ---------------------------------------------------------------------------
+
+test resolve_l1_drops_undetected_keys {} -body {
+    ::biochemeleon::rep_tiers::resolve_per_rep 10 \
+        [dict create VDW 2 Lines 2 Points 2] [dict create VDW 1 Lines 1] 1 ""
+} -result {Lines 2 VDW 2}
+
+test resolve_l1_all_unimplemented_detected_randomizes {} -body {
+    set r [::biochemeleon::rep_tiers::resolve_per_rep 5 {} [dict create Cartoon 1] 1 42]
+    set ok [expr {[dict size $r] >= 1}]
+    if {$ok} {
+        dict for {rep cnt} $r {
+            if {[::biochemeleon::rep_tiers::implemented $rep] != 1} { set ok 0; break }
+        }
+    }
+    set ok
+} -result 1
+
+test resolve_l1_detected_empty_randomizes {} -body {
+    set r [::biochemeleon::rep_tiers::resolve_per_rep 5 {} [dict create] 1 42]
+    set ok [expr {[dict size $r] >= 1}]
+    if {$ok} {
+        dict for {rep cnt} $r {
+            if {[::biochemeleon::rep_tiers::implemented $rep] != 1} { set ok 0; break }
+        }
+    }
+    set ok
+} -result 1
+
+# Single detected implemented tier + empty per_rep: the restriction has one
+# allowed rep, so the randomized distribution must land entirely on it.
+test resolve_l1_single_detected_tier_exact {} -body {
+    ::biochemeleon::rep_tiers::resolve_per_rep 3 {} [dict create Licorice 1] 1 41
+} -result {Licorice 3}
+
+# ---------------------------------------------------------------------------
+# tiers_from_per_rep (ordered {code style count} triples, 1-based codes over
+# the ACTIVE list, counts > 0 only)
+# ---------------------------------------------------------------------------
+
+test tiers_from_per_rep_order_and_codes {} -body {
+    ::biochemeleon::rep_tiers::tiers_from_per_rep [dict create VDW 2 Lines 3]
+} -result {{1 Lines 3} {2 VDW 2}}
+
+test tiers_from_per_rep_skips_nonpositive_counts {} -body {
+    ::biochemeleon::rep_tiers::tiers_from_per_rep [dict create VDW 0 Lines 3 CPK -1]
+} -result {{1 Lines 3}}
+
+test tiers_from_per_rep_empty {} -body {
+    llength [::biochemeleon::rep_tiers::tiers_from_per_rep [dict create]]
+} -result 0
+
+# ---------------------------------------------------------------------------
+# effective_total (the P9 effective total: sum of counts; 0 for empty/invalid)
+# ---------------------------------------------------------------------------
+
+test effective_total_sums_counts {} -body {
+    ::biochemeleon::rep_tiers::effective_total [dict create VDW 2 Lines 3]
+} -result 5
+
+test effective_total_empty_is_zero {} -body {
+    ::biochemeleon::rep_tiers::effective_total [dict create]
+} -result 0
+
+# CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
+# Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
+# ($? is always 0 from VMD), so the harness MUST parse this marker line.
+set total $::tcltest::numTests(Total)
+set passed $::tcltest::numTests(Passed)
+set failed $::tcltest::numTests(Failed)
+set skipped $::tcltest::numTests(Skipped)
+puts "BCHM_TEST_RESULT Total=$total Passed=$passed Failed=$failed Skipped=$skipped"
+cleanupTests
