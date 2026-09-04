@@ -85,6 +85,214 @@ test returns_list_of_triples {} -body {
     set ok
 } -result 1
 
+# ---- Phase 17.1: bonded placement ----
+# Pure bonded-hider placement layer (plan 17.1-03): sample / unit_vector /
+# bonded_offset / reject_overlaps / place_bonded_hider. Geometry contract
+# (17.1-RESEARCH, probe-verified): VMD bonds two atoms iff d < 0.6*(r_i+r_j),
+# so offsets are drawn in [1.2, 1.6] A (>= 0.33 A margin inside every C/N/O/S
+# cutoff); occupied entries carry PER-ENTRY seps (1.4 real / 4.0 hider-hider);
+# rejection is STRICT < (a candidate at exactly sep passes -- matches the bond
+# law); |coord| <= 9999.0 guards the %8.3f PDB field; placement terminates via
+# bounded retries + sep halving (a slightly-clashing hider beats an infinite
+# loop). Every randomness test passes an explicit seed (Pitfall-4 mitigation).
+
+test sample_distinct_and_count {} -body {
+    set lst [list a b c d e]
+    set out [::biochemeleon::generators::sample $lst 3 42]
+    set ok [expr {[llength $out] == 3}]
+    if {$ok} {
+        foreach el $out {
+            if {[lsearch -exact $lst $el] == -1} { set ok 0 }
+        }
+        if {[llength [lsort -unique $out]] != 3} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test sample_seed_deterministic {} -body {
+    set lst [list a b c d e f g]
+    set a [::biochemeleon::generators::sample $lst 4 7]
+    set b [::biochemeleon::generators::sample $lst 4 7]
+    expr {$a eq $b}
+} -result 1
+
+test sample_n_gt_len {} -body {
+    set out [::biochemeleon::generators::sample [list a b] 5 1]
+    expr {[llength $out] == 2 && [llength [lsort -unique $out]] == 2}
+} -result 1
+
+test sample_zero {} -body {
+    llength [::biochemeleon::generators::sample [list a b] 0 1]
+} -result 0
+
+test unit_vector_norm {} -body {
+    set ok 1
+    foreach seed {1 2 3 4 5} {
+        set uv [::biochemeleon::generators::unit_vector $seed]
+        if {[llength $uv] != 3} { set ok 0; continue }
+        lassign $uv x y z
+        set n [expr {sqrt($x*$x + $y*$y + $z*$z)}]
+        if {abs($n - 1.0) > 1e-9} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test unit_vector_deterministic {} -body {
+    set a [::biochemeleon::generators::unit_vector 1]
+    set b [::biochemeleon::generators::unit_vector 1]
+    set c [::biochemeleon::generators::unit_vector 2]
+    expr {$a eq $b && $a ne $c}
+} -result 1
+
+test bonded_offset_bounds {} -body {
+    set ok 1
+    foreach seed {1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20} {
+        set off [::biochemeleon::generators::bonded_offset $seed]
+        if {[llength $off] != 3} { set ok 0; continue }
+        lassign $off dx dy dz
+        set len [expr {sqrt($dx*$dx + $dy*$dy + $dz*$dz)}]
+        if {$len < 1.2 - 1e-9 || $len > 1.6 + 1e-9} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test bonded_offset_deterministic {} -body {
+    set a [::biochemeleon::generators::bonded_offset 9]
+    set b [::biochemeleon::generators::bonded_offset 9]
+    expr {$a eq $b}
+} -result 1
+
+test reject_overlaps_empty {} -body {
+    ::biochemeleon::generators::reject_overlaps {0 0 0} [list]
+} -result 0
+
+test reject_overlaps_inside {} -body {
+    ::biochemeleon::generators::reject_overlaps {0.5 0 0} [list {1 0 0 1.4}]
+} -result 1
+
+test reject_overlaps_boundary {} -body {
+    # candidate at EXACTLY the entry's sep: strict-< rejects nothing here
+    # (matches the bond law's strict-< boundary; 2.4-1.0 == 1.4 bit-exact)
+    ::biochemeleon::generators::reject_overlaps {2.4 0 0} [list {1 0 0 1.4}]
+} -result 0
+
+test reject_overlaps_per_entry_sep {} -body {
+    # both entries present: the {0.5 0 0} entry at dist 0.5 < 1.4 rejects
+    set r1 [::biochemeleon::generators::reject_overlaps {0 0 0} \
+                [list {2 0 0 4.0} {0.5 0 0 1.4}]]
+    # ONLY the {2 0 0 4.0} entry: dist 3.0 < 4.0 rejects
+    set r2 [::biochemeleon::generators::reject_overlaps {5 0 0} [list {2 0 0 4.0}]]
+    # dist 4.5 > 4.0 passes
+    set r3 [::biochemeleon::generators::reject_overlaps {6.5 0 0} [list {2 0 0 4.0}]]
+    expr {$r1 == 1 && $r2 == 1 && $r3 == 0}
+} -result 1
+
+test place_basic {} -body {
+    set r [::biochemeleon::generators::place_bonded_hider {0 0 0} [list] 42]
+    set ok [expr {[llength $r] == 3}]
+    if {$ok} {
+        lassign $r x y z
+        set d [expr {sqrt($x*$x + $y*$y + $z*$z)}]
+        if {$d < 1.2 - 1e-9 || $d > 1.6 + 1e-9} { set ok 0 }
+        if {abs($x) > 9999.0 || abs($y) > 9999.0 || abs($z) > 9999.0} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test place_honors_real_sep {} -body {
+    # 12 occupied points at distance 1.0 from the anchor (equator ring +
+    # southern 45-deg ring + south pole, |p| == 1), each with its own sep
+    # 1.4 (MIN_SEP_REAL), leaving the +z cap open. The result must sit in
+    # the bond band AND respect every per-entry sep at FULL strength.
+    set occ [list \
+        [list 1 0 0 1.4] [list -1 0 0 1.4] \
+        [list 0 1 0 1.4] [list 0 -1 0 1.4] \
+        [list 0.7071 0.7071 0 1.4] \
+        [list 0.7071 0 -0.7071 1.4] [list -0.7071 0 -0.7071 1.4] \
+        [list 0 0.7071 -0.7071 1.4] [list 0 -0.7071 -0.7071 1.4] \
+        [list 0.5 0.5 -0.7071 1.4] [list -0.5 -0.5 -0.7071 1.4] \
+        [list 0 0 -1 1.4]]
+    set r [::biochemeleon::generators::place_bonded_hider {0 0 0} $occ 7]
+    set ok [expr {[llength $r] == 3}]
+    if {$ok} {
+        lassign $r x y z
+        set d [expr {sqrt($x*$x + $y*$y + $z*$z)}]
+        if {$d < 1.2 - 1e-9 || $d > 1.6 + 1e-9} { set ok 0 }
+    }
+    if {$ok} {
+        foreach entry $occ {
+            lassign $entry ex ey ez sep
+            set dd [expr {sqrt(($x-$ex)*($x-$ex) + ($y-$ey)*($y-$ey) + ($z-$ez)*($z-$ez))}]
+            if {$dd < $sep - 1e-9} { set ok 0 }
+        }
+    }
+    set ok
+} -result 1
+
+test place_relaxes_under_blockade {} -body {
+    # tight cage: 8 occupied points at distance 4.0 from the anchor toward
+    # the cube corners (max angular gap 54.7 deg), each sep 4.0. Every
+    # candidate in the bond band is within 4.0 of some cage point, so the
+    # full-sep round ALWAYS exhausts -- the call must still return a
+    # coordinate (relaxation) and terminate.
+    set c [expr {4.0 / sqrt(3.0)}]
+    set occ [list]
+    foreach sx {1 -1} {
+        foreach sy {1 -1} {
+            foreach sz {1 -1} {
+                lappend occ [list [expr {$sx * $c}] [expr {$sy * $c}] \
+                                    [expr {$sz * $c}] 4.0]
+            }
+        }
+    }
+    set r [::biochemeleon::generators::place_bonded_hider {0 0 0} $occ 11]
+    set ok [expr {[llength $r] == 3}]
+    if {$ok} {
+        lassign $r x y z
+        set d [expr {sqrt($x*$x + $y*$y + $z*$z)}]
+        if {$d < 1.2 - 1e-9 || $d > 1.6 + 1e-9} { set ok 0 }
+        if {abs($x) > 9999.0 || abs($y) > 9999.0 || abs($z) > 9999.0} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test place_overflow_guard {} -body {
+    # anchor near the %8.3f ceiling: the result must never exceed |9999.0|
+    # (a coordinate >= 10000 shifts the whole PDB line right and corrupts
+    # the element field -- 17.1-RESEARCH probe B)
+    set r [::biochemeleon::generators::place_bonded_hider {9998.0 0 0} [list] 42]
+    set ok [expr {[llength $r] == 3}]
+    if {$ok} {
+        lassign $r x y z
+        if {abs($x) > 9999.0 || abs($y) > 9999.0 || abs($z) > 9999.0} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test place_clamps_after_exhaustion {} -body {
+    # fully blockaded forever: one occupied point AT the anchor with sep 6.4
+    # rejects every candidate at every relaxation level (final seps
+    # 6.4/3.2/1.6 vs candidate distance in [1.2, 1.6) -- strict <). The
+    # exhaustion branch must accept the FINAL drawn candidate, clamped.
+    set r [::biochemeleon::generators::place_bonded_hider {0 0 0} \
+               [list {0 0 0 6.4}] 13]
+    set ok [expr {[llength $r] == 3}]
+    if {$ok} {
+        lassign $r x y z
+        set d [expr {sqrt($x*$x + $y*$y + $z*$z)}]
+        if {$d < 1.2 - 1e-9 || $d > 1.6 + 1e-9} { set ok 0 }
+        if {abs($x) > 9999.0 || abs($y) > 9999.0 || abs($z) > 9999.0} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+test place_deterministic {} -body {
+    set occ [list [list 1 0 0 1.4] [list 0 0 -1 1.4]]
+    set a [::biochemeleon::generators::place_bonded_hider {0 0 0} $occ 5]
+    set b [::biochemeleon::generators::place_bonded_hider {0 0 0} $occ 5]
+    expr {$a eq $b}
+} -result 1
+
 # CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
 # Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
 # ($? is always 0 from VMD), so the harness MUST parse this marker line.
