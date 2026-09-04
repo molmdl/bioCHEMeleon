@@ -29,12 +29,19 @@
 #   7. tier_styles: code 1 -> VDW, code 2 -> Lines.
 #
 # Sources the lib files in dependency order (mirrors the entry, NOT the
-# entry itself): setup_state, registry, generators, game_logic, demos,
-# backup, mutation, hiders, game. registry is sourced EXACTLY ONCE
-# (re-sourcing would WIPE _records). rep_tiers.tcl is deliberately NOT
-# sourced (17.1-01 runs in a parallel wave-1 worktree -- the file may not
-# exist here); this smoke passes tier_specs literally and calls zero
-# rep_tiers:: procs. Later smokes (17.1-06+) add rep_tiers to their order.
+# entry itself): setup_state, registry, rep_tiers, generators, game_logic,
+# demos, backup, mutation, hiders, game. registry is sourced EXACTLY ONCE
+# (re-sourcing would WIPE _records). rep_tiers IS sourced as of 17.1-06:
+# game.tcl's start_game now calls rep_tiers::* internally, so the namespace
+# must exist before that call (this header previously deferred the source
+# line to "later smokes (17.1-06+)" -- this is that update). This smoke
+# still passes tier_specs literally and calls zero rep_tiers:: procs.
+#
+# 17.1-06 SETUP NOTE: the 2-arg start_game call now RANDOMIZES across
+# IMPLEMENTED_TIERS, so the setup round passes an EXPLICIT per_rep
+# {VDW 5} to keep the molecule deterministic -- 5 VDW hiders, 560 atoms,
+# sentinels 555-559, exactly the pre-17.1-06 shape the assertions below
+# assume.
 #
 # NO game::cleanup: step 6 intentionally delreps a tracked game rep (the
 # round is broken by design); the smoke ends there.
@@ -78,6 +85,7 @@ set tr [list]
 foreach {nm path} [list \
     setup_state [file join [pwd] vmd lib setup_state.tcl] \
     registry     [file join [pwd] vmd lib registry.tcl] \
+    rep_tiers    [file join [pwd] vmd lib rep_tiers.tcl] \
     generators   [file join [pwd] vmd lib generators.tcl] \
     game_logic   [file join [pwd] vmd lib game_logic.tcl] \
     demos        [file join [pwd] vmd lib demos.tcl] \
@@ -101,7 +109,10 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
     set n0 [molinfo $orig_molid get numatoms]
     if {$n0 != 555} { _bail orig_atoms "exp=555 got=$n0" }
 
-    if {![catch {::biochemeleon::game::start_game $orig_molid 5} gs]} {
+    # 17.1-06: the EXPLICIT per_rep keeps the setup round deterministic
+    # (the 2-arg form now randomizes across IMPLEMENTED_TIERS): 5 VDW
+    # hiders -> 560 atoms, sentinels 555-559, the pre-17.1-06 shape.
+    if {![catch {::biochemeleon::game::start_game $orig_molid 5 [dict create VDW 5] 0} gs]} {
         if {[catch {dict get $gs game_molid} gm]} {
             _bail gs_key_game_molid "missing (gs=$gs)"
         } else {
