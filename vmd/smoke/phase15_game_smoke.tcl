@@ -16,9 +16,16 @@
 #
 # Uses 1znf (424 atoms, small + fast) with 2 hiders. Sources lib files in dep
 # order directly (mirrors the entry's source order, NOT the entry itself --
-# avoids GUI/dialog baggage): setup_state, registry, demos, backup, mutation,
+# avoids GUI/dialog baggage): setup_state, registry, rep_tiers (17.1-06 entry
+# order -- game.tcl calls rep_tiers::* at CALL time), demos, backup, mutation,
 # game. (registry is Plan 01; backup is Plan 03; mutation is Plan 02; all merged
 # in Wave 1 before this Wave-2 plan.)
+#
+# 17.1-07 NOTE: both start_game calls pass an EXPLICIT VDW-only per_rep
+# ([dict create VDW 2] 0) -- the 2-arg form now randomizes across implemented
+# tiers (17.1-06), and the saved_numreps + 2 invariant holds only for
+# single-tier rounds. restart's per_rep pass-through keeps the replay round
+# VDW-only too.
 #
 # -e'd by VMD -> [info script] is EMPTY (Phase 13 Pitfall 3) -> use [pwd] (VMD
 # cwd = staging root) to locate the lib files, then `source` them. Each lib's
@@ -57,6 +64,7 @@ set game_molid -1
 foreach {nm path} [list \
     setup_state [file join [pwd] vmd lib setup_state.tcl] \
     registry     [file join [pwd] vmd lib registry.tcl] \
+    rep_tiers    [file join [pwd] vmd lib rep_tiers.tcl] \
     demos        [file join [pwd] vmd lib demos.tcl] \
     backup       [file join [pwd] vmd lib backup.tcl] \
     mutation     [file join [pwd] vmd lib mutation.tcl] \
@@ -83,7 +91,7 @@ if {[catch {::biochemeleon::demos::load_demo 1znf} m]} {
 }
 
 # ---- 2. start_game: 2 placeholder hiders -> game_state dict. ----
-if {![catch {::biochemeleon::game::start_game $m 2} gs]} {
+if {![catch {::biochemeleon::game::start_game $m 2 [dict create VDW 2] 0} gs]} {
     # game_state shape: 3 keys.
     if {![dict exists $gs game_molid]} { _bail gs_key_game_molid "missing" }
     if {![dict exists $gs hider_count]} { _bail gs_key_hider_count "missing" }
@@ -153,7 +161,7 @@ if {![catch {::biochemeleon::game::cleanup $gs} restored]} {
 # restart = cleanup + start_game with the SAME hider_count on the restored molid.
 if {[catch {::biochemeleon::demos::load_demo 1znf} m2b]} {
     _bail load_demo2 $m2b
-} elseif {[catch {::biochemeleon::game::start_game $m2b 2} gs2]} {
+} elseif {[catch {::biochemeleon::game::start_game $m2b 2 [dict create VDW 2] 0} gs2]} {
     _bail start_game2 $gs2
 } elseif {[catch {::biochemeleon::game::restart $gs2} gs3]} {
     _bail restart $gs3

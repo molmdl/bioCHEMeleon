@@ -217,7 +217,10 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} m]} {
     set n0 [molinfo $m get numatoms]
     if {$n0 != 555} { lappend failures "orig_atoms:exp=555 got=$n0" }
     set pre_reps [molinfo $m get numreps]
-    if {![catch {::biochemeleon::game::start_game $m 5} gs]} {
+    # 17.1-07: explicit VDW-only per_rep -- the 2-arg form now randomizes
+    # across implemented tiers (17.1-06), which would spread the 5 hiders
+    # over N tiers (+2N reps) and break the +2 numreps assert below.
+    if {![catch {::biochemeleon::game::start_game $m 5 [dict create VDW 5] 0} gs]} {
         if {[catch {dict get $gs game_molid} game_molid]} {
             lappend failures "gs_key_game_molid:missing (gs=$gs)"
         } else {

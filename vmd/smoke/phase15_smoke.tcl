@@ -22,10 +22,16 @@
 # 15-04's 1znf, exercising the full pipeline on a bigger body).
 #
 # Sources the lib files in dependency order directly (mirrors the entry, NOT
-# the entry itself -- avoids GUI/dialog baggage): setup_state, registry, demos,
-# backup, mutation, game. (demos + mutation each re-source setup_state
+# the entry itself -- avoids GUI/dialog baggage): setup_state, registry,
+# rep_tiers (17.1-06 entry order -- game.tcl calls rep_tiers::* at CALL time),
+# demos, backup, mutation, game. (demos + mutation each re-source setup_state
 # themselves -- harmless constant re-init; registry is sourced ONCE here --
 # re-sourcing would WIPE _records.)
+#
+# 17.1-07 NOTE: the start_game call passes an EXPLICIT VDW-only per_rep
+# ([dict create VDW 5] 0) -- the 2-arg form now randomizes across implemented
+# tiers (17.1-06), and the saved_numreps + 2 invariant holds only for
+# single-tier rounds.
 #
 # -e'd by VMD -> [info script] is EMPTY (Phase 13 Pitfall 3) -> use [pwd] (VMD
 # cwd = staging root) to locate the lib files. VMD does NOT propagate tcl exit
@@ -78,6 +84,7 @@ set gs [list]
 foreach {nm path} [list \
     setup_state [file join [pwd] vmd lib setup_state.tcl] \
     registry     [file join [pwd] vmd lib registry.tcl] \
+    rep_tiers    [file join [pwd] vmd lib rep_tiers.tcl] \
     demos        [file join [pwd] vmd lib demos.tcl] \
     backup       [file join [pwd] vmd lib backup.tcl] \
     mutation     [file join [pwd] vmd lib mutation.tcl] \
@@ -118,7 +125,7 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
 #      This is the orchestrator (snapshot -> make_placeholder_hiders -> mutate
 #      -> backup::apply -> registry DI); backup/mutation/registry are NOT
 #      called directly here. ----
-if {![catch {::biochemeleon::game::start_game $orig_molid 5} gs]} {
+if {![catch {::biochemeleon::game::start_game $orig_molid 5 [dict create VDW 5] 0} gs]} {
     if {[catch {dict get $gs game_molid} game_molid]} {
         _bail gs_key_game_molid "missing (gs=$gs)"
     } else {

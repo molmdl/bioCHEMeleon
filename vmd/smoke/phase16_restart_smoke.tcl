@@ -15,6 +15,11 @@
 # controller's won-state precondition. mark_found is the same call on_pick
 # makes.
 #
+# 17.1-07 NOTE: every start_game call below passes an EXPLICIT VDW-only
+# per_rep ([dict create VDW <n>] 0) -- the 2-arg form now randomizes across
+# implemented tiers (17.1-06), and the per-round numreps == base + 2
+# invariant asserted by _assert_round holds only for single-tier rounds.
+#
 # Stages (every round asserted with the SAME single-generation invariants:
 # atom count = original + N, EXACTLY N sentinels at the top indices via the
 # canonical selector, registry::count_hiders == N (rebuilt per round, never
@@ -96,7 +101,8 @@
 #
 # Sources the lib files in dependency order (mirrors the entry, NOT the entry
 # itself -- avoids GUI/dialog baggage): setup_state -> registry -> generators
-# -> demos -> backup -> mutation -> hiders -> game. registry is sourced
+# -> rep_tiers (17.1-06 entry order -- game.tcl calls rep_tiers::* at CALL
+# time) -> demos -> backup -> mutation -> hiders -> game. registry is sourced
 # EXACTLY ONCE (re-sourcing would WIPE _records). generators IS required
 # (start_game -> mutation::make_placeholder_hiders -> generators::
 # sphere_positions since 16-07; mutation.tcl also sources it itself --
@@ -227,6 +233,7 @@ foreach {nm path} [list \
     setup_state [file join [pwd] vmd lib setup_state.tcl] \
     registry     [file join [pwd] vmd lib registry.tcl] \
     generators   [file join [pwd] vmd lib generators.tcl] \
+    rep_tiers    [file join [pwd] vmd lib rep_tiers.tcl] \
     demos        [file join [pwd] vmd lib demos.tcl] \
     backup       [file join [pwd] vmd lib backup.tcl] \
     mutation     [file join [pwd] vmd lib mutation.tcl] \
@@ -268,7 +275,7 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig1]} {
 
 # ---- STAGE A1. FRESH-SESSION START (guard must NOT fire: stash empty). ----
 if {$setup_ok} {
-    if {![catch {::biochemeleon::game::start_game $orig1 3} gs1]} {
+    if {![catch {::biochemeleon::game::start_game $orig1 3 [dict create VDW 3] 0} gs1]} {
         if {[catch {dict get $gs1 game_molid} gm1]} {
             _bail gs1_key "missing (gs=$gs1)"
         } else {
@@ -294,7 +301,7 @@ if {$setup_ok} {
 #      guard must clean round 1, restore the 555-atom original, remap the
 #      dead target by LIVENESS, and start fresh with THIS call's count. ----
 if {$ok_a1} {
-    if {![catch {::biochemeleon::game::start_game $gm1 2} gs2]} {
+    if {![catch {::biochemeleon::game::start_game $gm1 2 [dict create VDW 2] 0} gs2]} {
         if {[catch {dict get $gs2 game_molid} gm2]} {
             _bail gs2_key "missing (gs=$gs2)"
         } else {
@@ -340,7 +347,7 @@ if {$ok_a2} {
         if {$rem0 != 0} { _bail b_remaining_pre "exp=0 got=$rem0"; set b_pre 0 }
     }
     if {$b_pre} {
-        if {![catch {::biochemeleon::game::start_game $gm2 3} gs3]} {
+        if {![catch {::biochemeleon::game::start_game $gm2 3 [dict create VDW 3] 0} gs3]} {
             if {[catch {dict get $gs3 game_molid} gm3]} {
                 _bail gs3_key "missing (gs=$gs3)"
             } else {
@@ -386,7 +393,7 @@ if {$ok_b} {
             if {[catch {molinfo $gm3 get numatoms} n3pre]} {
                 _bail c_pre_active "gs3 game_molid $gm3 not alive pre-start: $n3pre"
             } else {
-                if {![catch {::biochemeleon::game::start_game $orig2 2} gs4]} {
+                if {![catch {::biochemeleon::game::start_game $orig2 2 [dict create VDW 2] 0} gs4]} {
                     if {[catch {dict get $gs4 game_molid} gm4]} {
                         _bail gs4_key "missing (gs=$gs4)"
                     } else {

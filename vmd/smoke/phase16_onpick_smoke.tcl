@@ -11,8 +11,9 @@
 #   1.  start_game on 1k8p (555 atoms) + 5 hiders -> 560 atoms, 5 sentinels at
 #       555-559, numreps grew by EXACTLY 2 over the pre-start value (the new
 #       hider-rep step, research SS5.5), registry reconstructed (count 5),
-#       game_state dict shape FROZEN {game_molid hider_count snapshot}, and
-#       the namespace stash (current_state) populated.
+#       game_state dict shape FROZEN {game_molid hider_count snapshot
+#       per_rep} (the additive 17.1-06 4th key), and the namespace stash
+#       (current_state) populated.
 #   2.  Recording callbacks registered (log_cb ONE arg / remaining_cb ZERO
 #       args / win_cb TWO args). remaining_cb is zero-arg, so its recorder is
 #       an INCREMENT counter ({incr ::REM_TICKS} -- a zero-arg lappend would
@@ -42,7 +43,8 @@
 #
 # Sources the lib files in dependency order (mirrors the entry, NOT the entry
 # itself -- avoids GUI/dialog baggage): setup_state, registry, generators,
-# game_logic, demos, backup, mutation, hiders, game. registry is sourced
+# game_logic, rep_tiers (17.1-06 entry order -- game.tcl calls rep_tiers::*
+# at CALL time), demos, backup, mutation, hiders, game. registry is sourced
 # EXACTLY ONCE (re-sourcing would WIPE _records); demos + mutation re-source
 # setup_state themselves (harmless constant re-init). pick_bridge is NOT
 # sourced (on_pick is called directly; the bridge only forwards to it).
@@ -89,6 +91,7 @@ foreach {nm path} [list \
     registry     [file join [pwd] vmd lib registry.tcl] \
     generators   [file join [pwd] vmd lib generators.tcl] \
     game_logic   [file join [pwd] vmd lib game_logic.tcl] \
+    rep_tiers    [file join [pwd] vmd lib rep_tiers.tcl] \
     demos        [file join [pwd] vmd lib demos.tcl] \
     backup       [file join [pwd] vmd lib backup.tcl] \
     mutation     [file join [pwd] vmd lib mutation.tcl] \
@@ -104,14 +107,16 @@ foreach {nm path} [list \
 # ---- 1. SETUP + START: load 1k8p (555 atoms), game::start_game with 5
 #         hiders. The hider-rep step now runs INSIDE start_game (research
 #         SS5.5) -- assert numreps grew by exactly 2 over the pre-start
-#         value. ----
+#         value. 17.1-07: explicit VDW-only per_rep (the regression
+#         baseline -- the 2-arg form now randomizes across implemented
+#         tiers). ----
 if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
     _bail load_demo $orig_molid
 } else {
     set n0 [molinfo $orig_molid get numatoms]
     if {$n0 != 555} { _bail orig_atoms "exp=555 got=$n0" }
     set pre_reps [molinfo $orig_molid get numreps]
-    if {![catch {::biochemeleon::game::start_game $orig_molid 5} gs]} {
+    if {![catch {::biochemeleon::game::start_game $orig_molid 5 [dict create VDW 5] 0} gs]} {
         if {[catch {dict get $gs game_molid} gm]} {
             _bail gs_key_game_molid "missing (gs=$gs)"
         } else {
@@ -138,13 +143,14 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
             # 1d: registry reconstructed from the sentinels (count 5).
             set ch [::biochemeleon::registry::count_hiders]
             if {$ch != 5} { _bail registry_count "exp=5 got=$ch" }
-            # 1e: game_state dict shape FROZEN (keys in insertion order).
-            if {[dict keys $gs] ne "game_molid hider_count snapshot"} {
+            # 1e: game_state dict shape FROZEN (keys in insertion order;
+            #     17.1-06 added the per_rep key -- 4 keys total).
+            if {[dict keys $gs] ne "game_molid hider_count snapshot per_rep"} {
                 _bail gs_shape "got=[dict keys $gs]"
             }
-            # 1f: the namespace stash is populated (3 keys).
-            if {[dict size $::biochemeleon::game::current_state] != 3} {
-                _bail stash_populated "exp=3 got=[dict size $::biochemeleon::game::current_state]"
+            # 1f: the namespace stash is populated (4 keys, same shape).
+            if {[dict size $::biochemeleon::game::current_state] != 4} {
+                _bail stash_populated "exp=4 got=[dict size $::biochemeleon::game::current_state]"
             }
         }
     } else {

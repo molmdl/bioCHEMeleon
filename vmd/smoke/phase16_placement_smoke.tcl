@@ -25,14 +25,22 @@
 # The blending VISUAL is 16-12's GUI human-verify; this smoke proves geometry.
 #
 # Sources the lib files in dependency order (mirrors the entry, NOT the entry
-# itself -- avoids GUI/dialog baggage): setup_state, registry, demos, backup,
-# mutation, hiders, game. registry is sourced EXACTLY ONCE (re-sourcing would
-# WIPE _records); demos + mutation re-source setup_state themselves (harmless
-# constant re-init). mutation.tcl sources generators.tcl itself (the 16-07
-# source line -- exercising it here IS part of the test). hiders.tcl is
+# itself -- avoids GUI/dialog baggage): setup_state, registry, rep_tiers
+# (17.1-06 entry order -- game.tcl calls rep_tiers::* at CALL time), demos,
+# backup, mutation, hiders, game. registry is sourced EXACTLY ONCE (re-sourcing
+# would WIPE _records); demos + mutation re-source setup_state themselves
+# (harmless constant re-init). mutation.tcl sources generators.tcl itself (the
+# 16-07 source line -- exercising it here IS part of the test). hiders.tcl is
 # sourced since the 16-08 start_game hider-rep step (research SS5.5):
 # start_game calls hiders::add_hider_reps at CALL time, so the namespace must
 # exist before the first start_game call.
+#
+# 17.1-07 NOTE: the start_game call passes an EXPLICIT VDW-only per_rep
+# ([dict create VDW 5] 0) -- the 2-arg form now randomizes across implemented
+# tiers (17.1-06), and a BONDED-tier hider can sit up to ~1.6 A outside the
+# bbox (anchor-relative placement), which would break the ±0.001 containment
+# assert. VDW is a free tier -> every hider comes from make_placeholder_hiders
+# (bbox-inside by construction).
 #
 # -e'd by VMD -> [info script] is EMPTY (Phase 13 Pitfall 3) -> use [pwd]
 # (VMD cwd = staging root) to locate the lib files. VMD does NOT propagate
@@ -66,6 +74,7 @@ set have_bbox 0
 foreach {nm path} [list \
     setup_state [file join [pwd] vmd lib setup_state.tcl] \
     registry     [file join [pwd] vmd lib registry.tcl] \
+    rep_tiers    [file join [pwd] vmd lib rep_tiers.tcl] \
     demos        [file join [pwd] vmd lib demos.tcl] \
     backup       [file join [pwd] vmd lib backup.tcl] \
     mutation     [file join [pwd] vmd lib mutation.tcl] \
@@ -110,7 +119,7 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
 #      orchestrator call site is UNCHANGED from Phase 15 (snapshot ->
 #      make_placeholder_hiders -> mutate -> backup::apply -> registry DI) --
 #      zero downstream edits is part of this plan's contract. ----
-if {![catch {::biochemeleon::game::start_game $orig_molid 5} gs]} {
+if {![catch {::biochemeleon::game::start_game $orig_molid 5 [dict create VDW 5] 0} gs]} {
     if {[catch {dict get $gs game_molid} game_molid]} {
         _bail gs_key_game_molid "missing (gs=$gs)"
     } else {
