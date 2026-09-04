@@ -9,10 +9,12 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 
 ## Current Position
 
-Phase: 17.1 of 23 (Rep Setup Infrastructure & Simple Rep Generators) — In progress (Wave 4 of 7)
-Plan: 07 of 14 in current phase (17.1-01..07 complete)
-Status: Wave 4 17.1-07 complete — ALL 12 pre-17.1 legacy smokes PASS=1 under the N-tier contracts (the P12 VDW-only regression baseline preserved, zero lib-file changes): the 8 known-red smokes updated to explicit [dict create VDW n] 0 per_rep rounds, tier_reps/repindex rep resolution (phase16_smoke 2d), user3-conjoined selection asserts, rep_tiers added to 7 smokes' direct source lists (entry order), onpick's stale 3-key gs_shape/stash asserts updated to the 17.1-06 4-key game_state; 0 ERROR)/bad switch/no such variable/invalid command name/can't read in every full log; 8.6 gate zero.
+Phase: 17.1 of 23 (Rep Setup Infrastructure & Simple Rep Generators) — In progress (Wave 5 of 7)
+Plan: 09 of 14 in current phase (17.1-01..09 complete)
+Status: Wave 5 17.1-09 complete — the Lines tier (HIDER-04's headline) proven end-to-end through the real 17.1-06 dispatch on 1znf (start_game 3 {Lines 3} 0): 427 atoms / hiders {424 425 426} / user3==1.0, mimicry + numbonds >= 1 (VMD added 13 hider bonds over the 426 real ones), rep read-back style == `Lines` exactly (Element / ColorID 7, literal user3-1 selections, numreps == pre+2), and THE BOTH-ENDPOINTS RENDER PROOF raw-confirmed in the Tachyon .dat (not marker-trusted): hiders-only Lines rep = 0 FCylinder + exactly 3 radius-0 dots (Rad 0.002 < 0.02, cyan/blue/red, zero salmon) while the scene's own all-selection rep draws the stubs (scene-diff cyl 765−752 = 13 == the exact hider bond count; sph diff == 0); found partition 1/2 + remaining {Lines 2}, cleanup restore (registry 0, game molid dead, original 424 atoms, pre-start numreps). PASS=1 3/3 runs, 0 ERROR)/bad switch, Tcl 8.6 gate zero. Single-file template copy of 17.1-08: only tier swap, found-marked index 424, render filenames, comments differ (diff-verified pre-run).
+Last activity: 2026-09-04 — Completed 17.1-09-PLAN.md (Lines-tier end-to-end smoke; commit ac866f5 test)
 Last activity: 2026-09-04 — Completed 17.1-07-PLAN.md (smoke inventory update; commits 9164b28 test + af1971d test)
+Wave 4 17.1-07 complete — ALL 12 pre-17.1 legacy smokes PASS=1 under the N-tier contracts (the P12 VDW-only regression baseline preserved, zero lib-file changes): the 8 known-red smokes updated to explicit [dict create VDW n] 0 per_rep rounds, tier_reps/repindex rep resolution (phase16_smoke 2d), user3-conjoined selection asserts, rep_tiers added to 7 smokes' direct source lists (entry order), onpick's stale 3-key gs_shape/stash asserts updated to the 17.1-06 4-key game_state; 0 ERROR)/bad switch/no such variable/invalid command name/can't read in every full log; 8.6 gate zero.
 
 Progress: ██████████████████░░░░░░░░░░░ ~37% v2.0 (4 of ~12 phases complete + Phase 17.1 7/14 plans)
 Plan: 08 of 14 in current phase (17.1-01..06, 08 complete)
@@ -106,6 +108,11 @@ None yet.
 
 ## Session Continuity
 
+Last session: 2026-09-04T18:29:56Z — Completed 17.1-09 (Lines-tier end-to-end dispatch smoke + both-endpoints render proof; Wave 5, worktree exec/17.1-09)
+Stopped at: 17.1-09 complete (commit ac866f5 test). Next plans: 17.1-10/11/12 (Licorice/CPK/DynamicBonds tier smokes — same 17.1-08 template; Licorice/CPK hider renders expect bond-radius/CPK balls instead of dots, SAME 0-FCylinder both-endpoints rule; DynamicBonds adds the pre-styled-scene pattern + `DynamicBonds 1.6` read-back equality). Carry-forward: pick_verify.tcl still reads dead hidden_rep/found_rep vars (breaks the NEXT GUI session — update to tier_reps/repindex first).
+Resume file: None
+Next: /gsd-execute-phase 17.1 continuation (17.1-10..14). Carry-forward: (j) relaxation fires commonly on crowded anchors — BCHM_BONDED_RELAX lines are normal in dispatch/GUI sessions; (k) 2-arg start_game randomizes across IMPLEMENTED_TIERS — assert invariants, never ==total; (l) legacy smokes ALL GREEN since 17.1-07 — grep full logs, never trust markers; (n) the both-endpoints rule is now render-proven for Lines (hiders-only rep = dots; scene rep draws stubs) — 17.1-10..12 re-prove per style from the same template.
+
 Last session: 2026-09-04T04:07:17Z — Completed 17.1-07 (smoke inventory update: 12/12 legacy smokes green under the N-tier contracts; Wave 4, worktree exec/17.1-07)
 Stopped at: 17.1-07 complete (commits 9164b28 test + af1971d test). Next plan: 17.1-08. Carry-forward: pick_verify.tcl still reads dead hidden_rep/found_rep vars (breaks the NEXT GUI session — update to tier_reps/repindex first); `[dict create VDW n] 0` is the established legacy-smoke baseline pattern.
 Resume file: None
@@ -125,3 +132,4 @@ Next: /gsd-execute-phase 17.1 continuation (17.1-07..14). Carry-forward: (j) rel
 ---
 *Updated: 2026-09-04 after 17.1-07 completion (Phase 17.1: 7/14 plans)*
 *Updated: 2026-09-04 after 17.1-08 completion (Phase 17.1: 7/14 plans)*
+*Updated: 2026-09-04 after 17.1-09 completion (Phase 17.1: 9/14 plans)*
