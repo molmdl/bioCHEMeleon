@@ -10,8 +10,8 @@
 # this file; re-sourcing registry here would WIPE _records -- do not). For
 # standalone smoke use, the smoke sources the lib files in dep order directly
 # (mirrors the entry, NOT the entry itself -- avoids GUI/dialog baggage).
-# game.tcl references ::biochemeleon::{registry,hiders,game_logic}::* at CALL
-# time (tcl proc resolution is call-time, so source order only needs the
+# game.tcl references ::biochemeleon::{registry,rep_tiers,hiders,game_logic}::*
+# at CALL time (tcl proc resolution is call-time, so source order only needs the
 # namespaces to exist before the first CALL, which is always after the entry
 # finishes).
 #
@@ -23,9 +23,10 @@
 # Pick contract (pick_bridge.tcl, Plan 16-06): _on_event forwards exactly
 # `game::on_pick <index>` -- ONE argument, the 0-based atom index. The
 # game_state is NOT threaded through pick_bridge: start_game stashes it in
-# the `current_state` namespace var (dict shape FROZEN per 15-05:
-# {game_molid hider_count snapshot}) and cleanup clears it. The GUI (Plan
-# 16-09) registers its log/remaining/win callbacks via set_callbacks.
+# the `current_state` namespace var (dict shape 15-05 {game_molid
+# hider_count snapshot} + the additive 17.1-06 per_rep key) and cleanup
+# clears it. The GUI (Plan 16-09) registers its log/remaining/win callbacks
+# via set_callbacks.
 #
 # Tcl 8.5 ONLY (no 8.6 control-flow idioms; brace all expr; dict create/get).
 # The apply-lambda body is the ONLY place atomselect touches the registry --
@@ -35,7 +36,8 @@ namespace eval ::biochemeleon::game {
     namespace export start_game cleanup restart on_pick set_callbacks
 
     # Phase 16: the CURRENT game_state dict {game_molid hider_count snapshot}
-    # (shape FROZEN per 15-05). Stashed by start_game, cleared by cleanup --
+    # (15-05 shape + the additive 17.1-06 per_rep key -- 4 keys total).
+    # Stashed by start_game, cleared by cleanup --
     # on_pick reads it instead of threading game_state through pick_bridge
     # (the PickBridge contract delivers ONLY the index).
     variable current_state [dict create]
@@ -51,12 +53,24 @@ namespace eval ::biochemeleon::game {
     variable _cb_win [list]
 }
 
-# start_game {molid hider_count} -> game_state dict {game_molid hider_count snapshot}.
+# start_game {molid hider_count {per_rep {}} {lock_scene 0}} ->
+#   game_state dict {game_molid hider_count snapshot per_rep}.
 #
-# Begin a round. Phase 15: N placeholder hiders (mutation::make_placeholder_hiders).
-# Phase 16 replaces make_placeholder_hiders with real sphere placement; the
-# start_game signature, the game_state shape, and the DI injection line stay
-# identical.
+# Begin a round. 17.1-06: the per-tier DISPATCH composition root -- lock-scene
+# derivation, per-tier placement over the N generators, multi-tier registry
+# stamping. Backward compatible: 2-arg calls (the Phase-15/16 signature) keep
+# working and randomize across IMPLEMENTED_TIERS (resolve_per_rep's
+# empty-per_rep path -- the quick-008 non-empty-subset distribution).
+#   per_rep    : validated dict {GAME_REPS name -> count} (setup_state);
+#                {} = randomize.
+#   lock_scene : 1 = restrict per_rep to the tiers DETECTED on the scene
+#                (snapshot reps via rep_tiers::scene_reps_to_per_rep);
+#                0 = per_rep as given (or randomize when empty).
+# P9 EFFECTIVE-TOTAL RULE: an explicit per_rep REPLACES the round total (no
+# top-up; v1 semantics) -- game_state's hider_count is the EFFECTIVE total
+# (sum of the resolved per_rep), so the win message and win_cb never
+# disagree with the registry count. Requested-but-unimplemented tiers are
+# dropped with a non-blocking vmdcon -warn (v1 under-generation parity).
 #
 # SELF-GUARDING (16-13, VERIFICATION gap 1): an active/prior round (non-empty
 # current_state stash) is cleaned up FIRST -- auto-restart with the CALLER's
@@ -69,26 +83,50 @@ namespace eval ::biochemeleon::game {
 # choke point.
 #
 # Ordering is NON-NEGOTIABLE (15-RESEARCH-registry-game.md section "Recommended
-# approach 4"; 16-RESEARCH-sphere.md SS5.5 adds the hider-rep step). The 16-13
-# active-game guard runs BEFORE step 1: the snapshot must capture the LIVE
-# original of the NEW round, which only exists after the old round's cleanup
-# restored it.
+# approach 4"; 16-RESEARCH-sphere.md SS5.5 adds the hider-rep step; 17.1-06
+# adds the tier-dispatch steps -- 17.1-RESEARCH-rep-infra.md RQ3.2/RQ4.3). The
+# 16-13 active-game guard runs BEFORE step 1: the snapshot must capture the
+# LIVE original of the NEW round, which only exists after the old round's
+# cleanup restored it.
 #   1. backup::snapshot BEFORE any mutation (captures original pdb_path +
 #      viewpoint + reps from the LIVE original -- must run before
 #      mutation::mutate mol-deletes it).
-#   2. mutation::make_placeholder_hiders (pure data prep; reads coords only).
-#   3. mutation::mutate (mol delete original + mol new combined + tag sentinels
-#      -> NEW game_molid, monotonic > old).
-#   4. backup::apply on the NEW game_molid (SC4 forward: restore reps +
-#      viewpoint on the game_molid -- viewmaster-style; NO mol ops, state-only).
-#   5. hiders.tcl: add the 2 hider reps AFTER backup::apply (research SS5.5 --
-#      base index = numreps AFTER apply, deterministic per round, so the
-#      hider reps are the LAST two: base..base+1; Pitfall 9).
-#   6. registry::reconstruct_from_sentinels with the apply-lambda DI (the
-#      lambda selects on the game_molid; count_hiders == N after).
+#   2. Lock-scene detection from THIS round's OWN snapshot reps
+#      (rep_tiers::scene_reps_to_per_rep): the guard's cleanup restored the
+#      original first, so the snapshot is structurally free of game reps;
+#      the sentinel filter inside rep_tiers is defense-in-depth (RQ1.4/P5).
+#   3. rep_tiers::resolve_per_rep (lock-scene restriction / randomize /
+#      drop-overflow clamp) -> the EFFECTIVE per_rep; eff_total = its sum
+#      (P9). Unimplemented-tier warning against the CALLER's keys first.
+#   4. Per-tier placement loop in GAME_REPS order
+#      (rep_tiers::tiers_from_per_rep): free tiers ->
+#      mutation::make_placeholder_hiders; bonded tiers ->
+#      mutation::make_bonded_hiders with the accumulating occupied-hider
+#      position list; record lists CONCATENATED in tier order with per-tier
+#      ACTUAL counts tracked (a tier may under-generate: make_bonded_hiders
+#      caps at the anchor count).
+#   5. ONE mutation::mutate call with ALL records (mol delete original + mol
+#      new combined + tag sentinels -> NEW game_molid, monotonic > old).
+#   6. backup::apply on the NEW game_molid (SC4 forward: restore reps +
+#      viewpoint on the game_molid -- viewmaster-style; NO mol ops,
+#      state-only).
+#   7. registry::reconstruct_from_sentinels ONCE (1-arg; the DI command
+#      prefix below), then split the sentinel indices by tier:
+#      fetch_hider_indices returns file order == record order and the
+#      records were concatenated in tier order, so tier k owns the sorted
+#      index slice at its cumulative ACTUAL count offsets (no extra molinfo).
+#   8. hiders::stamp_tier_codes BEFORE add_hider_reps (ORDERING CONTRACT: a
+#      static single-frame molecule never re-evaluates cached rep selections
+#      on an atom-field change -- a rep added before the user3 stamp would
+#      cache an empty selection forever).
+#   9. hiders::add_hider_reps with the {code style-args} spec table (AFTER
+#      backup::apply -- base numreps deterministic; the 2N hider reps land
+#      LAST: base..base+2N-1; Pitfall 9).
+#  10. registry::assign_reps (ONE bulk call -- P8: NEVER a per-tier
+#      reconstruct loop, which would clear prior tiers).
 # The resulting game_state is STASHED in the namespace var current_state
 # (on_pick's data source) before being returned.
-proc ::biochemeleon::game::start_game {molid hider_count} {
+proc ::biochemeleon::game::start_game {molid hider_count {per_rep {}} {lock_scene 0}} {
     variable current_state
     # ---- ACTIVE-GAME GUARD (16-13, VERIFICATION gap 1) --------------------
     # A Start during an in-flight round or after a won round must NOT stack
@@ -136,31 +174,127 @@ proc ::biochemeleon::game::start_game {molid hider_count} {
     # ---- end guard ---------------------------------------------------------
     # 1. Snapshot BEFORE any mutation (captures original pdb_path + viewpoint + reps).
     set snapshot [::biochemeleon::backup::snapshot $molid]
-    # 2. Build placeholder hider records (Phase 16 swaps this for real sphere placement).
-    set hider_records [::biochemeleon::mutation::make_placeholder_hiders $molid $hider_count]
-    # 3. Mutate: mol delete original + mol new combined + tag sentinels -> new game molid.
-    set game_molid [::biochemeleon::mutation::mutate $molid $hider_records]
-    # 4. SC4 forward: re-apply saved reps + viewpoint to the NEW game_molid (viewmaster-style).
+    # 2. Lock-scene detection from THIS round's own snapshot reps (ordering
+    #    step 2). The guard above cleaned any prior round first, so the
+    #    snapshot is structurally free of game reps; rep_tiers' sentinel
+    #    filter is defense-in-depth (research RQ1.4/P5).
+    set detected [::biochemeleon::rep_tiers::scene_reps_to_per_rep [dict get $snapshot reps]]
+    # 3. Warn (non-blocking, v1 under-generation parity) for requested tiers
+    #    with no generator -- compared against the CALLER's per_rep keys,
+    #    captured BEFORE resolve (the resolved dict only holds implemented
+    #    tiers). Non-dict input -> no keys (catch-guarded).
+    set per_rep_in $per_rep
+    if {[catch {dict keys $per_rep_in} in_keys]} {
+        set in_keys [list]
+    }
+    foreach r $in_keys {
+        if {"" eq [::biochemeleon::rep_tiers::tier_kind $r]} {
+            catch {vmdcon -warn "bioCHEMeleon: rep '$r' has no generator yet -- dropped from this round"}
+        }
+    }
+    # 4. Resolve the EFFECTIVE per_rep (lock-scene restriction / randomize /
+    #    drop-overflow clamp) and its P9 effective total.
+    set per_rep [::biochemeleon::rep_tiers::resolve_per_rep $hider_count $per_rep $detected $lock_scene]
+    set eff_total [::biochemeleon::rep_tiers::effective_total $per_rep]
+    # 5. Ordered active-tier table {code style count} (GAME_REPS order,
+    #    1-based codes -- the code is only a discriminator; the registry's
+    #    rep field carries the GAME_REPS name).
+    set tiers [::biochemeleon::rep_tiers::tiers_from_per_rep $per_rep]
+    # 6. Per-tier placement loop (GAME_REPS order). occ_hiders accumulates
+    #    ALL previously-placed hider positions this round as {x y z} triples
+    #    (extracted from the prior 5-field {name element x y z} records --
+    #    the 17.1-05 occupied_hiders contract) so a later bonded tier keeps
+    #    its distance from earlier hiders. tier_counts tracks the ACTUAL
+    #    record count per tier, parallel to $tiers (a tier may
+    #    under-generate: make_bonded_hiders caps at the anchor count).
+    set records [list]
+    set tier_counts [list]
+    set occ_hiders [list]
+    foreach t $tiers {
+        lassign $t code style count
+        set kind [::biochemeleon::rep_tiers::tier_kind $style]
+        if {$kind eq "free"} {
+            set recs [::biochemeleon::mutation::make_placeholder_hiders $molid $count]
+        } elseif {$kind eq "bonded"} {
+            set recs [::biochemeleon::mutation::make_bonded_hiders $molid $count $occ_hiders]
+        } else {
+            # Defense: resolve_per_rep restricts to implemented tiers, so an
+            # empty kind never reaches here -- skip with the warning.
+            catch {vmdcon -warn "bioCHEMeleon: rep '$style' has no generator yet -- skipped"}
+            lappend tier_counts 0
+            continue
+        }
+        foreach r $recs {
+            lassign $r nm el x y z
+            lappend occ_hiders [list $x $y $z]
+        }
+        lappend records {*}$recs
+        lappend tier_counts [llength $recs]
+    }
+    # 7. ONE mutate call: mol delete original + mol new combined + tag
+    #    sentinels -> new game molid (monotonic > old).
+    set game_molid [::biochemeleon::mutation::mutate $molid $records]
+    # 8. SC4 forward: re-apply saved reps + viewpoint to the NEW game_molid
+    #    (viewmaster-style; state-only).
     ::biochemeleon::backup::apply $snapshot $game_molid
-    # 5. Phase 16 (research SS5.5): the 2 hider reps go AFTER backup::apply
-    #    (base numreps deterministic) and before the registry reconstruct.
-    ::biochemeleon::hiders::add_hider_reps $game_molid
-    # 6. Reconstruct the registry from sentinels (DI: inject the atomselect apply-lambda).
-    #    CRITICAL: [list apply {lambda} $game_molid] is a COMMAND-PREFIX VALUE (the {expand}
-    #    in reconstruct_from_sentinels invokes it). NEVER [apply {lambda} $game_molid] --
-    #    that EVALUATES immediately and returns the id-list value, which [{*}] would then
-    #    run as a command -> "invalid command name <first-index>" (the 13-01 DI bug,
-    #    probe-verified in 15-RESEARCH-registry-game).
+    # 9. Reconstruct the registry from sentinels -- ONCE, 1-arg (P8: NEVER a
+    #    per-tier reconstruct loop; a second call would CLEAR prior tiers,
+    #    probe1 P17D). CRITICAL: [list apply {lambda} $game_molid] is a
+    #    COMMAND-PREFIX VALUE (the {expand} in reconstruct_from_sentinels
+    #    invokes it). NEVER [apply {lambda} $game_molid] -- that EVALUATES
+    #    immediately and returns the id-list value, which [{*}] would then
+    #    run as a command -> "invalid command name <first-index>" (the 13-01
+    #    DI bug, probe-verified in 15-RESEARCH-registry-game).
     ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{molid} {
         set sel [atomselect $molid "resname GAM and beta < 0"]
         set ids [$sel get index]
         $sel delete
         return $ids
     }} $game_molid]
-    # Build the game_state (shape FROZEN per 15-05), STASH it for on_pick
+    # 10. Split the sentinel indices by tier: fetch_hider_indices returns
+    #     file order == record order (probe3) and the records were
+    #     concatenated in tier order (step 6), so tier k owns the sorted
+    #     index slice at its cumulative ACTUAL count offsets -- no extra
+    #     molinfo. tier_of = {code -> index list} (empty slices skipped:
+    #     stamping an empty selection would error); idx_to_rep = {index ->
+    #     GAME_REPS style name}.
+    set idxs [::biochemeleon::mutation::fetch_hider_indices $game_molid]
+    set tier_of [dict create]
+    set idx_to_rep [dict create]
+    set off 0
+    foreach t $tiers cnt $tier_counts {
+        lassign $t code style count
+        set slice [list]
+        for {set i 0} {$i < $cnt} {incr i} {
+            set idx [lindex $idxs $off]
+            lappend slice $idx
+            dict set idx_to_rep $idx $style
+            incr off
+        }
+        if {[llength $slice] > 0} {
+            dict set tier_of $code $slice
+        }
+    }
+    # 11. Stamp the user3 tier codes BEFORE adding the reps (ORDERING
+    #     CONTRACT -- ordering step 8; see hiders.tcl's header).
+    ::biochemeleon::hiders::stamp_tier_codes $game_molid $tier_of
+    # 12. Add ONE hidden/found rep PAIR per tier (2N reps) AFTER backup::apply
+    #     (ordering step 9 -- base numreps deterministic, hider reps land
+    #     LAST). Specs carry the style args (DynamicBonds -> {DynamicBonds
+    #     1.6}, the spurious-bond rule).
+    set specs [list]
+    foreach t $tiers {
+        lassign $t code style count
+        lappend specs [list $code {*}[::biochemeleon::rep_tiers::style_args $style]]
+    }
+    ::biochemeleon::hiders::add_hider_reps $game_molid $specs
+    # 13. Multi-tier registry stamping: ONE bulk assign_reps (P8).
+    ::biochemeleon::registry::assign_reps $idx_to_rep
+    # Build the game_state (15-05 shape + the additive per_rep key;
+    # hider_count = the EFFECTIVE total, P9), STASH it for on_pick
     # (pick_bridge forwards only the index -- game.tcl owns its own state),
     # then return it.
-    set gs [dict create game_molid $game_molid hider_count $hider_count snapshot $snapshot]
+    set gs [dict create game_molid $game_molid hider_count $eff_total snapshot $snapshot per_rep $per_rep]
     set current_state $gs
     return $gs
 }
@@ -197,10 +331,28 @@ proc ::biochemeleon::game::cleanup {game_state} {
 # The new start_game reconstructs the registry on the fresh game_molid (the
 # registry is a namespace singleton with NO cross-reload persistence in
 # Phase 15; rebuild-from-sentinels each round).
+#
+# 17.1-06: per_rep is passed through SYMMETRICALLY (the round replays its own
+# tier distribution instead of re-randomizing). Defensive reads: game_state
+# has NO lock_scene key (the 4-key shape) -- the stashed per_rep already
+# encodes the resolved lock-scene restriction (resolve_per_rep keeps an
+# explicit per_rep verbatim when lock_scene=0), so the defensive lock_scene
+# read always yields 0, which is moot for the distribution (17.1-06
+# must-haves truth).
 proc ::biochemeleon::game::restart {game_state} {
     set hider_count [dict get $game_state hider_count]
+    if {[dict exists $game_state per_rep]} {
+        set per_rep [dict get $game_state per_rep]
+    } else {
+        set per_rep [list]
+    }
+    if {[dict exists $game_state lock_scene]} {
+        set lock_scene [dict get $game_state lock_scene]
+    } else {
+        set lock_scene 0
+    }
     set molid [::biochemeleon::game::cleanup $game_state]
-    return [::biochemeleon::game::start_game $molid $hider_count]
+    return [::biochemeleon::game::start_game $molid $hider_count $per_rep $lock_scene]
 }
 
 # set_callbacks {log_cb remaining_cb win_cb} -> {}.

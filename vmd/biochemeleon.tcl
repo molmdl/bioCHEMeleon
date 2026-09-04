@@ -59,8 +59,8 @@ namespace eval ::biochemeleon {
 package provide biochemeleon $::biochemeleon::version
 
 # ---------------------------------------------------------------------------
-# (4) Source the pure layer (BOTH Phase-13 files + the two Phase-16 pure
-# modules).
+# (4) Source the pure layer (BOTH Phase-13 files + the Phase-16 pure modules
+# + the Phase-17.1 rep-tier module).
 # `[file dirname [info script]]` works because this entry is always SOURCED
 # (by the smoke, by .vmdrc, by the user), never -e'd directly in tests, so
 # [info script] is correctly set inside it (Pitfall 3 in 13-RESEARCH-testing.md).
@@ -68,12 +68,21 @@ package provide biochemeleon $::biochemeleon::version
 # Phase 16 (Plan 10) added the PURE game-loop modules to this block:
 # generators (16-01, sphere placement sampler) + game_logic (16-03, round
 # state machine / timer / log model). Both are stdlib-only (no mol, no Tk).
+# Phase 17.1 (Plan 06) added rep_tiers.tcl (17.1-01, the N-tier dispatch
+# decisions: lock-scene detection over snapshot reps, per_rep resolution,
+# the ordered tier table). Also stdlib-only.
 # ---------------------------------------------------------------------------
 set _dir [file dirname [info script]]
 source [file join $_dir lib setup_state.tcl]
 source [file join $_dir lib registry.tcl]
 source [file join $_dir lib generators.tcl]
 source [file join $_dir lib game_logic.tcl]
+# Phase 17.1 (Plan 06): rep_tiers.tcl -- the N-tier dispatch-decision pure
+# module (17.1-01). Sourced in the pure block AFTER game_logic (its only
+# dependency is setup_state, re-sourced harmlessly) and BEFORE the mol
+# bridges: game.tcl references rep_tiers::* at CALL time, so the namespace
+# must exist before the first CALL (always after the entry finishes).
+source [file join $_dir lib rep_tiers.tcl]
 # Phase 14 + Phase 15 + Phase 16: source the mol bridges + composition root +
 # the GUI layer.
 # Phase 14 added demos.tcl (mol bridge, Plan 02) + gui/dialog.tcl (Plan 03;
@@ -83,15 +92,18 @@ source [file join $_dir lib game_logic.tcl]
 # Phase 15 added backup.tcl + mutation.tcl (mol bridges, Plans 03/02) +
 # game.tcl (composition root, Plan 04) in dependency order AFTER demos.tcl and
 # BEFORE gui/dialog.tcl.
-# Phase 16 (Plan 10) added hiders.tcl (16-05, the 2-rep found-visual layer --
-# after mutation.tcl it depends on nothing but is called by game.tcl) and
+# Phase 16 (Plan 10) added hiders.tcl (16-05, the found-visual layer -- N
+# hidden/found rep pairs since the 17.1-04 generalization; after mutation.tcl
+# it depends on nothing but is called by game.tcl) and
 # pick_bridge.tcl (16-06, the click-to-find bridge -- after game.tcl, whose
 # on_pick it forwards to).
 # Order matters: setup_state (pure) -> registry (pure) -> generators (pure) ->
-# game_logic (pure) -> demos (mol bridge, sources setup_state) -> backup (mol)
+# game_logic (pure) -> rep_tiers (pure, Phase 17.1) -> demos (mol bridge,
+# sources setup_state) -> backup (mol)
 # -> mutation (mol; also re-sources setup_state + generators itself, harmless
 # constant re-init) -> hiders (mol) -> game (composition root, references
-# backup+mutation+registry+hiders+game_logic namespaces -- sourced after them)
+# backup+mutation+registry+rep_tiers+hiders+game_logic namespaces -- sourced
+# after them)
 # -> pick_bridge (mol bridge; forwards picks to game::on_pick at CALL time) ->
 # dialog (GUI, sources setup_tab + game_tab which use the above).
 # registry is sourced EXACTLY ONCE here -- no module below re-sources it
