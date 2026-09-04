@@ -7,8 +7,10 @@
 #      (base = numreps AFTER backup::apply -- deterministic per round).
 #   2. Rep read-backs via the COMBINED-BRACES molinfo form (single-field
 #      molinfo get {rep $i} FAILS -- Pitfall 2):
-#        hidden rep = VDW / {resname GAM and beta < 0 and user2 < 1} / Element
-#        found rep  = VDW / {resname GAM and beta < 0 and user2 > 0} / ColorID 7
+#        hidden rep = VDW / {resname GAM and beta < 0 and user2 < 1 and
+#                     user3 1} / Element
+#        found rep  = VDW / {resname GAM and beta < 0 and user2 > 0 and
+#                     user3 1} / ColorID 7
 #   3. mark_found_visual sets user2=1 on the picked index (user2 values are
 #      FLOATS: compare numerically, NEVER string-eq "1" -- Pitfall 7), leaves
 #      untouched hiders at 0.0, and re-issues BOTH modselects (the mandatory
@@ -24,10 +26,11 @@
 #      is DELETED (leak guard -- catch {molinfo ...} must FAIL).
 #
 # Sources the lib files in dependency order (mirrors the entry, NOT the entry
-# itself -- avoids GUI/dialog baggage): setup_state, registry, demos, backup,
-# mutation, game, hiders. registry is sourced EXACTLY ONCE (re-sourcing would
-# WIPE _records); demos + mutation re-source setup_state themselves (harmless
-# constant re-init).
+# itself -- avoids GUI/dialog baggage): setup_state, registry, rep_tiers
+# (17.1-06 entry order -- game.tcl calls rep_tiers::* at CALL time), demos,
+# backup, mutation, game, hiders. registry is sourced EXACTLY ONCE (re-sourcing
+# would WIPE _records); demos + mutation re-source setup_state themselves
+# (harmless constant re-init).
 #
 # -e'd by VMD -> [info script] is EMPTY (Phase 13 Pitfall 3) -> use [pwd]
 # (VMD cwd = staging root) to locate the lib files. VMD does NOT propagate tcl
@@ -61,6 +64,7 @@ set rf -1
 foreach {nm path} [list \
     setup_state [file join [pwd] vmd lib setup_state.tcl] \
     registry     [file join [pwd] vmd lib registry.tcl] \
+    rep_tiers    [file join [pwd] vmd lib rep_tiers.tcl] \
     demos        [file join [pwd] vmd lib demos.tcl] \
     backup       [file join [pwd] vmd lib backup.tcl] \
     mutation     [file join [pwd] vmd lib mutation.tcl] \
@@ -81,8 +85,10 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
     if {$n0 != 555} { _bail orig_atoms "exp=555 got=$n0" }
 
     # ---- 2. START: the real Phase-15 pipeline (composition root only --
-    #         backup/mutation/registry are never called directly here). ----
-    if {![catch {::biochemeleon::game::start_game $orig_molid 5} gs]} {
+    #         backup/mutation/registry are never called directly here).
+    #         17.1-07: explicit VDW-only per_rep (the regression baseline --
+    #         the 2-arg form now randomizes across implemented tiers). ----
+    if {![catch {::biochemeleon::game::start_game $orig_molid 5 [dict create VDW 5] 0} gs]} {
         if {[catch {dict get $gs game_molid} gm]} {
             _bail gs_key_game_molid "missing (gs=$gs)"
         } else {
@@ -99,8 +105,19 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
                 $sel delete
             } else { _bail sentinel_sel $sel }
 
-            # ---- 3. ADD HIDER REPS: exactly 2 more, at base..base+1. ----
+            # ---- 3. ADD HIDER REPS: exactly 2 more, at base..base+1.
+            #         17.1-07 production-order stamp FIRST (stamp_tier_codes
+            #         BEFORE add_hider_reps -- the ORDERING CONTRACT: a rep
+            #         added before its tier's user3 codes are stamped caches
+            #         an empty selection forever). All 5 hiders are tier 1
+            #         (the explicit VDW-only round above); the stamp is
+            #         idempotent with start_game's own internal stamp. ----
             set base_reps [molinfo $gm get numreps]
+            if {[catch {::biochemeleon::hiders::stamp_tier_codes $gm [dict create 1 {555 556 557 558 559}]} serr]} {
+                _bail stamp_tier_codes $serr
+            }
+            # 1-arg call = the add_hider_reps DEFAULT tier_specs {{1 VDW}}
+            # (the Phase-16-compatible single VDW pair) -- kept deliberately.
             if {[catch {::biochemeleon::hiders::add_hider_reps $gm} aerr]} {
                 _bail add_hider_reps $aerr
             } else {
@@ -118,7 +135,7 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
                     _bail hidden_readback $rberr
                 } else {
                     if {$hstyle ne "VDW"} { _bail hidden_style "exp=VDW got=$hstyle" }
-                    if {$hsel ne {resname GAM and beta < 0 and user2 < 1}} {
+                    if {$hsel ne {resname GAM and beta < 0 and user2 < 1 and user3 1}} {
                         _bail hidden_sel "got=$hsel"
                     }
                     if {$hcol ne "Element"} { _bail hidden_color "exp=Element got=$hcol" }
@@ -129,7 +146,7 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
                     _bail found_readback $rberr2
                 } else {
                     if {$fstyle ne "VDW"} { _bail found_style "exp=VDW got=$fstyle" }
-                    if {$fsel ne {resname GAM and beta < 0 and user2 > 0}} {
+                    if {$fsel ne {resname GAM and beta < 0 and user2 > 0 and user3 1}} {
                         _bail found_sel "got=$fsel"
                     }
                     if {$fcol ne {ColorID 7}} { _bail found_color "exp=ColorID 7 got=$fcol" }
@@ -165,6 +182,13 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
                         if {[$sh num] != 4} { _bail hidden_split "exp=4 got=[$sh num]" }
                         $sh delete
                     } else { _bail hidden_split_sel $sh }
+                    # 7b. user3 tier partition (17.1-07): every hider is
+                    #     tier 1 (code stamped above; read-back is FLOAT --
+                    #     the SELECTION form `user3 1` matches numerically).
+                    if {![catch {atomselect $gm "resname GAM and beta < 0 and user3 1"} s3]} {
+                        if {[$s3 num] != 5} { _bail user3_partition "exp=5 got=[$s3 num]" }
+                        $s3 delete
+                    } else { _bail user3_partition_sel $s3 }
 
                     # ---- 8. Sentinel integrity: beta untouched -> all 5. ----
                     if {![catch {atomselect $gm "resname GAM and beta < 0"} sg]} {

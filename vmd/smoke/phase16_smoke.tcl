@@ -46,10 +46,11 @@
 #
 # Sources the lib files in dependency order directly (mirrors the entry, NOT
 # the entry itself -- avoids GUI/dialog baggage): setup_state, registry,
-# generators, game_logic, demos, backup, mutation, hiders, game, pick_bridge.
-# registry is sourced EXACTLY ONCE (re-sourcing would WIPE _records); demos +
-# mutation re-source setup_state/generators themselves (harmless constant
-# re-init).
+# generators, game_logic, rep_tiers (17.1-06 entry order -- game.tcl calls
+# rep_tiers::* at CALL time), demos, backup, mutation, hiders, game,
+# pick_bridge. registry is sourced EXACTLY ONCE (re-sourcing would WIPE
+# _records); demos + mutation re-source setup_state/generators themselves
+# (harmless constant re-init).
 #
 # Run (repo root, against fresh staging):
 #   echo exit | timeout 300 bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/smoke/phase16_smoke.tcl -eofexit' 2>&1
@@ -117,6 +118,7 @@ foreach {nm path} [list \
     registry     [file join [pwd] vmd lib registry.tcl] \
     generators   [file join [pwd] vmd lib generators.tcl] \
     game_logic   [file join [pwd] vmd lib game_logic.tcl] \
+    rep_tiers    [file join [pwd] vmd lib rep_tiers.tcl] \
     demos        [file join [pwd] vmd lib demos.tcl] \
     backup       [file join [pwd] vmd lib backup.tcl] \
     mutation     [file join [pwd] vmd lib mutation.tcl] \
@@ -167,9 +169,11 @@ if {[catch {::biochemeleon::demos::load_demo 1k8p} orig_molid]} {
 
 # ---- 2. GENERATE (SC1 logic layer): game::start_game with REAL sphere
 #         placement (mutation::make_placeholder_hiders -> generators::
-#         sphere_positions, uniform-random inside the ORIGINAL bbox). ----
+#         sphere_positions, uniform-random inside the ORIGINAL bbox).
+#         17.1-07: explicit VDW-only per_rep (the regression baseline --
+#         the 2-arg form now randomizes across implemented tiers). ----
 if {$orig_molid != -1} {
-    if {![catch {::biochemeleon::game::start_game $orig_molid 5} gs]} {
+    if {![catch {::biochemeleon::game::start_game $orig_molid 5 [dict create VDW 5] 0} gs]} {
         if {[catch {dict get $gs game_molid} gm]} {
             _bail gs_key_game_molid "missing (gs=$gs)"
         } else {
@@ -204,15 +208,23 @@ if {$orig_molid != -1} {
             }
             # 2d: numreps == pre-start + 2 (backup::apply restored the saved
             #     reps, then hiders::add_hider_reps appended hidden+found
-            #     LAST); the hider-rep indices are recorded at base..base+1.
+            #     LAST); the hider-rep INDICES resolve via the 17.1-04
+            #     tier_reps dict + mol repindex (hidden_rep/found_rep index
+            #     vars are GONE) -- single-tier round => code 1, positions
+            #     base..base+1 preserved (explicit VDW-only per_rep).
             set post_reps [molinfo $gm get numreps]
             if {$post_reps != $pre_reps + 2} {
                 _bail game_numreps "exp=[expr {$pre_reps + 2}] got=$post_reps"
             }
-            set rh $::biochemeleon::hiders::hidden_rep
-            set rf $::biochemeleon::hiders::found_rep
-            if {$rh != $pre_reps || $rf != [expr {$pre_reps + 1}]} {
-                _bail hider_rep_idx "hidden=$rh found=$rf (exp $pre_reps/[expr {$pre_reps + 1}])"
+            if {[catch {dict get $::biochemeleon::hiders::tier_reps 1} tr1]} {
+                _bail tier_reps "code 1 missing ($tr1)"
+            } else {
+                set rh [mol repindex $gm [lindex $tr1 0]]
+                set rf [mol repindex $gm [lindex $tr1 1]]
+                if {$rh < 0 || $rf < 0
+                        || $rh != $pre_reps || $rf != [expr {$pre_reps + 1}]} {
+                    _bail hider_rep_idx "hidden=[lindex $tr1 0]=>$rh found=[lindex $tr1 1]=>$rf (exp $pre_reps/[expr {$pre_reps + 1}])"
+                }
             }
             # 2e: hidden rep read-back (COMBINED-BRACES molinfo form ONLY --
             #     the single-field form FAILS; Pitfall 3 in the phase docs).
@@ -220,7 +232,7 @@ if {$orig_molid != -1} {
                 _bail hidden_readback $rb1
             } else {
                 if {$hstyle ne "VDW"} { _bail hidden_style "exp=VDW got=$hstyle" }
-                if {$hsel ne {resname GAM and beta < 0 and user2 < 1}} {
+                if {$hsel ne {resname GAM and beta < 0 and user2 < 1 and user3 1}} {
                     _bail hidden_sel "got=$hsel"
                 }
                 if {$hcol ne "Element"} { _bail hidden_color "exp=Element got=$hcol" }
@@ -230,7 +242,7 @@ if {$orig_molid != -1} {
                 _bail found_readback $rb2
             } else {
                 if {$fstyle ne "VDW"} { _bail found_style "exp=VDW got=$fstyle" }
-                if {$fsel ne {resname GAM and beta < 0 and user2 > 0}} {
+                if {$fsel ne {resname GAM and beta < 0 and user2 > 0 and user3 1}} {
                     _bail found_sel "got=$fsel"
                 }
                 if {$fcol ne {ColorID 7}} { _bail found_color "exp=ColorID 7 got=$fcol" }
