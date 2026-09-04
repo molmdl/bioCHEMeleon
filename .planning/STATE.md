@@ -22,6 +22,10 @@ Wave 4 17.1-08 complete — the first BONDED-tier round proven end-to-end throug
 
 Progress: ██████████████████░░░░░░░░░░░ ~36% v2.0 (4 of ~12 phases complete + Phase 17.1 7/14 plans)
 
+Wave 5 17.1-12 complete (worktree exec/17.1-12, commit c1eb9e7 test) — the DynamicBonds-tier end-to-end smoke (`vmd/smoke/phase17_dynbonds_smoke.tcl`, 799 lines, ZERO lib changes) proves the P-5 explicit-cutoff rule through the real 17.1-06 dispatch on 1znf: pre-styled scene rep 0 to BARE `DynamicBonds` before start_game (user-scene parity; the scene's own 3.0 default cutoff is the user's choice), `start_game 3 [dict create DynamicBonds 3] 0` → 427 atoms / hiders {424 425 426} / user3==1.0, mimicry + numbonds >= 1, OFFSET-VS-CUTOFF via 17.1-05's proven three-way form (nearest-real-atom <= 1.61 ALWAYS; full-sep >= 1.19; relaxed logged BCHM_DYNBONDS_RELAX + non-degenerate — relaxation fired on 0-3 of 3 hiders per run, absorbed without flaking), multi-word read-back validation (hidden/found style == `DynamicBonds 1.6` EXACTLY, derived from style_args + cross-checked against tier_styles — never hand-typed), registry key proven BARE (`DynamicBonds`, exact key-set assert — NOT `DynamicBonds 1.6`), Tachyon: baseline 0/0, hider-rep exclusive 0 FCylinder AND 0 Sphere (EVIDENCE-PINNED CORRECTION of the plan's "3 dots": DynamicBonds' per-frame bond search runs over ALL atoms — p6_geom's own data (2 lone + 2 bonded hiders → exactly 2 spheres) proves bonded hiders are geometrically SILENT in a hiders-only rep; a dot would expose an anchor-less hider) with a Points discriminator sub-render proving selection liveness (3 dots + element colors + no salmon), scene-diff A.cyl−B.cyl = 84 ≥ 3 stubs / A.sph−B.sph = 0, found partition 426 → 1/2 + remaining {DynamicBonds 2}, cleanup restore incl. rep-0 style == `DynamicBonds`. PASS=1 3/3 runs, 0 ERROR)/bad switch, 8.6 gate zero. SECOND EVIDENCE-PINNED CORRECTION: Tachyon export RADII ARE SCENE-SCALE-DEPENDENT (p6 2-atom scene → 0.00991189; this 427-atom scene → 0.0175322 uniform across all 3802 scene cylinders) — absolute radius pins do NOT transfer across scenes; pin classes (uniformity + magnitude band (0.005, 0.05)) instead. Carry-forward for any future Tachyon smoke + Phase 18/GUI blend checks: the hiders-only DynamicBonds rep is invisible in isolation (blend comes entirely from the scene rep's stubs).
+
+Progress: ██████████████████░░░░░░░░░░░ ~36% v2.0 (4 of ~12 phases complete + Phase 17.1 7/14 plans)
+
 ## Performance Metrics
 
 **Velocity:**
@@ -125,3 +129,11 @@ Next: /gsd-execute-phase 17.1 continuation (17.1-07..14). Carry-forward: (j) rel
 ---
 *Updated: 2026-09-04 after 17.1-07 completion (Phase 17.1: 7/14 plans)*
 *Updated: 2026-09-04 after 17.1-08 completion (Phase 17.1: 7/14 plans)*
+
+Last session: 2026-09-04T19:55:23Z — Completed 17.1-12 (DynamicBonds-tier end-to-end smoke; Wave 5, worktree exec/17.1-12)
+Stopped at: 17.1-12 complete (commit c1eb9e7 test). Next plans: 17.1-13/14. Carry-forward: (n) hiders-only DynamicBonds rep is geometrically SILENT for bonded hiders (0 primitives — dynamic search over ALL atoms + both-endpoints rule; blend visibility comes entirely from the scene rep's stubs; a Points discriminator sub-render is the established selection-liveness proof); (o) Tachyon export radii are SCENE-SCALE-DEPENDENT — pin classes (uniformity + magnitude band), never absolute values copied across scenes; (p) offset-vs-cutoff asserts use the 17.1-05 three-way read-back-safe form (<= 1.61 always; full-sep >= 1.19; relaxed logged + non-degenerate).
+Resume file: None
+Next: /gsd-execute-phase 17.1 continuation (17.1-13..14). SUMMARY: .planning/phases/17.1-rep-setup-infrastructure-simple-rep-generators/17.1-12-SUMMARY.md
+
+---
+*Updated: 2026-09-04 after 17.1-12 completion (Phase 17.1: 8/14 plans via merged waves 1-5; 09-11 merging in parallel)*
