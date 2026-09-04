@@ -202,10 +202,14 @@ proc ::biochemeleon::on_start {} {
     # other step.
     catch {::biochemeleon::pick_bridge::deactivate}
     # 4. Start the game (all-or-nothing at the controller level: snapshot ->
-    #    sphere placement -> PDB-rebuild -> hider reps -> registry). Catch ->
-    #    abort: no partial game state, the dialog stays open.
+    #    hider generation -> PDB-rebuild -> hider reps -> registry). Catch ->
+    #    abort: no partial game state, the dialog stays open. 17.1-14: per_rep
+    #    + lock_scene threaded -- lock/randomize derivation lives INSIDE
+    #    start_game, so console + GUI + restart share one semantics.
     if {[catch {::biochemeleon::game::start_game $molid \
-                    [dict get $state hider_count]} gs]} {
+                    [dict get $state hider_count] \
+                    [dict get $state per_rep] \
+                    [dict get $state lock_scene]} gs]} {
         tk_messageBox -parent $w -icon warning -title "bioCHEMeleon" \
             -message "Could not start the game: $gs"
         return
