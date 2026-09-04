@@ -57,10 +57,14 @@ if {$orig_n != 555} { _bail orig_atoms "exp=555 got=$orig_n" }
 
 set hiders [::biochemeleon::mutation::make_placeholder_hiders $m0 5]
 if {[llength $hiders] != 5} { _bail hider_count "[llength $hiders]" }
-# Sanity: each record is {name x y z} (4 elements).
+# Sanity: each record is {name element x y z} (5 elements -- Phase 17.1 shape)
+# with a NON-BLANK element (PDB cols 77-78, the load-bearing blend field).
 set bad_rec 0
-foreach r $hiders { if {[llength $r] != 4} { incr bad_rec } }
-if {$bad_rec != 0} { _bail hider_rec_shape "$bad_rec records not {name x y z}" }
+foreach r $hiders {
+    if {[llength $r] != 5} { incr bad_rec; continue }
+    if {[lindex $r 1] eq ""} { incr bad_rec }
+}
+if {$bad_rec != 0} { _bail hider_rec_shape "$bad_rec records not {name element x y z} (or blank element)" }
 
 # ---- 2. write_combined_pdb DIRECT call -> verify PDB content (mutate's internal
 #         path is separate; this call verifies the file). Returns orig_n (555). ----

@@ -15,7 +15,9 @@
 #   3. Frozen Phase-15 contract intact: exactly 5 sentinels via the canonical
 #      selector "resname GAM and beta < 0" at indices 555-559 (555+5=560
 #      atoms), names G01..G05 (2-digit zero-padded) -- {molid count}
-#      signature and {name x y z} record shape unchanged.
+#      signature unchanged; the record shape is the Phase-17.1 5-field
+#      {name element x y z} (element = HID_ELEMENT "C"; this smoke asserts
+#      through the loaded molecule, so no record destructuring here).
 #   4. Registry + sentinel regression (Phase-15 behavior holds): count_hiders
 #      == 5 after start (is_hider 555 true, is_hider 0 false); cleanup
 #      restores 555 atoms, resets the registry to 0, and DELETES the live
