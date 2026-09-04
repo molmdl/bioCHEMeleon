@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 
 ## Current Position
 
-Phase: 17.1 of 23 (Rep Setup Infrastructure & Simple Rep Generators) — In progress (Wave 3 of 7)
-Plan: 06 of 14 in current phase (17.1-01..06 complete)
-Status: Wave 3 17.1-06 complete — game.tcl is now the N-tier DISPATCH composition root (4-arg start_game {molid hider_count {per_rep {}} {lock_scene 0}}, 16-13 guard byte-identical): lock-scene detection off the round's OWN snapshot reps, per-tier placement loop in GAME_REPS order (free->placeholder, bonded->make_bonded_hiders with accumulating {x y z} occupied list), ONE mutate, ONE 1-arg reconstruct + ONE assign_reps (P8), stamp_tier_codes BEFORE add_hider_reps (cached-selection trap), tier split by cumulative ACTUAL record counts, game_state 4-key {game_molid hider_count snapshot per_rep} with hider_count = the P9 effective total, restart per_rep pass-through symmetry. Entry sources rep_tiers.tcl (pure block after game_logic). Dispatch smoke PASS=1 (3/3 runs, 0 ERROR/bad switch): 2-tier VDW 2 + Lines 2 end-to-end (428 atoms, GAME_REPS-ordered per_rep stash {Lines 2 VDW 2}, derived tier order vs user3 stamps, 2N reps, per-pair read-back, registry per-tier counts, per-tier find partition, cleanup restore) + 2-arg randomize containment via INVARIANTS (observed draws summed to 1 and <5 — quick-008 is sum<=total, NOT ==total; the plan's literal ==5 would have flaked). KEY DISCOVERY carried from 17.1-05: relaxation fires COMMONLY on crowded anchors (normal BCHM_BONDED_RELAX lines).
-Last activity: 2026-09-04 — Completed 17.1-06-PLAN.md (per-tier dispatch; commits c20d782 feat + a724770 test + 5f97841 fix)
+Phase: 17.1 of 23 (Rep Setup Infrastructure & Simple Rep Generators) — In progress (Wave 4 of 7)
+Plan: 07 of 14 in current phase (17.1-01..07 complete)
+Status: Wave 4 17.1-07 complete — ALL 12 pre-17.1 legacy smokes PASS=1 under the N-tier contracts (the P12 VDW-only regression baseline preserved, zero lib-file changes): the 8 known-red smokes updated to explicit [dict create VDW n] 0 per_rep rounds, tier_reps/repindex rep resolution (phase16_smoke 2d), user3-conjoined selection asserts, rep_tiers added to 7 smokes' direct source lists (entry order), onpick's stale 3-key gs_shape/stash asserts updated to the 17.1-06 4-key game_state; 0 ERROR)/bad switch/no such variable/invalid command name/can't read in every full log; 8.6 gate zero.
+Last activity: 2026-09-04 — Completed 17.1-07-PLAN.md (smoke inventory update; commits 9164b28 test + af1971d test)
 
-Progress: ██████████████████░░░░░░░░░░░ ~36% v2.0 (4 of ~12 phases complete + Phase 17.1 6/14 plans)
+Progress: ██████████████████░░░░░░░░░░░ ~37% v2.0 (4 of ~12 phases complete + Phase 17.1 7/14 plans)
 
 ## Performance Metrics
 
@@ -31,7 +31,7 @@ Progress: ██████████████████░░░░░�
 | 14. Setup Tab & Bundled Demos | 4/4 | 87 min | 22 min |
 | 15. Mutation Safety & Hider Registry | 5/5 | ~101 min | ~20 min |
 | 16. MVP Core Loop (Sphere) | 17/17 | 12 plans (08-30) + ~71 min gap wave (09-03) | ~14 min (gap wave) |
-| 17.1. Rep Setup Infra & Simple Generators | 6/14 | 41+10+225+13+25+44 min so far | ~25 min (wave-3 avg) |
+| 17.1. Rep Setup Infra & Simple Generators | 7/14 | 41+10+225+13+25+44+12 min so far | ~25 min (wave-3 avg) |
 
 *Updated after each plan completion*
 
@@ -82,9 +82,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 
 - **17.1-06 game.tcl per-tier dispatch (2026-09-04, main checkout):** start_game extended to the 4-arg dispatch composition root (feat c20d782; dispatch smoke a724770 PASS=1 3/3; tiers-smoke regression fix 5f97841; 44 min). Ordering: 16-13 guard (BYTE-IDENTICAL) -> snapshot -> scene_reps_to_per_rep over the round's OWN snapshot reps (post-guard the snapshot is structurally free of game reps; sentinel filter = defense-in-depth) -> unimplemented-tier vmdcon warning against the CALLER's per_rep keys (captured BEFORE resolve — the resolved dict only holds implemented tiers) -> resolve_per_rep + effective_total (P9) -> tiers_from_per_rep -> per-tier loop in GAME_REPS order (free->make_placeholder_hiders, bonded->make_bonded_hiders with occ_hiders = ALL prior {x y z} positions extracted from the 5-field records) -> ONE mutate -> backup::apply -> ONE 1-arg reconstruct (DI command-prefix byte-preserved; call-line grep count == 1, NEVER the raw-substring count — 16-13 lesson) -> tier split by cumulative ACTUAL record counts over fetch_hider_indices' file-order indices (empty slices skipped in tier_of — stamping an empty selection errors; the rep pair is still added, empty selection harmless) -> stamp_tier_codes -> add_hider_reps with {code *style_args} specs -> ONE assign_reps (P8). game_state = {game_molid hider_count snapshot per_rep} (additive 4th key), hider_count = EFFECTIVE total; restart passes per_rep through (defensive dict-exists; lock_scene NOT stashed — moot 0, the stashed per_rep encodes the resolved restriction). 2-arg calls now RANDOMIZE across IMPLEMENTED_TIERS (deliberate behavior change). SMOKE LESSONS: (a) resolve_per_rep's stash is GAME_REPS-ordered ({Lines 2 VDW 2}, NOT the input order {VDW 2 Lines 2} — 17.1-01 pinned contract wins over the plan's step-1 literal); (b) quick-008 randomize is sum<=hc NOT ==hc — observed draws summed to 1 and <5, so 2-arg containment must assert INVARIANTS (hider_count==effective_total, keys subset IMPLEMENTED_TIERS, count==hider_count, numreps==pre+2*ntiers, user3 vs the derived table), never a hard-coded ==total; (c) smokes sourcing lib files directly MUST add rep_tiers to their source list or start_game dies with `invalid command name ...scene_reps_to_per_rep` (phase17_tiers_smoke fixed in-plan; 7 legacy smokes still red for 17.1-07 — see Pending Todos). GREEN on fresh staging: dispatch (3/3), 17_tiers, 17_bonded, 15_mutation, 15_backup, 16_pick.
 
+- **17.1-07 legacy-smoke VDW-only baseline (2026-09-04):** All 12 pre-17.1 smokes PASS=1 under the N-tier contracts (worktree exec/17.1-07; commits 9164b28 + af1971d, 12 min, zero lib changes). The repeatable baseline pattern: explicit VDW-only per_rep (`[dict create VDW n] 0` as start_game args 3-4) on every legacy call keeps the +2 numreps invariants AND the placement bbox assert valid with ZERO assert-arith churn (VDW = free tier = make_placeholder_hiders = bbox-inside). Smoke rep resolution = `tier_reps` dict + `mol repindex` with -1 guard (hidden_rep/found_rep namespace vars are GONE); single-tier selection-string asserts carry the ` and user3 1` conjunct; rep_tiers MUST be in every smoke's direct source list (game.tcl resolves rep_tiers::* at CALL time — the "invalid command name scene_reps_to_per_rep" early-failure class). game_state is 4-key — onpick's shape asserts updated 3->4; restart/15_game use per-key dict-exists so needed no change. phase16_hiders_smoke stamps user3 before its 1-arg add_hider_reps (production ordering, idempotent) + user3 partition check. REMAINING: pick_verify.tcl still reads the dead vars (GUI driver, next-session blocker).
+
 ### Pending Todos
 
-- **17.1-07 (from 17.1-04 + 17.1-06 evidence):** the known-red smoke inventory after the dispatch landed (all confirmed PASS=0 on fresh staging tmp/p17-06-stage). 17.1-06 fix (5f97841) already recovered phase17_tiers_smoke (rep_tiers source line + explicit per_rep {VDW 5} setup). REMAINING 8, and the KEY EVIDENCE: 7 of them fail EARLIER than the old plan description — `invalid command name "::biochemeleon::rep_tiers::scene_reps_to_per_rep"` because they source lib files directly WITHOUT rep_tiers — so 17.1-07 must add rep_tiers to their source lists IN ADDITION to updating their VDW-only numreps(+2)/selection-string asserts: `phase15_smoke`, `phase15_game_smoke` (also a cleanup cascade), `phase16_smoke` (~212-213; now honestly red, previously false-PASS — grep the log, never trust the marker), `phase16_hiders_smoke`, `phase16_onpick_smoke`, `phase16_restart_smoke` (start_a1), `phase16_placement_smoke`; PLUS `phase16_entry_smoke` (sources the ENTRY so rep_tiers is present — fails exactly as predicted on `hider_reps_added:exp=3 got=5`, the +2-vs-multi-tier assert). Also `vmd/tests/pick_verify.tcl` (~136-139, 261; GUI verify driver — breaks the next GUI session).
+- **NEXT GUI SESSION (from 17.1-07):** `vmd/tests/pick_verify.tcl` (~136-139, ~255-261) still reads the REMOVED `hiders::hidden_rep`/`found_rep` namespace vars — it will break the next GUI human-verify session. Update to the tier_reps-dict + mol repindex resolution (mirror phase16_smoke's 2d block) before any GUI verify work. All 12 legacy smokes are GREEN as of 17.1-07 — keep them green.
 
 None yet.
 
@@ -96,10 +98,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-04T03:40:43Z — Completed 17.1-06 (game.tcl per-tier dispatch composition root + multi-tier dispatch smoke; Wave 3, main checkout)
-Stopped at: 17.1-06 complete (commits c20d782 feat, a724770 test, 5f97841 fix). Next plan: 17.1-07 (smoke inventory update — the evidence-backed worklist is in Pending Todos: 7 legacy smokes need rep_tiers added to their source lists + VDW-only assert updates; phase16_entry_smoke needs the +2 assert update; pick_verify.tcl needs the hidden_rep/found_rep reads updated).
+Last session: 2026-09-04T04:07:17Z — Completed 17.1-07 (smoke inventory update: 12/12 legacy smokes green under the N-tier contracts; Wave 4, worktree exec/17.1-07)
+Stopped at: 17.1-07 complete (commits 9164b28 test + af1971d test). Next plan: 17.1-08. Carry-forward: pick_verify.tcl still reads dead hidden_rep/found_rep vars (breaks the NEXT GUI session — update to tier_reps/repindex first); `[dict create VDW n] 0` is the established legacy-smoke baseline pattern.
 Resume file: None
-Next: /gsd-execute-phase 17.1 continuation (17.1-07..14). Carry-forward: (j) relaxation fires commonly on crowded anchors — BCHM_BONDED_RELAX lines are normal in dispatch/GUI sessions; (k) 2-arg start_game now randomizes across IMPLEMENTED_TIERS — any new smoke calling it 2-arg must assert invariants, never ==total; (l) the 8 legacy smokes remain known-red until 17.1-07 (grep full logs, never trust markers).
+Next: /gsd-execute-phase 17.1 continuation (17.1-08..14). Carry-forward: (j) relaxation fires commonly on crowded anchors — BCHM_BONDED_RELAX lines are normal in dispatch/GUI sessions; (k) 2-arg start_game now randomizes across IMPLEMENTED_TIERS — any new smoke calling it 2-arg must assert invariants, never ==total; (l) legacy smokes ALL GREEN since 17.1-07 — any regression is now attributable to 17.1+ changes (grep full logs, never trust markers).
 
 ## v1 Milestone Reference (archived)
 
@@ -109,4 +111,4 @@ Next: /gsd-execute-phase 17.1 continuation (17.1-07..14). Carry-forward: (j) rel
 - **Known v1 tech debt considered for v2:** Phase 9 SSL fallback (check_hostname=False); Phase 11 SS-inheritance (cosmetic). v1.1 quick-008 (random total distribution) baked into v2 from the start (SETUP-06).
 
 ---
-*Updated: 2026-09-04 after 17.1-06 completion (Phase 17.1: 6/14 plans)*
+*Updated: 2026-09-04 after 17.1-07 completion (Phase 17.1: 7/14 plans)*
