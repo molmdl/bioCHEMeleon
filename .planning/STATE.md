@@ -9,17 +9,17 @@ See: .planning/PROJECT.md (updated 2026-08-22)
 
 ## Current Position
 
-Phase: 17.1 of 23 (Rep Setup Infrastructure & Simple Rep Generators) — In progress (Wave 2 of 7)
-Plan: 05 of 14 in current phase (17.1-01..05 complete)
-Status: Wave 1 (pure layers: rep_tiers 17.1-01, registry rep API 17.1-02, bonded geometry 17.1-03, N-tier hiders.tcl 17.1-04) merged to main; Wave 2 17.1-05 complete — make_bonded_hiders mol bridge landed (anchor mimicry name+element, 1.2-1.6 Å placement through the PDB writer, element cols 77-78 load-bearing) with a headless chemistry smoke PASS=1 (bond law numbonds>=1, element/radius/name mimicry, sentinel round-trip, 78-col layout, separation) and phase15/phase16 smokes updated+green. KEY DISCOVERY: the 17.1-03 relaxation contract fires COMMONLY on crowded anchors (1-3 of 5 hiders per 1znf round accept a candidate < 1.19 A from a non-anchor real atom — H-bearing sp3 anchors block most of the thin shell); anchor-bond band (<= 1.61) always holds, numbonds >= 1 always holds; tuning candidates flagged for a later plan (NOT changed — 17.1-03 constants are TDD-pinned).
-Last activity: 2026-09-04 — Completed 17.1-05-PLAN.md (make_bonded_hiders + element-carrying 5-field records; commits 0b64ed1 feat + 25dae2c test)
+Phase: 17.1 of 23 (Rep Setup Infrastructure & Simple Rep Generators) — In progress (Wave 3 of 7)
+Plan: 06 of 14 in current phase (17.1-01..06 complete)
+Status: Wave 3 17.1-06 complete — game.tcl is now the N-tier DISPATCH composition root (4-arg start_game {molid hider_count {per_rep {}} {lock_scene 0}}, 16-13 guard byte-identical): lock-scene detection off the round's OWN snapshot reps, per-tier placement loop in GAME_REPS order (free->placeholder, bonded->make_bonded_hiders with accumulating {x y z} occupied list), ONE mutate, ONE 1-arg reconstruct + ONE assign_reps (P8), stamp_tier_codes BEFORE add_hider_reps (cached-selection trap), tier split by cumulative ACTUAL record counts, game_state 4-key {game_molid hider_count snapshot per_rep} with hider_count = the P9 effective total, restart per_rep pass-through symmetry. Entry sources rep_tiers.tcl (pure block after game_logic). Dispatch smoke PASS=1 (3/3 runs, 0 ERROR/bad switch): 2-tier VDW 2 + Lines 2 end-to-end (428 atoms, GAME_REPS-ordered per_rep stash {Lines 2 VDW 2}, derived tier order vs user3 stamps, 2N reps, per-pair read-back, registry per-tier counts, per-tier find partition, cleanup restore) + 2-arg randomize containment via INVARIANTS (observed draws summed to 1 and <5 — quick-008 is sum<=total, NOT ==total; the plan's literal ==5 would have flaked). KEY DISCOVERY carried from 17.1-05: relaxation fires COMMONLY on crowded anchors (normal BCHM_BONDED_RELAX lines).
+Last activity: 2026-09-04 — Completed 17.1-06-PLAN.md (per-tier dispatch; commits c20d782 feat + a724770 test + 5f97841 fix)
 
-Progress: █████████████████░░░░░░░░░░░░ ~35% v2.0 (4 of ~12 phases complete + Phase 17.1 5/14 plans)
+Progress: ██████████████████░░░░░░░░░░░ ~36% v2.0 (4 of ~12 phases complete + Phase 17.1 6/14 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 33 (v2.0); 77 in v1 (archived)
+- Total plans completed: 34 (v2.0); 77 in v1 (archived)
 - Average duration: ~17 min (v2.0, 33 plans; day-1 Phase-16 per-plan splits not recorded)
 - Total execution time: ~238 min (v2.0 through Phase 15) + Phase 16 (day-1 12 plans + ~71 min gap wave) + Phase 17.1 so far (01: 41 / 02: 10 / 03: 3h45 incl. probe rewrites / 04: 13 / 05: 25)
 
@@ -31,7 +31,7 @@ Progress: █████████████████░░░░░░�
 | 14. Setup Tab & Bundled Demos | 4/4 | 87 min | 22 min |
 | 15. Mutation Safety & Hider Registry | 5/5 | ~101 min | ~20 min |
 | 16. MVP Core Loop (Sphere) | 17/17 | 12 plans (08-30) + ~71 min gap wave (09-03) | ~14 min (gap wave) |
-| 17.1. Rep Setup Infra & Simple Generators | 5/14 | 41+10+225+13+25 min so far | ~19 min (wave-2 avg) |
+| 17.1. Rep Setup Infra & Simple Generators | 6/14 | 41+10+225+13+25+44 min so far | ~25 min (wave-3 avg) |
 
 *Updated after each plan completion*
 
@@ -80,9 +80,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 
 - **17.1-05 make_bonded_hiders + element-carrying records (2026-09-04, main checkout):** mutation.tcl gained `make_bonded_hiders {molid count {occupied_hiders {}}}` (feat 0b64ed1; chemistry smoke test 25dae2c; 25 min): distinct heavy-atom anchors (`not resname GAM and element C N O S P`; count CAPPED at anchor count — v1 under-generation parity), hider name+element COPIED from the anchor via SINGLE-KEYWORD gets (P5), position drawn 1.2-1.6 Å via generators::place_bonded_hider (NO seeds); occupied = per-anchor `within 3.0 of index $aid and not index $aid` neighborhood (sep 1.4, anchor excluded) + this tier's placed positions + `occupied_hiders` arg at sep 4.0 — the arg is {x y z} POSITION TRIPLES per 17.1-06's pinned caller contract ("extract from prior recs"). `_hider_record` now takes the element param (PDB cols 77-78 %2s — THE load-bearing blend field: blank → element X radius 1.50, the probe-J defect class, now regression-guarded headlessly); `write_combined_pdb` destructures the 5-field shape; `make_placeholder_hiders` emits it too (element = HID_ELEMENT C) — ONE record shape everywhere; export list + header updated; still sources ONLY setup_state + generators. KEY DECISION: sep constants referenced QUALIFIED (`$::biochemeleon::generators::MIN_SEP_REAL`) — a same-named `variable` in the mutation namespace would be UNDEFINED and silently evaluate empty. DISCOVERY (1znf, 5 hiders; 2 runs, 3/5 and 1/5 relaxed under different PRNG streams): the 17.1-03 relaxation contract fires COMMONLY on crowded anchors (H-bearing sp3: each bonded H at ~1.09 Å blocks a ~67° cone of the thin 1.2-1.6 shell) — relaxed hiders sit 0.39-0.92 Å from a NON-anchor real atom (inside its VDW radius; cosmetic blend-quality degradation, still bonds). SMOKE PINNING: nearest-real-atom ≤ 1.61 asserted for ALL (anchor never in the occupied list → anchor-bond band unconditional), full-sep accepts additionally ≥ 1.19, relaxed accepts logged (`BCHM_BONDED_RELAX`) + non-degenerate (> 1e-6); numbonds ≥ 1 held for every hider both runs. Tuning candidates (LATER plan — 17.1-03 constants are TDD-pinned): larger MAX_TRIES, H-exclusion from the neighborhood, or excluding anchor-bonded neighbors from the MIN_SEP_REAL set. phase15_mutation_smoke record-shape assert → 5-field + element non-blank; phase16_placement_smoke comment-only update; regression set (15_game/15_backup/16_restart/16_onpick + the 3 plan smokes) all PASS=1, 0 `ERROR)`/`bad switch` on fresh staging tmp/p17-05-stage.
 
+- **17.1-06 game.tcl per-tier dispatch (2026-09-04, main checkout):** start_game extended to the 4-arg dispatch composition root (feat c20d782; dispatch smoke a724770 PASS=1 3/3; tiers-smoke regression fix 5f97841; 44 min). Ordering: 16-13 guard (BYTE-IDENTICAL) -> snapshot -> scene_reps_to_per_rep over the round's OWN snapshot reps (post-guard the snapshot is structurally free of game reps; sentinel filter = defense-in-depth) -> unimplemented-tier vmdcon warning against the CALLER's per_rep keys (captured BEFORE resolve — the resolved dict only holds implemented tiers) -> resolve_per_rep + effective_total (P9) -> tiers_from_per_rep -> per-tier loop in GAME_REPS order (free->make_placeholder_hiders, bonded->make_bonded_hiders with occ_hiders = ALL prior {x y z} positions extracted from the 5-field records) -> ONE mutate -> backup::apply -> ONE 1-arg reconstruct (DI command-prefix byte-preserved; call-line grep count == 1, NEVER the raw-substring count — 16-13 lesson) -> tier split by cumulative ACTUAL record counts over fetch_hider_indices' file-order indices (empty slices skipped in tier_of — stamping an empty selection errors; the rep pair is still added, empty selection harmless) -> stamp_tier_codes -> add_hider_reps with {code *style_args} specs -> ONE assign_reps (P8). game_state = {game_molid hider_count snapshot per_rep} (additive 4th key), hider_count = EFFECTIVE total; restart passes per_rep through (defensive dict-exists; lock_scene NOT stashed — moot 0, the stashed per_rep encodes the resolved restriction). 2-arg calls now RANDOMIZE across IMPLEMENTED_TIERS (deliberate behavior change). SMOKE LESSONS: (a) resolve_per_rep's stash is GAME_REPS-ordered ({Lines 2 VDW 2}, NOT the input order {VDW 2 Lines 2} — 17.1-01 pinned contract wins over the plan's step-1 literal); (b) quick-008 randomize is sum<=hc NOT ==hc — observed draws summed to 1 and <5, so 2-arg containment must assert INVARIANTS (hider_count==effective_total, keys subset IMPLEMENTED_TIERS, count==hider_count, numreps==pre+2*ntiers, user3 vs the derived table), never a hard-coded ==total; (c) smokes sourcing lib files directly MUST add rep_tiers to their source list or start_game dies with `invalid command name ...scene_reps_to_per_rep` (phase17_tiers_smoke fixed in-plan; 7 legacy smokes still red for 17.1-07 — see Pending Todos). GREEN on fresh staging: dispatch (3/3), 17_tiers, 17_bonded, 15_mutation, 15_backup, 16_pick.
+
 ### Pending Todos
 
-- **17.1-07 (from 17.1-04):** three artifacts read/assert the REMOVED `hiders::hidden_rep`/`found_rep` contract and are known-red until updated — `vmd/smoke/phase16_smoke.tcl` (~212-213; FALSE-PASSES: top-level `can't read … no such variable` + marker still prints PASS=1 — grep the log, never trust the marker), `vmd/smoke/phase16_hiders_smoke.tcl` (honest PASS=0: hidden_sel/found_sel bails — old selection strings lack the new `user3 <t>` conjunct), `vmd/tests/pick_verify.tcl` (~136-139, 261; GUI verify driver — breaks the next GUI session).
+- **17.1-07 (from 17.1-04 + 17.1-06 evidence):** the known-red smoke inventory after the dispatch landed (all confirmed PASS=0 on fresh staging tmp/p17-06-stage). 17.1-06 fix (5f97841) already recovered phase17_tiers_smoke (rep_tiers source line + explicit per_rep {VDW 5} setup). REMAINING 8, and the KEY EVIDENCE: 7 of them fail EARLIER than the old plan description — `invalid command name "::biochemeleon::rep_tiers::scene_reps_to_per_rep"` because they source lib files directly WITHOUT rep_tiers — so 17.1-07 must add rep_tiers to their source lists IN ADDITION to updating their VDW-only numreps(+2)/selection-string asserts: `phase15_smoke`, `phase15_game_smoke` (also a cleanup cascade), `phase16_smoke` (~212-213; now honestly red, previously false-PASS — grep the log, never trust the marker), `phase16_hiders_smoke`, `phase16_onpick_smoke`, `phase16_restart_smoke` (start_a1), `phase16_placement_smoke`; PLUS `phase16_entry_smoke` (sources the ENTRY so rep_tiers is present — fails exactly as predicted on `hider_reps_added:exp=3 got=5`, the +2-vs-multi-tier assert). Also `vmd/tests/pick_verify.tcl` (~136-139, 261; GUI verify driver — breaks the next GUI session).
 
 None yet.
 
@@ -94,10 +96,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-09-04T02:45:56Z — Completed 17.1-05 (make_bonded_hiders + element-carrying records; Wave 2, main checkout)
-Stopped at: 17.1-05 complete (commits 0b64ed1 feat, 25dae2c test). Next plan: 17.1-06 (game.tcl tier dispatch — consumes make_bonded_hiders with {x y z} occupied_hiders triples, stamp_tier_codes BEFORE add_hider_reps ordering contract, per-tier ACTUAL record counts via returned llength).
+Last session: 2026-09-04T03:40:43Z — Completed 17.1-06 (game.tcl per-tier dispatch composition root + multi-tier dispatch smoke; Wave 3, main checkout)
+Stopped at: 17.1-06 complete (commits c20d782 feat, a724770 test, 5f97841 fix). Next plan: 17.1-07 (smoke inventory update — the evidence-backed worklist is in Pending Todos: 7 legacy smokes need rep_tiers added to their source lists + VDW-only assert updates; phase16_entry_smoke needs the +2 assert update; pick_verify.tcl needs the hidden_rep/found_rep reads updated).
 Resume file: None
-Next: /gsd-execute-phase 17.1 continuation (17.1-06..14). Carry-forward: (j) make_bonded_hiders relaxation fires commonly on crowded anchors — expect relaxed placements as normal in 17.1-06 dispatch + GUI verify sessions; (k) occupied_hiders = {x y z} triples (caller extracts from prior recs); (l) phase16_smoke.tcl + phase16_hiders_smoke.tcl remain known-red until 17.1-07 (grep full logs, never trust markers).
+Next: /gsd-execute-phase 17.1 continuation (17.1-07..14). Carry-forward: (j) relaxation fires commonly on crowded anchors — BCHM_BONDED_RELAX lines are normal in dispatch/GUI sessions; (k) 2-arg start_game now randomizes across IMPLEMENTED_TIERS — any new smoke calling it 2-arg must assert invariants, never ==total; (l) the 8 legacy smokes remain known-red until 17.1-07 (grep full logs, never trust markers).
 
 ## v1 Milestone Reference (archived)
 
@@ -107,4 +109,4 @@ Next: /gsd-execute-phase 17.1 continuation (17.1-06..14). Carry-forward: (j) mak
 - **Known v1 tech debt considered for v2:** Phase 9 SSL fallback (check_hostname=False); Phase 11 SS-inheritance (cosmetic). v1.1 quick-008 (random total distribution) baked into v2 from the start (SETUP-06).
 
 ---
-*Updated: 2026-09-04 after 17.1-05 completion (Phase 17.1: 5/14 plans)*
+*Updated: 2026-09-04 after 17.1-06 completion (Phase 17.1: 6/14 plans)*
