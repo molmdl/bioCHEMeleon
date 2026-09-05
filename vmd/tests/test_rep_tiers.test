@@ -6,11 +6,19 @@
 # Pitfall 4 (global PRNG): EVERY randomized call below passes an EXPLICIT seed
 # (resolve_per_rep forwards it to randomize_per_rep, which reseeds internally
 # via srand($seed)), so no case relies on residual PRNG state. The seed values
-# 173 and 41 were PROBED against this VMD 1.9.3 binary's Tcl 8.5.6 PRNG so the
-# plan's pinned randomized-path expectations hold deterministically:
-#   seed 173 -> randomize_per_rep 10 IMPLEMENTED_TIERS sums to exactly 10
-#               ({Points 4 Licorice 3 VDW 2 Lines 1} pre-ordering)
-#   seed 41  -> randomize_per_rep 3 {Licorice} -> exactly {Licorice 3}
+# were PROBED against this VMD 1.9.3 binary's Tcl 8.5.6 PRNG so the pinned
+# randomized-path expectations hold deterministically (re-probe on any binary
+# OR DOMAIN change -- 17.2-03 widened the randomize domain from the 17.1 six
+# simple tiers to all 10 GAME_REPS, which changes every draw):
+#   seed 173 -> randomize_per_rep 10 (10-tier domain) sums to exactly 10
+#               ({Tube 3 Cartoon 6 CPK 1} pre-ordering)
+#   seed 42  -> randomize_per_rep 3 (10-tier domain) sums to exactly 3
+#               ({Tube 2 Cartoon 1} pre-ordering)
+#   seed 41  -> single-rep allowed list (any name; the draws are
+#               name-independent) -> the FULL count on that rep
+#               ({Licorice 3} and {Cartoon 3} alike)
+#   seeds 1..20 at hc=5 collectively draw all 10 GAME_REPS (the full-domain
+#               union pin inside resolve_randomize_full_domain)
 
 package require tcltest
 namespace import ::tcltest::*
@@ -29,6 +37,8 @@ proc rt_rec {style sel} { return [list $style $sel red opaque] }
 # ---------------------------------------------------------------------------
 
 test implemented_game_reps_all_one {} -body {
+    # The six 17.1 simple tiers; the four residue tiers added by 17.2-03 are
+    # pinned per-tier in the residue-splice section below.
     set ok 1
     foreach rep {Lines VDW Licorice CPK Points DynamicBonds} {
         if {[::biochemeleon::rep_tiers::implemented $rep] != 1} { set ok 0; break }
@@ -36,14 +46,14 @@ test implemented_game_reps_all_one {} -body {
     set ok
 } -result 1
 
-test implemented_unimplemented_and_unknown_zero {} -body {
-    list [::biochemeleon::rep_tiers::implemented Cartoon] \
-         [::biochemeleon::rep_tiers::implemented NewCartoon] \
-         [::biochemeleon::rep_tiers::implemented Trace] \
-         [::biochemeleon::rep_tiers::implemented Tube] \
-         [::biochemeleon::rep_tiers::implemented Ribbons] \
+# inverted by 17.2-03 seam widening: Cartoon/NewCartoon/Trace/Tube moved to
+# implemented_residue_* (now implemented); the curation exclusions Ribbons and
+# Bonds are NOT generators and stay 0, as does the unknown name.
+test implemented_excluded_unchanged {} -body {
+    list [::biochemeleon::rep_tiers::implemented Ribbons] \
+         [::biochemeleon::rep_tiers::implemented Bonds] \
          [::biochemeleon::rep_tiers::implemented ""]
-} -result {0 0 0 0 0 0}
+} -result {0 0 0}
 
 test tier_kind_vdw_free {} -body {
     ::biochemeleon::rep_tiers::tier_kind VDW
@@ -57,9 +67,11 @@ test tier_kind_bonded_tiers {} -body {
     set ok
 } -result 1
 
+# inverted by 17.2-03 seam widening: the Cartoon family now has the kind
+# "residue" (tier_kind_residue_* below); only non-GAME_REPS names are unknown.
 test tier_kind_unknown_empty {} -body {
-    list [::biochemeleon::rep_tiers::tier_kind Cartoon] \
-         [::biochemeleon::rep_tiers::tier_kind Ribbons] \
+    list [::biochemeleon::rep_tiers::tier_kind Ribbons] \
+         [::biochemeleon::rep_tiers::tier_kind Bonds] \
          [::biochemeleon::rep_tiers::tier_kind ""]
 } -result {{} {} {}}
 
@@ -75,9 +87,11 @@ test style_args_single_word_tiers {} -body {
          [::biochemeleon::rep_tiers::style_args Points]
 } -result {Lines VDW Points}
 
+# inverted by 17.2-03 seam widening: the Cartoon family now returns its bare
+# single-word style (style_args_residue_* below); non-GAME_REPS names stay {}.
 test style_args_unknown_empty {} -body {
-    list [::biochemeleon::rep_tiers::style_args Cartoon] \
-         [::biochemeleon::rep_tiers::style_args Ribbons]
+    list [::biochemeleon::rep_tiers::style_args Ribbons] \
+         [::biochemeleon::rep_tiers::style_args Bonds]
 } -result {{} {}}
 
 # ---------------------------------------------------------------------------
@@ -166,10 +180,20 @@ test resolve_l0_explicit_kept_verbatim {} -body {
     ::biochemeleon::rep_tiers::resolve_per_rep 10 [dict create VDW 2 Lines 3] [dict create] 0 ""
 } -result {Lines 3 VDW 2}
 
-test resolve_l0_drops_unimplemented_key {} -body {
-    set r [::biochemeleon::rep_tiers::resolve_per_rep 5 [dict create Cartoon 2] [dict create] 0 42]
-    list [dict exists $r Cartoon] [expr {[dict size $r] >= 1}]
-} -result {0 1}
+# inverted by 17.2-03 seam widening: Cartoon is implemented now
+# (resolve_keeps_residue_per_rep below pins the keep); the GAME_REPS filter is
+# pinned with Ribbons -- a curation exclusion, never a generator -- whose key
+# is still dropped before the randomize fallback.
+test resolve_l0_drops_non_game_reps_key {} -body {
+    set r [::biochemeleon::rep_tiers::resolve_per_rep 5 [dict create Ribbons 2] [dict create] 0 42]
+    set ok [expr {![dict exists $r Ribbons] && [dict size $r] >= 1}]
+    if {$ok} {
+        dict for {rep cnt} $r {
+            if {[::biochemeleon::rep_tiers::implemented $rep] != 1} { set ok 0; break }
+        }
+    }
+    set ok
+} -result 1
 
 # Drop-overflow clamp, validate_state semantics (keep entries that fit in the
 # cleaned dict's own order, DROP the rest -- never truncate): VDW 8 fits in
@@ -178,16 +202,13 @@ test resolve_l0_clamp_drop_overflow {} -body {
     ::biochemeleon::rep_tiers::resolve_per_rep 10 [dict create VDW 8 Lines 8] [dict create] 0 ""
 } -result {VDW 8}
 
-test resolve_l0_unimplemented_only_randomizes {} -body {
-    set r [::biochemeleon::rep_tiers::resolve_per_rep 4 [dict create Cartoon 4] [dict create] 0 42]
-    set ok [expr {[dict size $r] >= 1}]
-    if {$ok} {
-        dict for {rep cnt} $r {
-            if {[::biochemeleon::rep_tiers::implemented $rep] != 1} { set ok 0; break }
-        }
-    }
-    set ok
-} -result 1
+# inverted by 17.2-03 seam widening (was resolve_l0_unimplemented_only_
+# randomizes): an explicit residue-only per_rep is now IMPLEMENTED, so it
+# resolves VERBATIM -- no drop, no randomize (seed empty is safe: the clamp
+# leaves a non-empty dict, so the randomize fallback is never reached).
+test resolve_l0_residue_only_kept_verbatim {} -body {
+    ::biochemeleon::rep_tiers::resolve_per_rep 4 [dict create Cartoon 4] [dict create] 0 ""
+} -result {Cartoon 4}
 
 # ---------------------------------------------------------------------------
 # resolve_per_rep, lock_scene=1 (allowed = detected INTERSECT
@@ -199,16 +220,15 @@ test resolve_l1_drops_undetected_keys {} -body {
         [dict create VDW 2 Lines 2 Points 2] [dict create VDW 1 Lines 1] 1 ""
 } -result {Lines 2 VDW 2}
 
-test resolve_l1_all_unimplemented_detected_randomizes {} -body {
-    set r [::biochemeleon::rep_tiers::resolve_per_rep 5 {} [dict create Cartoon 1] 1 42]
-    set ok [expr {[dict size $r] >= 1}]
-    if {$ok} {
-        dict for {rep cnt} $r {
-            if {[::biochemeleon::rep_tiers::implemented $rep] != 1} { set ok 0; break }
-        }
-    }
-    set ok
-} -result 1
+# inverted by 17.2-03 seam widening (was resolve_l1_all_unimplemented_detected_
+# randomizes): a detected Cartoon-family scene now RESTRICTS allowed to the
+# detected residue tier instead of falling back to the simple-tier list -- the
+# lock-scene round derives a full residue round. Seed 41 probed (single-rep
+# distribution is draw-dependent; the plan's case omitted the seed and the
+# suite's Pitfall-4 rule requires one).
+test resolve_lockscene_cartoon {} -body {
+    ::biochemeleon::rep_tiers::resolve_per_rep 3 {} [dict create Cartoon 1] 1 41
+} -result {Cartoon 3}
 
 test resolve_l1_detected_empty_randomizes {} -body {
     set r [::biochemeleon::rep_tiers::resolve_per_rep 5 {} [dict create] 1 42]
@@ -255,6 +275,132 @@ test effective_total_sums_counts {} -body {
 test effective_total_empty_is_zero {} -body {
     ::biochemeleon::rep_tiers::effective_total [dict create]
 } -result 0
+
+# ---------------------------------------------------------------------------
+# Phase 17.2: residue-splice tier family (seam widening, 17.2-03)
+#
+# IMPLEMENTED_TIERS widens to the FULL GAME_REPS list; Cartoon/NewCartoon/
+# Trace/Tube gain the third tier kind "residue" (one fake GAM residue per
+# hider via the shared splice -- rep_tiers only returns the kind string, the
+# 17.2-09 dispatch routes on it) and take NO modstyle params (bare
+# single-word style_args; viability research section 6.6). One splice, four
+# consumers. The four tiers are pinned PER TIER (one concept per test) so a
+# future regression names the exact tier.
+# ---------------------------------------------------------------------------
+
+test implemented_residue_cartoon {} -body {
+    ::biochemeleon::rep_tiers::implemented Cartoon
+} -result 1
+
+test implemented_residue_newcartoon {} -body {
+    ::biochemeleon::rep_tiers::implemented NewCartoon
+} -result 1
+
+test implemented_residue_trace {} -body {
+    ::biochemeleon::rep_tiers::implemented Trace
+} -result 1
+
+test implemented_residue_tube {} -body {
+    ::biochemeleon::rep_tiers::implemented Tube
+} -result 1
+
+test tier_kind_residue_cartoon {} -body {
+    ::biochemeleon::rep_tiers::tier_kind Cartoon
+} -result residue
+
+test tier_kind_residue_newcartoon {} -body {
+    ::biochemeleon::rep_tiers::tier_kind NewCartoon
+} -result residue
+
+test tier_kind_residue_trace {} -body {
+    ::biochemeleon::rep_tiers::tier_kind Trace
+} -result residue
+
+test tier_kind_residue_tube {} -body {
+    ::biochemeleon::rep_tiers::tier_kind Tube
+} -result residue
+
+test style_args_residue_cartoon {} -body {
+    ::biochemeleon::rep_tiers::style_args Cartoon
+} -result {Cartoon}
+
+test style_args_residue_newcartoon {} -body {
+    ::biochemeleon::rep_tiers::style_args NewCartoon
+} -result {NewCartoon}
+
+test style_args_residue_trace {} -body {
+    ::biochemeleon::rep_tiers::style_args Trace
+} -result {Trace}
+
+test style_args_residue_tube {} -body {
+    ::biochemeleon::rep_tiers::style_args Tube
+} -result {Tube}
+
+# Explicit residue entries are now KEPT (17.1 dropped {Cartoon n} as
+# unimplemented): GAME_REPS-ordered keep, counts verbatim. Seed empty is safe
+# -- the clamp leaves a non-empty dict, so randomize is never reached.
+test resolve_keeps_residue_per_rep {} -body {
+    ::biochemeleon::rep_tiers::resolve_per_rep 4 [dict create Cartoon 2 Tube 2] [dict create] 0 ""
+} -result {Cartoon 2 Tube 2}
+
+# The randomize fallback now draws over the FULL 10-tier domain (17.1 drew
+# over the six simple tiers): (a) the plan's seeded case sums to exactly 3
+# over GAME_REPS (seed 42 probed -> {Tube 2 Cartoon 1}); (b) the union of keys
+# over seeds 1..20 (hc=5, probed) covers ALL 10 GAME_REPS -- a single draw
+# cannot prove the domain, the union can. Binary-pinned like every seed here
+# (re-probe on binary or domain change).
+test resolve_randomize_full_domain {} -body {
+    set r [::biochemeleon::rep_tiers::resolve_per_rep 3 {} [dict create] 0 42]
+    set ok 1
+    dict for {rep cnt} $r {
+        if {[lsearch -exact $::biochemeleon::setup_state::GAME_REPS $rep] < 0} { set ok 0 }
+        if {![string is integer -strict $cnt] || $cnt <= 0} { set ok 0 }
+    }
+    set sum 0
+    dict for {rep cnt} $r { incr sum $cnt }
+    if {$ok && $sum != 3} { set ok 0 }
+    if {$ok} {
+        set seen [dict create]
+        foreach seed {1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20} {
+            set d [::biochemeleon::rep_tiers::resolve_per_rep 5 {} [dict create] 0 $seed]
+            foreach rep [dict keys $d] { dict set seen $rep 1 }
+        }
+        foreach rep $::biochemeleon::setup_state::GAME_REPS {
+            if {![dict exists $seen $rep]} { set ok 0; break }
+        }
+        if {[dict size $seen] != [llength $::biochemeleon::setup_state::GAME_REPS]} { set ok 0 }
+    }
+    set ok
+} -result 1
+
+# GAME_REPS-order codes: tiers_from_per_rep iterates GAME_REPS, so VDW
+# (position 2) takes code 1 and Cartoon (position 5, between CPK and Points)
+# takes code 2 -- the residue tiers sit IN their GAME_REPS positions (the
+# dispatch's user3 stamps follow this order). NOTE: the plan's literal
+# expected value {{1 Cartoon 2} {2 VDW 1}} contradicts GAME_REPS (VDW
+# precedes Cartoon) and this suite's own pinned precedent
+# (tiers_from_per_rep_order_and_codes) -- corrected here, intent preserved.
+test tiers_from_per_rep_residue {} -body {
+    ::biochemeleon::rep_tiers::tiers_from_per_rep [dict create Cartoon 2 VDW 1]
+} -result {{1 VDW 1} {2 Cartoon 2}}
+
+# Residue hiders count ONE per hider in the bookkeeping (the registry/dispatch
+# unit is the HIDER, not the residue's 5 atoms).
+test effective_total_residue {} -body {
+    ::biochemeleon::rep_tiers::effective_total [dict create Cartoon 2 VDW 1]
+} -result 3
+
+# Scene detection was ALWAYS GAME_REPS-filtered (independent of
+# IMPLEMENTED_TIERS) -- a user scene styled Cartoon is detected; pinned here
+# so the lock-scene residue round's input contract is explicit. NOTE: the
+# plan's literal selection {protein and not resname GAM} trips the module's
+# sentinel filter (any selection containing "resname GAM" is skipped,
+# rep_tiers.tcl defense-in-depth) -- corrected to a plain user-style
+# selection, intent preserved.
+test scene_detection_cartoon_unchanged {} -body {
+    ::biochemeleon::rep_tiers::scene_reps_to_per_rep \
+        [list [rt_rec Cartoon {protein}]]
+} -result {Cartoon 1}
 
 # CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
 # Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
