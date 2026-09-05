@@ -39,9 +39,9 @@ Requirements for the VMD 1.9.3 tcl port. Each maps to exactly one roadmap phase 
 - [x] **HIDER-01**: Hider generation via PDB-rebuild (Option D) — write a combined PDB (real + hider atoms with strict column alignment), `mol new` reload as a single molecule; hiders live in the SAME molecule as real atoms (player can't isolate them by toggling molecule visibility)
 - [x] **HIDER-02**: Hider sentinel `resname=GAM` + `beta=-999` + `segid=GAME` set in-place via `atomselect` after load (robust against PDB column bugs); hider registry keyed by atom `index` (stable within a molid's lifetime), reconstructable from sentinels on reload
 - [x] **HIDER-03**: Sphere/VDW hiders — place anywhere in the bounding region (simplest generator; MVP)
-- [ ] **HIDER-04**: Line/Licorice hiders — new atoms mimic connected atoms or alternate positions
+- [x] **HIDER-04**: Line/Licorice hiders — new atoms mimic connected atoms or alternate positions
 - [ ] **HIDER-05**: Cartoon/NewCartoon hiders — splice a full residue (Cα + neighbors) with `mol ssrecalc`, OR use Tube/Trace as SS-independent alternatives to sidestep the STRIDE `ss='L'` caveat for fake `GAM` residues
-- [ ] **HIDER-06**: Research-driven selection of which VMD representations are viable for the blend-in mechanic — 10-rep GAME_REPS list (Lines, VDW, Licorice, CPK, Cartoon, NewCartoon, Trace, Tube, Points, DynamicBonds); surface/volumetric reps are anti-features
+- [x] **HIDER-06**: Research-driven selection of which VMD representations are viable for the blend-in mechanic — 10-rep GAME_REPS list (Lines, VDW, Licorice, CPK, Cartoon, NewCartoon, Trace, Tube, Points, DynamicBonds); surface/volumetric reps are anti-features
 
 ### Core Loop
 
@@ -131,9 +131,9 @@ Which phases cover which requirements. v2.0 phases are numbered 13-23 (continuin
 | GAME-01 | Phase 16 | Complete |
 | GAME-02 | Phase 16 | Complete |
 | GAME-03 | Phase 16 | Complete |
-| HIDER-04 | Phase 17.1 | Pending |
+| HIDER-04 | Phase 17.1 | Complete |
 | HIDER-05 | Phase 17.2 | Pending |
-| HIDER-06 | Phase 17.1 | Pending |
+| HIDER-06 | Phase 17.1 | Complete |
 | MATERIAL-01 | Phase 18 | Pending |
 | MATERIAL-02 | Phase 18 | Pending |
 | GAME-05 | Phase 19 | Pending |

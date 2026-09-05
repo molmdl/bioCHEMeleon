@@ -142,20 +142,20 @@ Plans:
 4. Reps are tracked by stable name (`mol repname`/`mol repindex`), never by index (renumbers on `mol delrep`).
 
 Plans:
-- [ ] 17.1-01-PLAN.md — PURE rep_tiers.tcl: tier table, scene-rep filter, resolve_per_rep (TDD)
-- [ ] 17.1-02-PLAN.md — Registry per-record rep API set_rep/assign_reps (TDD)
-- [ ] 17.1-03-PLAN.md — Pure bonded placement geometry (1.2–1.6 Å anchor-offset) (TDD)
-- [ ] 17.1-04-PLAN.md — hiders.tcl N-tier generalization: 2N rep pairs + user3 stamping (+ 2-tier smoke)
-- [ ] 17.1-05-PLAN.md — make_bonded_hiders: anchor mimicry + 5-field records through the PDB writer (+ chemistry smoke)
-- [ ] 17.1-06-PLAN.md — game.tcl 4-arg start_game: per-tier dispatch + snapshot-derived lock-scene (+ dispatch smoke)
-- [ ] 17.1-07-PLAN.md — VDW regression baseline: Phase-15/16 smokes restored green (8 files)
-- [ ] 17.1-08-PLAN.md — Points tier end-to-end smoke + reusable Tachyon probe template
-- [ ] 17.1-09-PLAN.md — Lines tier smoke (both-endpoints rule)
-- [ ] 17.1-10-PLAN.md — Licorice tier smoke (ball+stick render diff)
-- [ ] 17.1-11-PLAN.md — CPK tier smoke (scale-ratio check)
-- [ ] 17.1-12-PLAN.md — DynamicBonds tier smoke (explicit cutoff 1.6)
-- [ ] 17.1-13-PLAN.md — Capstone: mixed 3-tier + lock-scene rounds + FULL-suite green gate
-- [ ] 17.1-14-PLAN.md — GUI wiring + rep_verify.tcl auto-driver + ONE consolidated human-verify checkpoint
+- [x] 17.1-01-PLAN.md — PURE rep_tiers.tcl: tier table, scene-rep filter, resolve_per_rep (TDD)
+- [x] 17.1-02-PLAN.md — Registry per-record rep API set_rep/assign_reps (TDD)
+- [x] 17.1-03-PLAN.md — Pure bonded placement geometry (1.2–1.6 Å anchor-offset) (TDD)
+- [x] 17.1-04-PLAN.md — hiders.tcl N-tier generalization: 2N rep pairs + user3 stamping (+ 2-tier smoke)
+- [x] 17.1-05-PLAN.md — make_bonded_hiders: anchor mimicry + 5-field records through the PDB writer (+ chemistry smoke)
+- [x] 17.1-06-PLAN.md — game.tcl 4-arg start_game: per-tier dispatch + snapshot-derived lock-scene (+ dispatch smoke)
+- [x] 17.1-07-PLAN.md — VDW regression baseline: Phase-15/16 smokes restored green (8 files)
+- [x] 17.1-08-PLAN.md — Points tier end-to-end smoke + reusable Tachyon probe template
+- [x] 17.1-09-PLAN.md — Lines tier smoke (both-endpoints rule)
+- [x] 17.1-10-PLAN.md — Licorice tier smoke (ball+stick render diff)
+- [x] 17.1-11-PLAN.md — CPK tier smoke (scale-ratio check)
+- [x] 17.1-12-PLAN.md — DynamicBonds tier smoke (explicit cutoff 1.6)
+- [x] 17.1-13-PLAN.md — Capstone: mixed 3-tier + lock-scene rounds + FULL-suite green gate
+- [x] 17.1-14-PLAN.md — GUI wiring + rep_verify.tcl auto-driver + ONE consolidated human-verify checkpoint — completed 2026-09-05 (checkpoint APPROVED)
 
 ### Phase 17.2: Cartoon/NewCartoon Generators (STRIDE ss caveat RESOLVED — Option A accepted)
 
@@ -289,7 +289,7 @@ Plans:
 | 14. Setup Tab & Bundled Demos | v2.0 | 4/4 | ✓ Complete | 2026-08-29 |
 | 15. Mutation Safety & Hider Registry | v2.0 | 5/5 | ✓ Complete | 2026-08-30 |
 | 16. MVP Core Loop (Sphere) | v2.0 | 17/17 | ✓ Complete | 2026-09-03 |
-| 17.1. Rep Setup Infrastructure & Simple Rep Generators | v2.0 | 0/14 | Planned | - |
+| 17.1. Rep Setup Infrastructure & Simple Rep Generators | v2.0 | 14/14 | ✓ Complete | 2026-09-05 |
 | 17.2. Cartoon/NewCartoon Generators | v2.0 | 0/12 | Planned | - |
 | 18. Materials Exploration | v2.0 | 0/TBD | Not started | - |
 | 19. In-game Actions | v2.0 | 0/TBD | Not started | - |
