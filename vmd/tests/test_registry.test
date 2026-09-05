@@ -224,6 +224,117 @@ test multi_tier_total_consistency {} -body {
     expr {$sum eq [::biochemeleon::registry::count_remaining]}
 } -result 1
 
+# ---- Phase 17.2 additions: resid-block lookup (register_resid_block /
+# ---- hider_for_resid) ----
+# The multi-atom pick fallback's PURE half: a cartoon splice registers ONE
+# fake GAM residue per hider (beta=-999 on the CA only), but a real click on
+# the cartoon bump can land on the residue's N/C/O/CB. The dispatch builds a
+# resid -> hider-index map (fake resid 9001+k -> the registered CA index) and
+# registers it ONCE per round via register_resid_block; on_pick's fallback
+# resolves a non-registered clicked index by reading its resid (mol side,
+# game.tcl) and looking it up here. The v2 analog of v1's
+# get_altconf_by_resv dual lookup, keyed `resid ∈ registered block`.
+
+# Basic round trip: the dispatch's map registers and both resids resolve
+# to their registered CA indices.
+test register_and_lookup {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 6} }}]
+    ::biochemeleon::registry::register_resid_block {9001 5 9002 6}
+    list [::biochemeleon::registry::hider_for_resid 9001] \
+         [::biochemeleon::registry::hider_for_resid 9002]
+} -result {5 6}
+
+# WHOLESALE REPLACE: the second call replaces the whole block — never merged
+# with a prior round's block (one call per round; a stale entry from the
+# first block must not survive).
+test register_replace_wholesale {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 6} }}]
+    ::biochemeleon::registry::register_resid_block {9001 5}
+    ::biochemeleon::registry::register_resid_block {9002 6}
+    list [::biochemeleon::registry::hider_for_resid 9001] \
+         [::biochemeleon::registry::hider_for_resid 9002]
+} -result {{} 6}
+
+# ATOMIC validate-then-replace: one unregistered idx aborts the WHOLE
+# registration BEFORE the block is touched — the exact mark_found error
+# wording, and no partial application (9001 stays unregistered).
+test register_unregistered_atomic {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    set rc [catch {::biochemeleon::registry::register_resid_block {9001 5 9002 999}} err]
+    list $rc $err [::biochemeleon::registry::hider_for_resid 9001]
+} -result {1 {hider 999 not registered} {}}
+
+# Empty mapping is a no-op — the block is UNCHANGED, not cleared (contract:
+# "empty mapping → no-op (block unchanged)"). Two halves: (a) the literal
+# sequence (no error; 9001 stays unregistered); (b) the unchanged pin (a
+# prior entry survives an empty-mapping call).
+test register_empty_noop {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    set rc [catch {::biochemeleon::registry::register_resid_block [dict create]} err]
+    ::biochemeleon::registry::register_resid_block {9001 5}
+    ::biochemeleon::registry::register_resid_block [dict create]
+    list $rc [::biochemeleon::registry::hider_for_resid 9001]
+} -result {0 5}
+
+# Empty mapping on an EMPTY registry is fine too — the validate loop runs
+# zero times (no keys to validate against nonexistent records); a real block
+# registers cleanly once records exist later.
+test register_nonexistent_records_ok_when_replaced_later {} -body {
+    ::biochemeleon::registry::reset
+    set rc [catch {::biochemeleon::registry::register_resid_block [dict create]} err]
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    ::biochemeleon::registry::register_resid_block {9001 5}
+    list $rc [::biochemeleon::registry::hider_for_resid 9001]
+} -result {0 5}
+
+# Unknown resid -> "" (string-empty, NEVER an error — the miss path is a
+# normal "Miss!" pick).
+test lookup_unknown {} -body {
+    ::biochemeleon::registry::hider_for_resid 42
+} -result {}
+
+# reset clears BOTH _records and _resid_block — a stale block must not
+# survive cleanup into the next round.
+test lookup_after_reset {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    ::biochemeleon::registry::register_resid_block {9001 5}
+    ::biochemeleon::registry::reset
+    ::biochemeleon::registry::hider_for_resid 9001
+} -result {}
+
+# PINNED lifecycle: reconstruct_from_sentinels does NOT touch _resid_block
+# (only reset and register_resid_block mutate it) — a registered block
+# SURVIVES a reconstruct call. The dispatch always re-registers after
+# reconstruct in residue rounds, but the registry itself never wipes it.
+test block_survives_reconstruct {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    ::biochemeleon::registry::register_resid_block {9001 5}
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    list [::biochemeleon::registry::hider_for_resid 9001] [::biochemeleon::registry::is_hider 5]
+} -result {5 1}
+
+# The two maps are INDEPENDENT: the resid block (resid -> idx) and the
+# per-record rep stamps (idx -> rep) never interfere with each other.
+test block_orthogonal_to_assign_reps {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5} }}]
+    ::biochemeleon::registry::register_resid_block {9001 5}
+    ::biochemeleon::registry::assign_reps {5 Cartoon}
+    list [::biochemeleon::registry::hider_for_resid 9001] \
+         [expr {[::biochemeleon::registry::remaining_by_rep] eq [dict create Cartoon 1]}]
+} -result {5 1}
+
+# Mixed-round shape (harmless 9001 collision): in a round with a simple tier
+# AND a residue tier, the simple-tier single-atom hiders all share resid 9001
+# (17.2-01 RESID_BASE) but are NOT in the block. A click on one of them is
+# registered (is_hider first), so the fallback only ever fires for fake
+# residues' N/C/O/CB — the block maps 9001 to the residue-tier CA (idx 8
+# here), never to a simple-tier atom.
+test mixed_round_shape {} -body {
+    ::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {7 8 9} }}]
+    ::biochemeleon::registry::register_resid_block {9001 8 9002 9}
+    ::biochemeleon::registry::hider_for_resid 9001
+} -result 8
+
 # CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
 # Print a machine-parseable marker — VMD does NOT propagate tcl exit codes
 # ($? is always 0 from VMD), so the harness MUST parse this marker line.
