@@ -7,10 +7,21 @@
 # randomize_per_rep -- the mutation.tcl pattern; its `namespace eval` re-inits
 # CONSTANTS to identical values (harmless pure re-init).
 #
-# THE 17.1 TIER SEAM: a tier = {name, kind, style_args}. IMPLEMENTED_TIERS is
-# the GAME_REPS-ordered subset whose generators exist in Phase 17.1; Phase 17.2
-# widens it with the residue-splice kinds (Cartoon/NewCartoon/Trace/Tube) --
-# a one-constant change plus TIER_KINDS entries, both in this file only.
+# THE TIER SEAM (widened in 17.2-03): a tier = {name, kind, style_args} with
+# kind in {free, bonded, residue}. IMPLEMENTED_TIERS now EQUALS GAME_REPS --
+# every GAME_REPS entry has a generator. The lists are kept as separate
+# constants on purpose: consumers reference IMPLEMENTED_TIERS, and the seam
+# documents that they may diverge again if a future rep is ever added to
+# GAME_REPS without a generator.
+#
+# THE RESIDUE KIND: Cartoon/NewCartoon/Trace/Tube share ONE mechanism -- a
+# fake GAM residue (full backbone N/CA/C/O/CB) spliced into the combined PDB
+# by the 17.2-01/17.2-04 splice generator; ONE splice, FOUR consumers. This
+# module only returns the kind string; game.tcl (17.2-09) routes kind
+# "residue" to the splice generator. NEVER call `mol ssrecalc` in that flow
+# (load-time STRIDE already assigns the fake residue `T`; ssrecalc is both
+# unnecessary and destructive to manual ss writes -- see the splice
+# generator's decision record and 17.2-RESEARCH-cartoon-stride.md section 9).
 #
 # STYLE ARGS (the explicit-cutoff rule): DynamicBonds' default cutoff is 3.0 A
 # with a strict `<` test, which draws spurious 2.3-2.9 A bonds on hider scenes
@@ -43,18 +54,24 @@
 source [file join [file dirname [info script]] setup_state.tcl]
 
 namespace eval ::biochemeleon::rep_tiers {
-    # GAME_REPS-ordered subset with generators in Phase 17.1. Phase 17.2 widens
-    # this one constant with Cartoon/NewCartoon/Trace/Tube (the extension seam).
-    variable IMPLEMENTED_TIERS {Lines VDW Licorice CPK Points DynamicBonds}
+    # GAME_REPS-ordered list of tiers with generators. Widened in 17.2-03 to
+    # the FULL GAME_REPS list (the residue-splice family joined): one splice,
+    # four consumers (Cartoon/NewCartoon/Trace/Tube).
+    variable IMPLEMENTED_TIERS {Lines VDW Licorice CPK Cartoon NewCartoon Trace Tube Points DynamicBonds}
 
     # Tier kind per implemented tier: "free" = renders a lone hider without any
-    # bond partner; "bonded" = bond-style rep. Cartoon/NewCartoon/Trace/Tube
-    # deliberately ABSENT (not implemented in 17.1 -> tier_kind "" / implemented 0).
+    # bond partner; "bonded" = bond-style rep; "residue" = one fake GAM residue
+    # per hider via the shared splice (Cartoon/NewCartoon/Trace/Tube -- game.tcl
+    # routes the kind to the splice generator; never ssrecalc there).
     variable TIER_KINDS [dict create \
         Lines bonded \
         VDW free \
         Licorice bonded \
         CPK bonded \
+        Cartoon residue \
+        NewCartoon residue \
+        Trace residue \
+        Tube residue \
         Points bonded \
         DynamicBonds bonded]
 
@@ -73,7 +90,8 @@ proc ::biochemeleon::rep_tiers::implemented {rep} {
     return 0
 }
 
-# "free" | "bonded" | "" (empty for unknown/unimplemented tiers).
+# "free" | "bonded" | "residue" | "" (empty for unknown tiers only -- every
+# GAME_REPS name is implemented since the 17.2-03 seam widening).
 proc ::biochemeleon::rep_tiers::tier_kind {rep} {
     variable TIER_KINDS
     if {[dict exists $TIER_KINDS $rep]} {
