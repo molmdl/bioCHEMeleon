@@ -19,8 +19,14 @@ namespace eval ::biochemeleon::registry {
     # derivable forever once the generator stamps a real rep).
     variable _records [dict create]
 
+    # Phase 17.2: the resid-block map — a dict resid -> hider index (the PURE
+    # half of the multi-atom pick fallback). Mutated ONLY by reset (cleared)
+    # and register_resid_block (wholesale replace); reconstruct_from_sentinels
+    # never touches it.
+    variable _resid_block [dict create]
+
     # Export the public symbols (documents the public contract).
-    namespace export reconstruct_from_sentinels is_hider mark_found count_hiders reset status_of count_remaining remaining_by_rep set_rep assign_reps
+    namespace export reconstruct_from_sentinels is_hider mark_found count_hiders reset status_of count_remaining remaining_by_rep set_rep assign_reps register_resid_block hider_for_resid
 }
 
 # Dependency-injected sentinel reconstruction (port of v1 registry.py:420-443).
@@ -73,10 +79,15 @@ proc ::biochemeleon::registry::count_hiders {} {
 
 # Phase 15: clear the registry (game::cleanup calls this post-restore so
 # post-cleanup is_hider/count_hiders return 0 — v1 parity). Overwrites
-# _records with an empty dict.
+# _records with an empty dict. Phase 17.2: ALSO clears _resid_block — a
+# stale resid block must not survive cleanup into the next round (only
+# reset and register_resid_block mutate _resid_block). Observable
+# _records behavior is unchanged.
 proc ::biochemeleon::registry::reset {} {
     variable _records
+    variable _resid_block
     set _records [dict create]
+    set _resid_block [dict create]
     return
 }
 
@@ -167,4 +178,67 @@ proc ::biochemeleon::registry::assign_reps {mapping} {
         ::biochemeleon::registry::set_rep $k $v
     }
     return
+}
+
+# ---- Phase 17.2: resid-block lookup (multi-atom pick fallback, pure half) ----
+
+# The resid -> hider-index map serves the multi-atom pick fallback. A
+# cartoon splice (17.2-01) registers ONE atom per hider — the fake GAM
+# residue's CA (beta=-999 on the CA only) — but a real click on the cartoon
+# bump can land on the residue's N/C/O/CB. The pick contract therefore needs
+# a SECOND, resid-keyed lookup: clicked index -> resid (read by game.tcl
+# at pick time, 17.2-09, keeping THIS module pure) -> registered
+# hider index (the fake CA). The v2 analog of v1's get_altconf_by_resv dual
+# lookup, keyed `resid ∈ registered block`.
+#
+# Harmless 9001 collision: single-atom simple-tier hiders all share resid
+# 9001 (17.2-01 RESID_BASE), the same number the fake-residue block starts
+# at. This is safe because on_pick consults is_hider FIRST — a single-atom
+# hider click IS registered — so the fallback only fires for non-registered
+# atoms, whose only resid-block members are fake-residue N/C/O/CB. Real demo
+# atoms have resid ≪ 9001. Mixed rounds with two residue tiers get disjoint
+# blocks via the dispatch's resid_start offset (17.2-09) — this module just
+# stores whatever mapping it is given.
+#
+# Lifecycle (pinned by tests): register_resid_block WHOLESALE-REPLACES the
+# block (one call per round, never merged with a prior block); reset CLEARS
+# it; reconstruct_from_sentinels NEVER touches it (the dispatch always
+# re-registers after reconstruct in residue rounds).
+
+# Register ONE round's resid -> hider-index map. `mapping` is a dict
+# resid -> hider index (the dispatch builds it: fake residue k, resid
+# 9001+k, -> its registered CA index).
+# ATOMIC validate-then-replace: every idx is validated as a registered hider
+# FIRST (error "hider $idx not registered" — the exact mark_found wording —
+# on any miss) BEFORE the block is touched (no partial state). All valid →
+# the block is REPLACED WHOLESALE by $mapping (never merged with a prior
+# round's block; one call per round). An empty mapping is a no-op — the
+# block is left UNCHANGED (not cleared; reset is the clearer). Returns
+# nothing.
+proc ::biochemeleon::registry::register_resid_block {mapping} {
+    variable _records
+    variable _resid_block
+    dict for {resid idx} $mapping {
+        if {![dict exists $_records $idx]} {
+            error "hider $idx not registered"
+        }
+    }
+    if {[dict size $mapping] == 0} {
+        return
+    }
+    set _resid_block $mapping
+    return
+}
+
+# Resolve a fake-residue resid (9001+k) to its registered hider index —
+# the pure half of the multi-atom pick fallback (a click on a fake GAM
+# residue's N/C/O/CB resolves to the registered CA). Unknown resid -> ""
+# (NEVER an error — the miss path is a normal "Miss!" pick). Tcl 8.5: dict
+# get has NO 3-arg default form — use the dict exists guard + dict get.
+proc ::biochemeleon::registry::hider_for_resid {resid} {
+    variable _resid_block
+    if {![dict exists $_resid_block $resid]} {
+        return ""
+    }
+    return [dict get $_resid_block $resid]
 }
