@@ -102,19 +102,30 @@ namespace eval ::biochemeleon::game {
 #      (rep_tiers::tiers_from_per_rep): free tiers ->
 #      mutation::make_placeholder_hiders; bonded tiers ->
 #      mutation::make_bonded_hiders with the accumulating occupied-hider
-#      position list; record lists CONCATENATED in tier order with per-tier
+#      position list; residue tiers (17.2-09: Cartoon/NewCartoon/Trace/Tube)
+#      -> mutation::make_residue_hiders with the resid_start offset
+#      (RESID_BASE + residue records placed so far -- two residue tiers in
+#      one round must not collide on the 9001 block). Simple-record lists
+#      and residue-record lists are accumulated SEPARATELY with per-tier
 #      ACTUAL counts tracked (a tier may under-generate: make_bonded_hiders
-#      caps at the anchor count).
+#      caps at the anchor count, make_residue_hiders at the eligible-anchor
+#      supply).
 #   5. ONE mutation::mutate call with ALL records (mol delete original + mol
 #      new combined + tag sentinels -> NEW game_molid, monotonic > old).
+#      Residue records ride the 3rd argument (17.2-04: non-empty ->
+#      tag_sentinels_mixed, CA-only beta -- NEVER tag_sentinels on a residue
+#      round, Pitfall C6).
 #   6. backup::apply on the NEW game_molid (SC4 forward: restore reps +
 #      viewpoint on the game_molid -- viewmaster-style; NO mol ops,
 #      state-only).
 #   7. registry::reconstruct_from_sentinels ONCE (1-arg; the DI command
 #      prefix below), then split the sentinel indices by tier:
 #      fetch_hider_indices returns file order == record order and the
-#      records were concatenated in tier order, so tier k owns the sorted
-#      index slice at its cumulative ACTUAL count offsets (no extra molinfo).
+#      records were emitted simple-first (write_combined_pdb writes the
+#      simple records before the residue records), so tier k owns the
+#      sorted index slice at its cumulative ACTUAL INDEX-COUNT offsets
+#      (17.2-09: a residue tier contributes 1 fetch index per hider -- its
+#      CA -- not 5 per record; no extra molinfo).
 #   8. hiders::stamp_tier_codes BEFORE add_hider_reps (ORDERING CONTRACT: a
 #      static single-frame molecule never re-evaluates cached rep selections
 #      on an atom-field change -- a rep added before the user3 stamp would
@@ -124,6 +135,12 @@ namespace eval ::biochemeleon::game {
 #      LAST: base..base+2N-1; Pitfall 9).
 #  10. registry::assign_reps (ONE bulk call -- P8: NEVER a per-tier
 #      reconstruct loop, which would clear prior tiers).
+#  11. The resid-block registration (17.2-09, ONE registry call AFTER
+#      reconstruct + assign_reps -- validation needs _records populated):
+#      each residue tier's record resids zip with its fetch-list index
+#      slice -> the fake-resid -> CA map the on_pick fallback consults.
+#      Skipped entirely for rounds with no residue tier. game_state's shape
+#      is UNCHANGED (4 keys) -- the registry holds the block.
 # The resulting game_state is STASHED in the namespace var current_state
 # (on_pick's data source) before being returned.
 proc ::biochemeleon::game::start_game {molid hider_count {per_rep {}} {lock_scene 0}} {
@@ -202,38 +219,85 @@ proc ::biochemeleon::game::start_game {molid hider_count {per_rep {}} {lock_scen
     set tiers [::biochemeleon::rep_tiers::tiers_from_per_rep $per_rep]
     # 6. Per-tier placement loop (GAME_REPS order). occ_hiders accumulates
     #    ALL previously-placed hider positions this round as {x y z} triples
-    #    (extracted from the prior 5-field {name element x y z} records --
-    #    the 17.1-05 occupied_hiders contract) so a later bonded tier keeps
-    #    its distance from earlier hiders. tier_counts tracks the ACTUAL
-    #    record count per tier, parallel to $tiers (a tier may
-    #    under-generate: make_bonded_hiders caps at the anchor count).
+    #    (extracted from the prior simple 5-field {name element x y z}
+    #    records and from each residue record's CA -- the 17.1-05
+    #    occupied_hiders contract) so a later bonded/residue tier keeps its
+    #    distance from earlier hiders. tier_idx_counts tracks the ACTUAL
+    #    FETCH-INDEX count per tier, parallel to $tiers (a tier may
+    #    under-generate: make_bonded_hiders caps at the anchor count,
+    #    make_residue_hiders at the eligible-anchor supply) -- the slicing
+    #    currency is the fetch list (beta<0 atoms), and a residue tier
+    #    contributes 1 index per hider (its CA), NOT 5 per record (Pitfall
+    #    C6). tier_is_residue (1/0, parallel) drives the file-layout slicing
+    #    walk below; residue_tiers keeps each residue tier's record list for
+    #    the resid zip.
     set records [list]
-    set tier_counts [list]
+    set residue_records [list]
+    set residue_tiers [list]
+    set tier_idx_counts [list]
+    set tier_is_residue [list]
     set occ_hiders [list]
+    set resid_used 0
     foreach t $tiers {
         lassign $t code style count
         set kind [::biochemeleon::rep_tiers::tier_kind $style]
-        if {$kind eq "free"} {
-            set recs [::biochemeleon::mutation::make_placeholder_hiders $molid $count]
-        } elseif {$kind eq "bonded"} {
-            set recs [::biochemeleon::mutation::make_bonded_hiders $molid $count $occ_hiders]
+        if {$kind eq "residue"} {
+            # NEVER call ssrecalc in this flow (Pitfall C2): the load-time
+            # STRIDE run already assigns the fake GAM residue its `T`
+            # structure; ssrecalc is unnecessary and WIPES manual ss writes.
+            # resid_start threads the 9001 block ACROSS residue tiers in one
+            # round (two Cartoon-family tiers must not collide on 9001+k):
+            # resid_used = residue records placed so far. Fully-qualified
+            # call-time read -- game.tcl sources NOTHING; splice.tcl is
+            # loaded because mutation sources it.
+            set resid_start [expr {$::biochemeleon::splice::RESID_BASE + $resid_used}]
+            set rrecs [::biochemeleon::mutation::make_residue_hiders $molid $count $occ_hiders $resid_start]
+            incr resid_used [llength $rrecs]
+            # occ_hiders gains each record's CA position (atoms[1] -- the
+            # N/CA/C/O/CB order guarantees the CA sits at index 1).
+            foreach r $rrecs {
+                lassign $r fch frid fatoms
+                lassign [lindex $fatoms 1] fnm fel fx fy fz
+                lappend occ_hiders [list $fx $fy $fz]
+            }
+            lappend tier_idx_counts [llength $rrecs]
+            lappend tier_is_residue 1
+            if {[llength $rrecs] > 0} {
+                # SEPARATE accumulation (must-have truth 1): residue records
+                # ride mutate's 3rd arg, NOT the simple-records list.
+                lappend residue_records {*}$rrecs
+                lappend residue_tiers $rrecs
+            }
         } else {
-            # Defense: resolve_per_rep restricts to implemented tiers, so an
-            # empty kind never reaches here -- skip with the warning.
-            catch {vmdcon -warn "bioCHEMeleon: rep '$style' has no generator yet -- skipped"}
-            lappend tier_counts 0
-            continue
+            if {$kind eq "free"} {
+                set recs [::biochemeleon::mutation::make_placeholder_hiders $molid $count]
+            } elseif {$kind eq "bonded"} {
+                set recs [::biochemeleon::mutation::make_bonded_hiders $molid $count $occ_hiders]
+            } else {
+                # Defense: resolve_per_rep restricts to implemented tiers, so
+                # an empty kind never reaches here -- skip with the warning.
+                catch {vmdcon -warn "bioCHEMeleon: rep '$style' has no generator yet -- skipped"}
+                lappend tier_idx_counts 0
+                lappend tier_is_residue 0
+                continue
+            }
+            foreach r $recs {
+                lassign $r nm el x y z
+                lappend occ_hiders [list $x $y $z]
+            }
+            lappend records {*}$recs
+            lappend tier_idx_counts [llength $recs]
+            lappend tier_is_residue 0
         }
-        foreach r $recs {
-            lassign $r nm el x y z
-            lappend occ_hiders [list $x $y $z]
-        }
-        lappend records {*}$recs
-        lappend tier_counts [llength $recs]
     }
     # 7. ONE mutate call: mol delete original + mol new combined + tag
-    #    sentinels -> new game molid (monotonic > old).
-    set game_molid [::biochemeleon::mutation::mutate $molid $records]
+    #    sentinels -> new game molid (monotonic > old). The residue records
+    #    ride the 3rd arg (17.2-04): non-empty -> mutate dispatches to
+    #    tag_sentinels_mixed (CA-only beta on the residue CAs) -- NEVER
+    #    tag_sentinels on a residue round (it would beta-stamp all 5 fake
+    #    atoms per residue, Pitfall C6). Empty -> the byte-unchanged simple
+    #    path.
+    set game_molid [::biochemeleon::mutation::mutate $molid $records $residue_records]
     # 8. SC4 forward: re-apply saved reps + viewpoint to the NEW game_molid
     #    (viewmaster-style; state-only).
     ::biochemeleon::backup::apply $snapshot $game_molid
@@ -252,27 +316,43 @@ proc ::biochemeleon::game::start_game {molid hider_count {per_rep {}} {lock_scen
         return $ids
     }} $game_molid]
     # 10. Split the sentinel indices by tier: fetch_hider_indices returns
-    #     file order == record order (probe3) and the records were
-    #     concatenated in tier order (step 6), so tier k owns the sorted
-    #     index slice at its cumulative ACTUAL count offsets -- no extra
-    #     molinfo. tier_of = {code -> index list} (empty slices skipped:
-    #     stamping an empty selection would error); idx_to_rep = {index ->
-    #     GAME_REPS style name}.
+    #     file order == record order (probe3) and the combined PDB was
+    #     emitted SIMPLE-FIRST (write_combined_pdb writes $records before
+    #     $residue_records -- residue records appended after simple records,
+    #     continuing serial), so the fetch list is sliced by walking the
+    #     tiers in FILE-LAYOUT order: all simple (free/bonded) tiers in
+    #     GAME_REPS order, then all residue tiers in GAME_REPS order. A
+    #     plain GAME_REPS-order walk would mis-slice mixed rounds where a
+    #     residue tier precedes a simple tier (Cartoon < Points) -- the
+    #     residue tier would steal the simple tier's leading indices. Each
+    #     tier's slice is contiguous because the records were concatenated
+    #     in exactly this two-block order. tier_of = {code -> index list}
+    #     (empty slices skipped: stamping an empty selection would error);
+    #     idx_to_rep = {index -> GAME_REPS style name}; residue_slices
+    #     (parallel to residue_tiers -- same residue-tier walk order, same
+    #     non-empty condition) feeds the resid zip below.
     set idxs [::biochemeleon::mutation::fetch_hider_indices $game_molid]
     set tier_of [dict create]
     set idx_to_rep [dict create]
+    set residue_slices [list]
     set off 0
-    foreach t $tiers cnt $tier_counts {
-        lassign $t code style count
-        set slice [list]
-        for {set i 0} {$i < $cnt} {incr i} {
-            set idx [lindex $idxs $off]
-            lappend slice $idx
-            dict set idx_to_rep $idx $style
-            incr off
-        }
-        if {[llength $slice] > 0} {
-            dict set tier_of $code $slice
+    foreach pass [list 0 1] {
+        foreach t $tiers cnt $tier_idx_counts isr $tier_is_residue {
+            if {$isr != $pass} { continue }
+            lassign $t code style count
+            set slice [list]
+            for {set i 0} {$i < $cnt} {incr i} {
+                set idx [lindex $idxs $off]
+                lappend slice $idx
+                dict set idx_to_rep $idx $style
+                incr off
+            }
+            if {[llength $slice] > 0} {
+                dict set tier_of $code $slice
+                if {$pass == 1} {
+                    lappend residue_slices $slice
+                }
+            }
         }
     }
     # 11. Stamp the user3 tier codes BEFORE adding the reps (ORDERING
@@ -290,6 +370,25 @@ proc ::biochemeleon::game::start_game {molid hider_count {per_rep {}} {lock_scen
     ::biochemeleon::hiders::add_hider_reps $game_molid $specs
     # 13. Multi-tier registry stamping: ONE bulk assign_reps (P8).
     ::biochemeleon::registry::assign_reps $idx_to_rep
+    # 14. Resid-block registration (17.2-09, ONE call -- the multi-atom pick
+    #     fallback's pure half): zip each residue tier's record resids with
+    #     its fetch-list index slice, both in record/file order within the
+    #     tier (residue k's resid = resid_start + k in acceptance order ==
+    #     file order; slice[j] is that record's CA). AFTER reconstruct +
+    #     assign_reps: the atomic validate-then-replace needs every index in
+    #     _records. Rounds with no residue tier skip the call entirely; the
+    #     block is wholesale-replaced per round and cleared by cleanup's
+    #     registry::reset.
+    set resid_map [dict create]
+    foreach rrecs $residue_tiers slice $residue_slices {
+        foreach r $rrecs idx $slice {
+            lassign $r fch frid fatoms
+            dict set resid_map $frid $idx
+        }
+    }
+    if {[dict size $resid_map] > 0} {
+        ::biochemeleon::registry::register_resid_block $resid_map
+    }
     # Build the game_state (15-05 shape + the additive per_rep key;
     # hider_count = the EFFECTIVE total, P9), STASH it for on_pick
     # (pick_bridge forwards only the index -- game.tcl owns its own state),
@@ -379,6 +478,47 @@ proc ::biochemeleon::game::set_callbacks {log_cb remaining_cb win_cb} {
     return
 }
 
+# _resolve_pick {idx} -> the registered hider index to score, or "".
+#
+# PRIVATE pick resolver (17.2-09): the single place a raw clicked index
+# becomes a scoring target. Two stages, in order:
+#   (a) DIRECT HIT: the clicked atom IS a registered hider -- the Phase-16
+#       path, byte-compatible (simple-tier hiders are single atoms and are
+#       always registered, so simple rounds resolve here and never reach
+#       (b)).
+#   (b) RESID-BLOCK FALLBACK (research SS7.1 -- the v2 analog of v1's
+#       get_altconf_by_resv dual lookup): only the fake residue's CA carries
+#       the beta sentinel, so a cartoon-bump click can deliver the
+#       residue's N/C/O/CB index -- an atom that is NOT registered. The
+#       clicked atom's resid is read on the game molecule (game.tcl is the
+#       mol layer; the registry stays pure) and consulted against the
+#       round's registered fake-resid -> CA block: a hit re-targets scoring
+#       to the registered CA, a miss ("") stays a Miss!. Real demo atoms
+#       have resid << 9001 and never appear in the block, so a direct click
+#       on a real atom still misses. The stash guard (empty current_state)
+#       returns "" before the selection is ever built.
+# The selection handle is always deleted (dangling selections leak and
+# return stale data silently -- AGENTS.md).
+proc ::biochemeleon::game::_resolve_pick {idx} {
+    variable current_state
+    # (a) Direct hit: registered hider -> score it as-is.
+    if {[::biochemeleon::registry::is_hider $idx]} {
+        return $idx
+    }
+    # Stash guard: no round in flight -> nothing to resolve (and no game
+    # molecule to read the resid from).
+    if {[dict size $current_state] == 0} {
+        return ""
+    }
+    # (b) Fallback: clicked atom's resid on the game molecule -> the
+    # registered fake-resid -> CA block. Single-keyword get (multi-keyword
+    # get returns per-atom lists -- Pitfall 5).
+    set sel [atomselect [dict get $current_state game_molid] "index $idx"]
+    set rid [lindex [$sel get resid] 0]
+    $sel delete
+    return [::biochemeleon::registry::hider_for_resid $rid]
+}
+
 # on_pick {idx} -> {}.
 #
 # The click-scoring controller (v1 game.py on_pick 1:1, 04-03). Called by
@@ -386,14 +526,23 @@ proc ::biochemeleon::game::set_callbacks {log_cb remaining_cb win_cb} {
 # registry key). The game_state is NOT passed in -- this proc reads the
 # current_state namespace var stashed by start_game.
 #
+# PICK RESOLUTION (17.2-09): the raw index is resolved FIRST via
+# _resolve_pick -- a direct registered hit, or the resid-block fallback
+# that re-targets a cartoon-bump click on a fake residue's N/C/O/CB to the
+# residue's registered CA (only the CA carries the beta sentinel, so only
+# the CA is registered; the found-visual marks the CA alone -- the
+# CA-only design, research SS7.2; the 5-sphere polish is explicitly NOT
+# built).
+#
 # THREE-WAY GUARD (caller-side; registry stays the single source of truth,
 # LOOP-02. registry::mark_found is a SILENT idempotent overwrite -- probe F19
-# / Pitfall 5 -- so the guard MUST live here, BEFORE mark_found; is_hider is
-# checked FIRST and status_of of an unregistered index is "" not an error):
-#   unregistered idx -> "Miss!" log only (LOOP-01: no harm)
-#   status "found"   -> "Already found!" log only (no double-count)
-#   status "hidden"  -> mark_found_visual + mark_found + "Found one! N
-#                       remaining" + remaining callback -> win check (LOOP-03)
+# / Pitfall 5 -- so the guard MUST live here, BEFORE mark_found; status_of of
+# an unregistered index is "" not an error):
+#   unresolved ""     -> "Miss!" log only (LOOP-01: no harm)
+#   status "found"    -> "Already found!" log only (no double-count)
+#   status "hidden"   -> mark_found_visual + mark_found + "Found one! N
+#                        remaining" + remaining callback -> win check (LOOP-03)
+# All three run on the RESOLVED index.
 #
 # STATE GATE (16-RESEARCH-gametab SS6.10): scoring only in state "playing" --
 # stray picks during idle/countdown/won are no-ops. This gate + finish_win's
@@ -425,20 +574,24 @@ proc ::biochemeleon::game::on_pick {idx} {
         if {[dict size $current_state] == 0} {
             return
         }
-        # 1. Unregistered -> miss (LOOP-01). is_hider checked FIRST.
-        if {![::biochemeleon::registry::is_hider $idx]} {
+        # 1. Resolve the pick (17.2-09): direct registered hit, or the
+        #    resid-block fallback re-targeting a fake-residue N/C/O/CB
+        #    click to its registered CA. Unresolved -> miss (LOOP-01).
+        set hit_idx [::biochemeleon::game::_resolve_pick $idx]
+        if {$hit_idx eq ""} {
             catch {{*}$_cb_log [::biochemeleon::game_logic::log_append miss ""]}
             return
         }
         # 2. Already found -> log only (no double-count; LOOP-02).
-        if {[::biochemeleon::registry::status_of $idx] eq $::biochemeleon::registry::HIDER_STATUS_FOUND} {
+        if {[::biochemeleon::registry::status_of $hit_idx] eq $::biochemeleon::registry::HIDER_STATUS_FOUND} {
             catch {{*}$_cb_log [::biochemeleon::game_logic::log_append already ""]}
             return
         }
-        # 3. Hidden hider: visual mark (user2 flag + the modselect re-assert),
-        #    registry mark, log + remaining callback.
-        ::biochemeleon::hiders::mark_found_visual [dict get $current_state game_molid] $idx
-        ::biochemeleon::registry::mark_found $idx
+        # 3. Hidden hider: visual mark on the RESOLVED index (user2 flag +
+        #    the modselect re-assert -- one green sphere at the CA, the
+        #    CA-only design), registry mark, log + remaining callback.
+        ::biochemeleon::hiders::mark_found_visual [dict get $current_state game_molid] $hit_idx
+        ::biochemeleon::registry::mark_found $hit_idx
         set rem [::biochemeleon::registry::count_remaining]
         catch {{*}$_cb_log [::biochemeleon::game_logic::log_append found $rem]}
         catch {{*}$_cb_remaining}
