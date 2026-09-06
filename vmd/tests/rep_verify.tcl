@@ -1,10 +1,13 @@
 # vmd/tests/rep_verify.tcl
 # ---------------------------------------------------------------------------
 # Phase 17.1 / Plan 17.1-14 -- CONSOLIDATED GUI rep-verify AUTO-DRIVER.
+# EXTENDED by Plan 17.2-12 with the CARTOON round (pv_round3): the 17.2
+# consolidated checkpoint round (Cartoon NewCartoon Trace Tube VDW x1 --
+# 4 residue bumps + 1 VDW sphere in ONE pass).
 # Drives the ONE consolidated human-verify checkpoint for the whole 17.1
 # phase: 6 simple tiers (Lines VDW Licorice CPK Points DynamicBonds) behind
 # the lock-scene/randomize infrastructure, exercised in a real VMD GUI in
-# 2 rounds (6-tier mixed + lock-scene).
+# 3 rounds (6-tier mixed + lock-scene + cartoon).
 #
 # AUTO-DRIVER (standing directive from 16-16: sessions must be simpler --
 # driver auto-issues commands + auto-logs to a file; the human only does
@@ -18,8 +21,11 @@
 #   3. click one hider per style (real clicks)
 #   4. style the scene for round 2 (Graphics -> Representations)
 #   5. paste: pv_round2      (starts the lock-scene round)
-#   6. paste: pv_report      (session summary)
-#   7. paste: pv_cleanup     (restore; then pv_cleanup_check)
+#   6. paste: pv_round3      (starts the CARTOON round on fresh 1znf:
+#      press p once, find all 5 -- click the cartoon BUMP not the
+#      VDW sphere for Cartoon and Tube)
+#   7. paste: pv_report      (session summary)
+#   8. paste: pv_cleanup     (restore; then pv_cleanup_check)
 #
 # ROUND 2 TARGETING (why the mirror): lock_scene detection reads the
 # TARGET molecule's snapshot reps (game.tcl scene_reps_to_per_rep over the
@@ -104,8 +110,47 @@ proc pv_observe {args} {
                 incr ::pv_finds
                 pv_log "PICK FIND #$::pv_finds index=$a (hidden -> found)"
             }
+            pv_log "PICK VERDICT index=$a is_hider=1 direct"
+        } else {
+            pv_observe_fallback $a $m
         }
     }
+    return
+}
+
+# ===========================================================================
+# pv_observe_fallback -- 17.2-12 fallback verdict for a NON-registered
+# pick (READ-ONLY; no game behavior change): reads the clicked atom's
+# resid + name off the picked molecule (falls back to the live game
+# molecule if the pick molid is dead) and logs the registry
+# hider_for_resid resolution. Captures WHICH atom delivers each bump
+# click (CA vs N/C/O/CB -- the research's open pick-target question).
+# ===========================================================================
+proc pv_observe_fallback {idx pmol} {
+    set gm $pmol
+    if {![string is integer -strict $gm]
+            || [catch {molinfo $gm get numatoms}]} {
+        set gm [pv_game_mol]
+    }
+    set rid "?"
+    set nm "?"
+    if {[string is integer -strict $gm]
+            && ![catch {set sel [atomselect $gm "index $idx"]}]} {
+        catch {
+            set rid [lindex [$sel get resid] 0]
+            set nm [lindex [$sel get name] 0]
+        }
+        catch {$sel delete}
+    }
+    set fb "(read-failed)"
+    if {$rid ne "?"} {
+        set fb "(none)"
+        catch {
+            set r2 [::biochemeleon::registry::hider_for_resid $rid]
+            if {$r2 ne {}} { set fb $r2 }
+        }
+    }
+    pv_log "PICK VERDICT index=$idx is_hider=0 resid=$rid name=$nm fallback=$fb"
     return
 }
 
@@ -182,9 +227,30 @@ proc pv_state {} {
     if {$gm ne {} && ![catch {molinfo $gm get numatoms} natoms]} {
         set sel [atomselect $gm {resname GAM and beta < 0}]
         set hidx [$sel list]
+        # 17.2-12: sentinel rows incl. SS letters (structure is the {T, C}
+        # family for fake CAs -- anchor-dependent, NEVER hard == T).
+        set srows {}
+        catch {set srows [$sel get {index resid name structure}]}
         $sel delete
         set nreps [molinfo $gm get numreps]
         lappend L "game molid $gm: $natoms atoms, $nreps reps; HIDER indices: $hidx"
+        if {[llength $srows] > 0} {
+            lappend L "sentinels (index resid name structure): $srows"
+        }
+        # 17.2-12: fake resid block (hider_for_resid 9001..9005; the round
+        # registers one resid per residue hider -- 9005 is the miss case).
+        set fb1 {}
+        catch {set fb1 [::biochemeleon::registry::hider_for_resid 9001]}
+        if {$fb1 ne {}} {
+            foreach rr {9001 9002 9003 9004 9005} {
+                set fb {}
+                catch {set fb [::biochemeleon::registry::hider_for_resid $rr]}
+                if {$fb eq {}} { set fb (none) }
+                lappend L "resid block: $rr -> $fb"
+            }
+        } else {
+            lappend L {resid block: none (simple-only round)}
+        }
         if {[info exists ::biochemeleon::hiders::tier_reps]} {
             dict for {code pair} $::biochemeleon::hiders::tier_reps {
                 lassign $pair hname fname hself fself
@@ -290,7 +356,69 @@ proc pv_round2 {} {
     }
     set ::pv_rounds 2
     after 4500 pv_state
-    pv_log {pv_round2: round 2 started. Press p once, find 2+ hiders (they should ALL be the styled tier), then paste: pv_report}
+    pv_log {pv_round2: round 2 started. Press p once, find 2+ hiders (they should ALL be the styled tier), then paste: pv_round3}
+    return
+}
+
+# ===========================================================================
+# pv_round3 -- the 17.2 CARTOON round (Plan 17.2-12). Mirrors pv_round2's
+# shape: a FRESH protein target (earlier rounds mutated/restored molecules
+# -- never assume a fixed molid; 1znf has the protein CA anchors the
+# residue splice needs -- 1k8p is DNA-only), then the crafted 5-hider
+# state (Cartoon NewCartoon Trace Tube VDW x1 = 4 residue bumps + 1 VDW
+# sphere: blend + pick + coexistence in ONE pass) via validate_state ->
+# apply_state -> on_start -> after-4500 auto-dump. The dump auto-logs the
+# round composition: per-tier remaining_by_rep, the fake resid block
+# (hider_for_resid 9001..9005), CA sentinel indices + structure letters,
+# per-tier rep read-backs, and the game atom count (orig + 21).
+# ===========================================================================
+proc pv_round3 {} {
+    pv_log {pv_round3: CARTOON round (4 residue bumps + 1 VDW sphere).}
+    # 1. Fresh 1znf protein target (a NEW molecule -- never the game
+    #    molecule the guard is about to delete).
+    if {[catch {::biochemeleon::demos::load_demo 1znf} m3]} {
+        pv_log "pv_round3: FAILED to load fresh 1znf target: $m3"
+        return
+    }
+    pv_log "pv_round3: fresh 1znf protein target = molid $m3"
+    if {![catch {::biochemeleon::demos::atom_count $m3} nat3]} {
+        pv_log "pv_round3: target has $nat3 atoms -- expect the game molecule at [expr {$nat3 + 21}] (4 residues x 5 + 1 VDW)"
+    }
+    # 2. Build + validate the round-3 state (5 hiders, one per tier:
+    #    Cartoon NewCartoon Trace Tube VDW x1), apply, start via the real
+    #    GUI path (on_start -> start_game detection).
+    set st [dict create target_mode loaded selected_object $m3 \
+                hider_count 5 \
+                per_rep [dict create Cartoon 1 NewCartoon 1 \
+                             Trace 1 Tube 1 VDW 1] \
+                lock_scene 0 difficulty_easy 1 demo_id 1znf]
+    if {[catch {::biochemeleon::setup_state::validate_state $st \
+                    [::biochemeleon::demos::atom_count $m3]} stv]} {
+        pv_log "pv_round3: validate_state failed: $stv"
+        return
+    }
+    if {[catch {::biochemeleon::setup_tab::apply_state $stv} aerr]} {
+        pv_log "pv_round3: apply_state failed: $aerr"
+        return
+    }
+    # 3. Refresh the cleanup stash: ::pv_gs was captured by round 1's
+    #    first dump and is STALE by round 3 (earlier guard restarts
+    #    deleted those molids) -- pv_cleanup on it would fail. Unset so
+    #    the round-3 auto-dump re-stashes the LIVE round-3 state.
+    catch {unset ::pv_gs}
+    pv_log {pv_round3: starting CARTOON round -- per-tier composition + resid block auto-log after GO.}
+    if {[catch {::biochemeleon::on_start} oerr]} {
+        pv_log "pv_round3: on_start failed: $oerr"
+        return
+    }
+    set ::pv_rounds 3
+    after 4500 pv_state
+    pv_log {pv_round3: round 3 started. Press p once, find all 5 hiders --}
+    pv_log {   for Cartoon and Tube click the BUMP on the cartoon geometry}
+    pv_log {   (NOT the VDW sphere -- the fallback-path proof; the log records}
+    pv_log {   which atom delivered each click). Bumps should read as smooth}
+    pv_log {   tube detours; nearby real helices/sheets stay undistorted.}
+    pv_log {   Found ones turn green. Then paste: pv_report, then pv_cleanup}
     return
 }
 
@@ -349,6 +477,12 @@ proc pv_cleanup_check {} {
     if {![catch {::biochemeleon::registry::count_remaining} rem]} {
         lappend L "registry remaining = $rem (expect 0 after reset)"
     }
+    # 17.2-12: the restored molecule's atom count (the cleanup-restore
+    # proof: back to the original demo count -- no residue remnants).
+    if {![catch {molinfo top} tm] && $tm ne {}
+            && ![catch {molinfo $tm get numatoms} nat]} {
+        lappend L "top molecule: molid $tm, $nat atoms (expect the original demo count)"
+    }
     foreach l $L { pv_log $l }
     return
 }
@@ -378,14 +512,18 @@ proc pv_report {} {
 # ===========================================================================
 proc pv_instructions {} {
     pv_log {== YOUR STEPS (everything else is auto-logged) ==}
-    pv_log {1. Press  p  ONCE on the VMD display (arms pick delivery).}
-    pv_log {2. Click ONE hider of EACH style (6 finds): VDW/CPK/Points}
-    pv_log {   spheres+dot, Licorice ball, Lines stub, DynamicBonds stub.}
-    pv_log {3. Each find turns GREEN; Game-tab remaining drops per tier.}
-    pv_log {4. After the win box: Graphics -> Representations -> set the}
-    pv_log {   DISPLAYED molecule's main rep to e.g. Licorice. Paste: pv_round2}
-    pv_log {5. Round 2: press p, find 2+ (all should be that tier). Paste:}
-    pv_log {   pv_report   then last   pv_cleanup}
+    pv_log {0. CLICKS BEFORE ONE  p  PRESS LAND IN LABELATOM MODE (known}
+    pv_log {   quirk): press  p  ONCE on the VMD display FIRST, each round.}
+    pv_log {1. Round 1: click ONE hider of EACH style (6 finds): VDW/CPK/}
+    pv_log {   Points spheres+dot, Licorice ball, Lines/DynBonds stubs.}
+    pv_log {2. Each find turns GREEN; Game-tab remaining drops per tier.}
+    pv_log {3. After the win box: style the DISPLAYED molecule's main rep}
+    pv_log {   (e.g. Licorice), paste  pv_round2 , press p, find 2+.}
+    pv_log {4. Paste  pv_round3  (CARTOON round: 4 bumps + 1 VDW sphere).}
+    pv_log {5. Press  p  ONCE; find all 5 -- for Cartoon and Tube click the}
+    pv_log {   cartoon BUMP (NOT the VDW sphere). Bumps = smooth tube}
+    pv_log {   detours; real helices/sheets stay undistorted; finds green.}
+    pv_log {6. Last: paste  pv_report  then  pv_cleanup.}
     return
 }
 
