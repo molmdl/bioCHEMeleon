@@ -227,9 +227,22 @@ proc ::biochemeleon::mutation::make_bonded_hiders {molid count {occupied_hiders 
 #      in N/CA/C/O/CB order, splice::displacement of (anchor C, next N),
 #      splice::resid_block 1 (resid_start + k) $real_max, splice::assemble_record
 #      -> {chain resid atoms_displaced}.
+#
+# FRAME PINNING (probe dbg_frame/dbg_pin, plan 17.2-04): multi-model demos
+# (1znf ships 2 frames) make UNPINNED atomselect coordinate reads racy --
+# reads land on whatever frame is current at read time (the current frame
+# even drifts; molinfo set frame does NOT pin it), so two unpinned reads can
+# return DIFFERENT models' geometry. Every selection here is pinned to
+# frame 0 before any coordinate read, making the residue records internally
+# deterministic. CALLER CONTRACT: the molecule should already be
+# SINGLE-FRAME (collapse it via writepdb+reload, as the 17.2 smokes'
+# load helper does) so the records and the later writepdb emission describe
+# the same geometry; on single-frame molecules frame 0 == the only frame and
+# every pin is a no-op.
 proc ::biochemeleon::mutation::make_residue_hiders {molid count {occupied_hiders {}} {resid_start {}}} {
     variable MIN_OCC_SEP
     set casel [atomselect $molid {protein and not resname GAM and name CA}]
+    $casel frame 0
     if {[$casel num] == 0} {
         $casel delete
         error "make_residue_hiders: no protein anchors"
@@ -265,6 +278,7 @@ proc ::biochemeleon::mutation::make_residue_hiders {molid count {occupied_hiders
         set ok 1
         foreach nm {N CA C O CB} {
             set s [atomselect $molid "chain $ch and resid $rid and name $nm"]
+            $s frame 0
             if {[$s num] >= 1} {
                 lappend present [list $nm \
                     [lindex [$s get element] 0] \
@@ -331,10 +345,13 @@ proc ::biochemeleon::mutation::make_residue_hiders {molid count {occupied_hiders
         # capture the anchor C's index for the next-N spatial query below.
         set atoms_data [list]
         set c_idx -1
+        set n_idx -1
         foreach nm {N CA C O CB} {
             set s [atomselect $molid "chain $ch and resid $rid and name $nm"]
+            $s frame 0
             if {[$s num] >= 1} {
                 if {$nm eq "C"} { set c_idx [lindex [$s get index] 0] }
+                if {$nm eq "N"} { set n_idx [lindex [$s get index] 0] }
                 lappend atoms_data [list $nm \
                     [lindex [$s get element] 0] \
                     [lindex [$s get x] 0] \
@@ -352,12 +369,48 @@ proc ::biochemeleon::mutation::make_residue_hiders {molid count {occupied_hiders
             }
         }
         set nnsel [atomselect $molid "name N and within 1.7 of index $c_idx"]
+        $nnsel frame 0
         set n_next_pt [list \
             [lindex [$nnsel get x] 0] \
             [lindex [$nnsel get y] 0] \
             [lindex [$nnsel get z] 0]]
         $nnsel delete
         set d [::biochemeleon::splice::displacement $c_pt $n_next_pt]
+        # REAR-JUNCTION SIGN SAFETY (plan 17.2-04, run-6 discovery): d is
+        # perpendicular to the FORWARD peptide bond (C_anchor -> N_next), but
+        # its projection on the REAR bond vector (prev C -> anchor N) can be
+        # POSITIVE -- stretching that junction past the 1.95 A C-N cutoff
+        # (sqrt(1.33^2 + d^2 + 2*1.33*d*cos) > 1.95 for cos > ~0.55 at d=1.0)
+        # and leaving the fake residue half-bonded (Pitfall C1 at 1.0 A!).
+        # Flipping the sign is free: the FORWARD junction distance is
+        # sign-invariant (d is perpendicular to that bond: exactly
+        # sqrt(1.33^2 + 1) = 1.66 A either way), and the flipped d can only
+        # SHORTEN the rear junction (<= 1.66 A). Both junctions stay bonded
+        # for every mid-chain anchor.
+        if {[llength $d] == 3 && $n_idx >= 0} {
+            set pcsel [atomselect $molid "name C and within 1.7 of index $n_idx"]
+            $pcsel frame 0
+            if {[$pcsel num] >= 1} {
+                set an_pt [list]
+                foreach a $atoms_data {
+                    if {[lindex $a 0] eq "N"} {
+                        set an_pt [list [lindex $a 2] [lindex $a 3] [lindex $a 4]]
+                    }
+                }
+                lassign $an_pt anx any anz
+                set pcx [lindex [$pcsel get x] 0]
+                set pcy [lindex [$pcsel get y] 0]
+                set pcz [lindex [$pcsel get z] 0]
+                lassign $d ddx ddy ddz
+                set rear_proj [expr {$ddx * ($anx - $pcx) \
+                    + $ddy * ($any - $pcy) + $ddz * ($anz - $pcz)}]
+                if {$rear_proj > 0} {
+                    set d [list [expr {-1.0 * $ddx}] \
+                        [expr {-1.0 * $ddy}] [expr {-1.0 * $ddz}]]
+                }
+            }
+            $pcsel delete
+        }
         if {$resid_start eq ""} {
             set start_k [expr {$::biochemeleon::splice::RESID_BASE + $k}]
         } else {
