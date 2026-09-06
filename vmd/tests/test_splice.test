@@ -73,11 +73,13 @@ test perp_zero_vector_errors {} -body {
     list $rc [string match "*degenerate peptide-bond*" $msg]
 } -result {1 1}
 
+# all-parallel refs (empty ref3) -> error; a non-parallel ref3 rescues
+# the ladder -> success ({0.0 1.0 0.0}), so rc2 = 0 (catch: 0 = OK).
 test perp_custom_ladder {} -body {
     set rc [catch {::biochemeleon::splice::perp_vector {0.0 0.0 1.0} {0.0 0.0 2.0} {0.0 0.0 3.0} {}} msg]
     set rc2 [catch {::biochemeleon::splice::perp_vector {0.0 0.0 1.0} {0.0 0.0 2.0} {0.0 0.0 3.0} {1.0 0.0 0.0}} v]
     list $rc [string match "*no non-parallel reference*" $msg] $rc2 [vec_close $v {0.0 1.0 0.0}]
-} -result {1 1 1 1}
+} -result {1 1 0 1}
 
 # ---- displacement ----
 
