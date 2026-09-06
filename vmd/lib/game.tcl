@@ -109,7 +109,8 @@ namespace eval ::biochemeleon::game {
 #      and residue-record lists are accumulated SEPARATELY with per-tier
 #      ACTUAL counts tracked (a tier may under-generate: make_bonded_hiders
 #      caps at the anchor count, make_residue_hiders at the eligible-anchor
-#      supply).
+#      supply -- a supply-0 scene degrades to 0 records with a warn, never
+#      a hard abort).
 #   5. ONE mutation::mutate call with ALL records (mol delete original + mol
 #      new combined + tag sentinels -> NEW game_molid, monotonic > old).
 #      Residue records ride the 3rd argument (17.2-04: non-empty ->
@@ -251,7 +252,17 @@ proc ::biochemeleon::game::start_game {molid hider_count {per_rep {}} {lock_scen
             # call-time read -- game.tcl sources NOTHING; splice.tcl is
             # loaded because mutation sources it.
             set resid_start [expr {$::biochemeleon::splice::RESID_BASE + $resid_used}]
-            set rrecs [::biochemeleon::mutation::make_residue_hiders $molid $count $occ_hiders $resid_start]
+            # Supply-0 tolerance (v1 under-generation parity): a scene with
+            # no eligible anchors (e.g. a DNA-only demo whose randomize draw
+            # includes a residue tier) degrades to 0 records with a
+            # non-blocking warn -- the round continues on the simple tiers,
+            # exactly like the defensive no-generator skip below. NEVER a
+            # hard abort: the generator's contract caps the count at the
+            # eligible supply, and supply 0 is that cap's edge.
+            if {[catch {::biochemeleon::mutation::make_residue_hiders $molid $count $occ_hiders $resid_start} rrecs]} {
+                catch {vmdcon -warn "bioCHEMeleon: residue tier '$style' could not generate -- dropped from this round ($rrecs)"}
+                set rrecs [list]
+            }
             incr resid_used [llength $rrecs]
             # occ_hiders gains each record's CA position (atoms[1] -- the
             # N/CA/C/O/CB order guarantees the CA sits at index 1).
