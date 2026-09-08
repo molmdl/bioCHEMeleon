@@ -1,219 +1,256 @@
 # Codebase Concerns
 
-**Analysis Date:** 2026-08-18
+**Analysis Date:** 2026-09-08
 
-**Project state context:** v1 is COMPLETE and VERIFIED (all phases 1-11 + Phase 4.1 done; 125 unit tests green; 10 headless smoke tests green; no pending todos; no open debug sessions in `.planning/debug/pending/`). The concerns below describe the shipped v1's fragility surface, latent issues, and constraints for future maintenance / v2 work — not open blockers. Most concerns are documented in `AGENTS.md`, `.planning/research/PITFALLS.md`, and `.planning/STATE.md` "Blockers/Concerns" (lines 281-300); this file consolidates them with file paths and current mitigations.
+**Project state context:** v1 (`pymol/`) is SHIPPED and FROZEN (tag `v1`; last code change 2026-08-22, docs-only 2026-08-28) — its archived concern history lives in `milestones/v1-*` and the phase summaries under `.planning/phases/01..11*/`. v2 (`vmd/`, VMD 1.9.3 / Tcl 8.5.6) is ACTIVE at Phase 17.2 of 23: 12/12 plans BUILT, PHASE HEADLESS-GREEN (205/205 tcltest suites, 29/31 smokes, 0 ERROR/bad-switch in all 44 gate logs — `17.2-11-SUMMARY.md`), with ONE GUI human-verify checkpoint PENDING (`17.2-12-SUMMARY.md`, rep_verify.tcl round-3 cartoon session). This file reflects the CURRENT v2 state; each item carries a status: **open** (action needed or explicitly scheduled), **known-behavior** (locked/documented, mechanism deliberately untouched), or **resolved-but-recorded** (fixed; recorded as a fragility lesson).
 
 ---
 
 ## Tech Debt
 
-**Cartoon MVP is N-terminus-only (C-terminus path unexercised at runtime):**
-- Issue: The C-terminus carbonyl C carries an OXT (terminal oxygen) in 1ubq + most structures, which saturates the C valence and makes `pymol.editor.attach_amino_acid` fail with "no target attachment vector found" (`ObjectMolecule.cpp:3357`). Phase 5 (plan 05-04) switched cartoon MVP to the N-terminus (free valence, no atom removal, `verify_intact` passes). `insert_cartoon_hider(is_c_terminus=True)` still supports the C-terminus path for OXT-free structures, but NO smoke test or generator exercises it.
-- Files: `biochemeleon/mutation.py` (`insert_cartoon_hider`, `pick_terminal_residues`); `biochemeleon/generators.py` (`pick_terminal_residues` returns `is_c_terminus=False`).
-- Impact: A bundled demo with an N-terminal cap (ACE/formyl) or a non-standard N-terminus may fail the N-term attach at runtime. The C-term path is dead code that has never been runtime-verified against a real OXT-free structure.
-- Current mitigation: Documented in `.planning/STATE.md:284` (Blockers/Concerns `[05-04]`). C-terminus path retained in code but not in the MVP generator.
-- Fix approach: Add a C-terminus smoke section (e.g. a capped/OXT-free structure) AND an N-terminal-cap demo regression test before either path is relied on for a new demo set. Consider detecting N-terminal caps and falling back to C-terminus automatically.
+**Byte-frozen `make_bonded_hiders` has an unparenthesized `within` pattern — occupied list silently empty:**
+- Issue: `vmd/lib/mutation.tcl:171` uses `within 3.0 of index $aid and not index $aid`. VMD parses trailing expressions INTO the `within` reference (`within D of X and not Y` == `within D of (X and not Y)` == within-of-empty), so the per-anchor occupied-neighborhood list is ALWAYS empty. Placement rejection still works probabilistically via the generator side and the `occupied_hiders` arg (positions from prior tiers, sep 4.0), so all 17.1 smokes stay green — the defect is silent.
+- Files: `vmd/lib/mutation.tcl:171` (the query), `vmd/lib/mutation.tcl:126-135` (comment claims the C-side neighborhood works).
+- Impact: bonded-tier hiders can land closer to real atoms than MIN_SEP_REAL intends on crowded anchors; blend-quality degradation only, never a crash.
+- Status: **open** (hygiene) — deliberately NOT touched under the byte-identical mandate (`17.2-04-SUMMARY.md` Issues; STATE 17.2-04 decision). Fix approach: parenthesize `(within 3.0 of index $aid) and not index $aid` in a dedicated hygiene pass that also re-pins `phase17_bonded_smoke` (byte-identity gates must be lifted in the same commit).
 
-**`biochemeleon.zip` is stale (gitignored fallback install artifact):**
-- Issue: `biochemeleon.zip` (6973 bytes, Aug 3 02:26) is ~15 days older than the `biochemeleon/` package (last modified Aug 18 09:33). The zip is gitignored (per `AGENTS.md:155`) but if anyone uses it as a fallback install artifact (e.g. via PyMOL Plugin Manager "Install from file"), they get a stale package missing all Phase 6-11 work.
-- Files: `biochemeleon.zip` (repo root), `biochemeleon/` (source of truth).
-- Impact: Stale installs silently miss bug fixes (Phase 11 membrane blank-chain fix `0702563`, Phase 6 hint-color-restore fix `c9c2169`, post-win cleanup-on-imported fix `[08-05]`, post-game debrief `41872b1`, etc.).
-- Current mitigation: Gitignored (not committed); `wsl2win_cp.sh` stages the live `biochemeleon/` to `tmp/bioCHEMeleon/` for the headless bridge.
-- Fix approach: Regenerate `biochemeleon.zip` from current `biochemeleon/` at every release tag, OR delete it and document the `wsl2win_cp.sh` staging path as the only install method.
+**Rear-junction displacement sign flip lives in the bridge, not the pure layer:**
+- Issue: `splice::displacement` (`vmd/lib/splice.tcl:140-155`) is perpendicular to the FORWARD peptide bond only; its projection on the REAR bond (prev C → anchor N) can stretch that junction past the 1.95 Å C–N cutoff at d = 1.0 Å. The fix (flip the sign when the rear projection is positive) lives in `make_residue_hiders` (`vmd/lib/mutation.tcl`, the bridge), leaving `splice::displacement` returning the raw, rear-unsafe vector.
+- Files: `vmd/lib/mutation.tcl` (`make_residue_hiders` rear-sign flip), `vmd/lib/splice.tcl:140` (raw contract), `vmd/tests/test_splice.test` (pins the raw contract).
+- Impact: any future caller of `splice::displacement` directly gets rear-unsafe geometry; the pure layer's test-pinned contract does not encode the hazard.
+- Status: **open** (documented follow-up) — 17.2-04 explicitly deferred promotion to splice.tcl (would need 17.2-01 test updates). Recorded in `17.2-04-SUMMARY.md` Next-Phase-Readiness.
 
-**`AGENTS.md` slightly misrepresents the `opencode.json` denylist:**
-- Issue: `AGENTS.md:11` says "`opencode.json` denies `pip*`, `apt*`, `conda*`, `rm*`." The actual `opencode.json` (lines 58-66) has `rm *` and `rg *` as `deny`, but `pip *`, `pip3 *`, `apt *`, `conda *`, `wget *`, `curl *`, `python *`, `mv *`, `npm *`, and `git push/pull/merge/rebase/reset/checkout` are all `ask` (i.e. prompt for approval, not fully denied).
-- Files: `AGENTS.md:11`, `opencode.json:50-69`.
-- Impact: Minor — an agent reading `AGENTS.md` may believe pip/apt/conda are impossible, when they are actually approval-gated. The practical effect (autonomous agents can't run them without a human) is the same, but the framing is imprecise.
-- Fix approach: Reword `AGENTS.md:11` to "`opencode.json` gates `pip*`, `apt*`, `conda*` behind approval and denies `rm*`/`rg*`."
+**Production GUI path does NOT collapse multi-frame molecules (frame-raciness caller contract):**
+- Issue: `vmd/data/demos/1znf.pdb` ships 37 MODEL records (multi-frame). `vmd/lib/game.tcl` has NO collapse step — the "callers MUST pass single-frame molecules" contract (17.2-04) is enforced only in smokes via `_load_demo_1f` (`vmd/smoke/phase17_splice_smoke.tcl:188-197`). The PENDING 17.2-12 GUI checkpoint round 3 loads 1znf directly through `demos::load_demo` (`vmd/tests/rep_verify.tcl:379`) — un-collapsed.
+- Files: `vmd/lib/mutation.tcl:245,281,351` (`$sel frame 0` pins — reads ARE deterministic), `vmd/lib/mutation.tcl` `write_combined_pdb` (writepdb deliberately UNPINNED — the interim write-pin was REVERTED in `c54d77c` because it regressed the byte-frozen bonded tier).
+- Impact: generator READS are frame-0 pinned (safe), but `write_combined_pdb`'s writepdb writes whatever frame is CURRENT. Frame drift was observed under probe conditions (frame 1→3→5; `molinfo set frame` does NOT pin). If the current frame is non-0 at write time, real atoms land on a foreign frame while fake residue records carry frame-0 coords → broken junctions. After a fresh `mol new` the current frame is 0, so the common path works — the hazard is drift-inducing intervening frame operations.
+- Status: **open** (caller contract only) — engine-side collapse (or a frame-0-pinned write scoped to non-frozen callers) is the structural fix candidate. Watch the 17.2-12 checkpoint log for junction anomalies.
 
-**`__pycache__` committed alongside source in `biochemeleon/` and `smoke/`:**
-- Issue: `ls -la biochemeleon/` shows a `__pycache__/` subdirectory (Aug 18 10:35) and `smoke/__pycache__/` exists. `*.pyc` is gitignored per `AGENTS.md:155`, but the directories may still accumulate stale bytecode if Python versions change.
-- Files: `biochemeleon/__pycache__/`, `smoke/__pycache__/`.
-- Impact: Negligible for runtime; possible confusion if a 3.6-vs-3.x bytecode mismatch causes silent import failures.
-- Fix approach: Add `__pycache__/` (not just `*.pyc`) to `.gitignore`; clean directories at release tag.
+**Two pre-existing draw-dependent smoke reds (the 29/31 gate):**
+- Issue 1: `vmd/smoke/phase17_dispatch_smoke.tcl` step 8 — the bare 2-arg randomize on 1k8p (DNA) can draw a residue tier; `make_residue_hiders` errors "no protein anchors" → the supply-0 degrade (`vmd/lib/game.tcl:262-265`) drops the tier, generating 0 (or 1) hiders vs the smoke's pinned 5. 3/3 draws red in the 17.2-11 gate session.
+- Issue 2: `vmd/smoke/phase17_licorice_smoke.tcl:162-172` — pins P radius 1.55 (VMD's actual element table: **1.80**, Bondi vdW) and P color {0.5 0.5 0.31} (actual render: **{0.5 0.5 0.2}**); a 1k8p backbone-P anchor draw trips both (2/3 red). The smoke's own comment (lines 164-168) anticipated the re-pin.
+- Files: `vmd/smoke/phase17_dispatch_smoke.tcl:335-378`, `vmd/smoke/phase17_licorice_smoke.tcl:162-172`, `vmd/smoke/phase17_points_smoke.tcl` (carries the same inert old P values — never exercised because 1znf has no P atoms).
+- Impact: the full-suite gate can never be 31/31 green until fixed; engine behavior is CORRECT in both cases (smoke-side assertions only).
+- Status: **open** (gap-closure candidates with recorded recipes — `17.2-11-SUMMARY.md` Issues; do NOT re-diagnose from scratch): dispatch step-8 → drop-ungeneratable-tiers + effective-total-recompute policy + draw-adaptive rewrite; licorice → re-pin per the 17.1-11 corrections (P 1.80, tan {0.5 0.5 0.2}); points smoke → apply the same corrections proactively if its demo ever changes.
+
+**`rep_verify.tcl` driver cosmetics (test-only, non-blocking):**
+- Issue: `pv_report` printed finds=0 (the `::pv_finds` counter at `vmd/tests/rep_verify.tcl:109-111,495-503` did not reflect session finds in the 17.1-14 session), and the round-2 dump echoed the INPUT per_rep instead of the DERIVED one.
+- Files: `vmd/tests/rep_verify.tcl`.
+- Impact: none on the game; registry lines in the log are authoritative. Status: **known-behavior** (recorded non-blocking, `17.1-14` STATE entry; fix opportunistically before the next GUI session).
+
+**tcltest suites lack an explicit `exit` (console hang past stdin EOF):**
+- Issue: the `.test` suites end after tcltest reporting; under `vmd -e ... -eofexit < /dev/null` VMD enters its text console and hangs over the WSL→Windows pipe (first 17.2-11 suite run COMPLETED 47/47 in-log, then timed out).
+- Files: `vmd/tests/*.test` (6 suites); working wrapper is staging-only `tmp/cap172-gate/suite_driver.tcl` (source suite by name, then `exit`) — NOT in the repo.
+- Impact: every future full-suite gate must re-create the wrapper or the gate stalls. Status: **open** (cheap fix: add an explicit exit path or commit the driver pattern into `vmd/tests/`).
+
+**Setup-tab Reset clears setup fields only — hiders remain:**
+- Issue: `do_reset` (`vmd/gui/setup_tab.tcl`) applies DEFAULTS to the form; an active round's hiders stay in the scene — expectation mismatch observed at 16-12.
+- Files: `vmd/gui/setup_tab.tcl` (do_reset).
+- Status: **open** (registered for gap closure; natural home is Phase 19 in-game actions).
+
+**Game tab has no Cleanup/Restart buttons (console-only cleanup):**
+- Issue: cleanup/restart require pasting `pv_cleanup`/console calls until Phase 19 lands the buttons. Hiders also remain visible after a win (MVP design).
+- Files: `vmd/gui/game_tab.tcl`, `vmd/lib/game.tcl` (`cleanup`/`restart` exist lib-side, unexposed).
+- Status: **open** (Phase 19 scope by design — ROADMAP Phase 19 `GAME-05..10`, `BTN-06`).
 
 ---
 
 ## Known Bugs
 
-**No open bugs.** v1 is complete and all phases are VERIFIED. The most recent bug fix was `0702563 fix(11): quote chain value in selectors to handle blank-chain structures` (2026-08-16); the next most recent was `36d5de4 fix(10-09): add Ctrl+Left-drag=Move to Help controls` (user checkpoint feedback). Recent fix commits (last 60 commits): only 4 `fix(...)` commits — `0702563` (Phase 11 membrane), `36d5de4` (help text), `fd573ad` (doc exec_ count), `ef9a154` (planning revision). No regressions are tracked.
+**First-click pick quirk (p-press arming) — LOCKED known behavior:**
+- Symptoms: clicks before one keyboard `p` press land in labelatom mode (labels ARE added; the in-game count never changes). One `p` press per round arms delivery for the whole round; pasted `mouse mode pick|pick 0|pick 2` never arms; a fresh VMD restart also clears it. Panel checkbox desyncs from hotkey `r` (pick_bridge does not observe hotkey-driven mode changes).
+- Files: `vmd/lib/pick_bridge.tcl` (dated FIRST-CLICK QUIRK header comment; mechanism byte-untouched per 16-17 branch c2), `vmd/AGENTS.md` (FIRST-CLICK QUIRK block), `vmd/gui/game_tab.tcl` (checkbox desync), `vmd/tests/rep_verify.tcl` (pv_instructions leads with "press p ONCE").
+- Trigger: start a round and click before pressing `p` on the VMD display.
+- Workaround: documented player guidance (press `p` or `1` once; Phase 22 will put it in-game help). Root cause pinned: arming is dispatch-path-bound (VMD `user add key` hotkey vs pasted text), NOT submode-bound; `pick 2` == labelatom/2 probe-verified; VMD 1.9.3 has NO mode-query form. Status: **known-behavior** (LOCKED contract; do NOT "fix" the mechanism).
 
-**Recently-fixed bug worth recording as a fragility lesson (NOT a current bug):**
-- **Phase 11 membrane blank-chain selector bug** (FIXED `0702563`, 2026-08-16): The unquoted chain value in PyMOL selectors with a blank chain (`chain=''`, common in MemProtMD structures `1gzm`/`3gp6`/`sasdpg4` where all atoms are on a single unnamed chain) was MALFORMED — it ignored the object scope and matched blank-chain atoms from EVERY object in the session. With the backup + live object both loaded, the segment selection in `insert_cartoon_segment_hider` matched each atom TWICE, `cmd.create` produced duplicate-id atoms, and `cmd.identify` returned `[id, id]` → `AssertionError: expected 1 anchor id, got [25, 25]`. Fix: single-quote the chain value in all 6 selectors in `biochemeleon/mutation.py`. Regression test: `smoke/phase11_smoke.py` section N (9 blank-chain tests, 86/86 PASSED) + `smoke/diag_phase11_dup_id.py` (repro). **Rule for future code: ALWAYS quote chain values in selectors** — `'%s and chain \'%s\'' % (obj, chain)`, never `'%s and chain %s' % (obj, chain)`. Source: `.planning/STATE.md:14`; `git show 0702563`.
+**Restored-original-intercepts-picks (Phase 19 candidate fix):**
+- Symptoms: after the active-game guard's cleanup, the restored original stays loaded AND visible; in the 17.1-14 GUI session round 2 logged 6 picks on the restored original (mol=3) before the user hid it manually. Related: restored originals ACCUMULATE in the loaded-objects dropdown (each cleanup `mol new`s a fresh original), and multi-round sessions leave overlapping leftover molecules (17.2-12 checkpoint step 5 explicitly tells the user to hide them).
+- Files: `vmd/lib/backup.tcl` (`restore` — `mol new` per cleanup), `vmd/lib/game.tcl` (16-13 active-game guard cleanup path), `vmd/gui/dialog.tcl` (on_start guard wiring).
+- Trigger: Start a new round while one is active; the restored original sits in the scene.
+- Workaround: hide it manually in VMD Main.
+- Status: **open** (Phase 19 candidate: hide/deselect the restored original after guard cleanup; possibly reuse/delete the restored copy).
+- Double-Start guard exists and is GUI-confirmed (16-16: never 561 atoms/Segments 3 again) — the stacking defect itself is **resolved-but-recorded**. Close-on-mid-round deliberately leaves the stash alive (consumed by the guard on next Start; cleanup-on-close is Phase 19 scope) — **known-behavior**.
+
+**One observed GUI FREEZE (attribution unknown):**
+- Symptoms: the 16-16 DRIVER session froze ("clashed") right after the post-win guard restart; log ends with no `Exiting normally`. The clean control session ran the IDENTICAL guard flow repeatedly with zero freezes and exited normally.
+- Files: observation recorded in `.planning/phases/16-mvp-core-loop-sphere/16-VERIFICATION.md` §7; candidate suspects (pv_observe per-fire errors vs VMD 1.9.3 flakiness) explicitly UNCONFIRMED.
+- Trigger: not reproducible on demand (1 occurrence in 2 sessions, 2026-09-03).
+- Workaround: none known.
+- Status: **open** (unattributed single observation — watch every future GUI session; if it recurs, capture the last log lines before declaring VMD flakiness).
+
+**pv_report counter bug (finds=0 print):**
+- See Tech Debt driver cosmetics above. Status: **known-behavior** (non-blocking).
+
+**Chain-value selector quoting (v1 lesson, carried into v2 by design):**
+- The v1 Phase 11 blank-chain selector bug (unquoted `chain ''` matched every object; FIXED `0702563`) is structurally avoided in v2: `make_residue_hiders` REJECTS blank-chain anchors outright (`vmd/lib/mutation.tcl:272-275` — a blank-chain fake would mis-fragment) and simple hiders use hard-coded chain G (`HID_CHAIN`). Status: **resolved-but-recorded** — rule for any new v2 selector that interpolates a chain id: quote or reject blanks.
 
 ---
 
 ## Security Considerations
 
-**Attribution / citation verification (spec.md constraint, DEMO-04):**
-- Risk: `spec.md:89` mandates "Do NOT make up anything. ALL claims and citations (DOIs, PDB IDs, sources) MUST be verified against a source and explicitly approved by a human." A future agent adding a demo PDB without a verified DOI, or shipping MemProtMD membrane coordinates without the CC-BY 4.0 attribution, would violate the spec and create a license-attribution failure.
-- Files: `DATA_SOURCES.md` (repo root, 202 lines, all citations maintained); `biochemeleon/data/demos/SOURCES.md` (2-line pointer to repo-root `DATA_SOURCES.md`); `biochemeleon/data/demos/*.pdb` (6 bundled PDBs).
-- Current mitigation: `DATA_SOURCES.md` lists every PDB ID + DOI + SASBDB ID + MemProtMD attribution with license (CC0 for RCSB, CC-BY 4.0 for MemProtMD, free-use for SASBDB). Verified per `.planning/research/PITFALLS.md:517-521` (MemProtMD license verified 2026-08-14 from site JS bundle). The 6 bundled RCSB PDBs (1znf, 1xdn, 5e54, 1k8p, 2qbz, 4wb3) are all CC0.
-- Recommendations: Any new demo addition MUST update `DATA_SOURCES.md` with a human-verified DOI + license. MemProtMD per-entry license MUST be re-verified before bundling any new membrane coordinates (the site was unreachable at Phase 9 research time per `.planning/STATE.md:286`; license was confirmed CC-BY 4.0 on 2026-08-14 but per-entry verification is the spec-mandated gate).
+**Shared fixed temp filename under `$env(TEMP)`:**
+- Risk: `mutate` writes the combined PDB to a FIXED path — `$::env(TEMP)/biochemeleon_game.pdb` (`vmd/lib/mutation.tcl:610-614`; fallback `[pwd]/biochemeleon_game.pdb`). Two concurrent VMD instances clobber each other's file (write → mol delete original → mol new: a racing instance can load a half-written or wrong-round PDB). This is WHY the full-suite gate is sequential-only (see Performance). The smoke collapse loader also writes `splice_load_collapse.pdb` into `[pwd]` (`vmd/smoke/phase17_splice_smoke.tcl:190`).
+- Files: `vmd/lib/mutation.tcl:609-617`.
+- Current mitigation: documented sequential-only protocol (`17.1-13`/`17.2-11` gate notes; STATE carry-forward (t)).
+- Recommendations: for production (a user running one VMD) the fixed name is fine; if parallel testing is ever wanted, derive the filename from the molid or PID. A predictable temp path is a low concern for a local desktop tool (no multi-user exposure).
 
-**External Python library approval (spec.md constraint):**
-- Risk: `spec.md:86-87` requires that any Python library beyond what `pymol-open-source` ships (PyQt5 via `pymol.Qt`, numpy) MUST be listed to a file, explicitly user-approved, and either user-installed or vendored into `./3rd_party_lib/` (gitignored) with the library's license noted. Silent `pip install` violates the spec.
-- Files: `opencode.json:60-64` (`pip *`, `pip3 *`, `apt *`, `conda *` are `ask`-gated); `3rd_party_lib/` (gitignored, currently no vendored libs).
-- Current mitigation: `opencode.json` approval gate + `AGENTS.md:111` documents the constraint. v1 uses only pymol-open-source + numpy — no external libs were added.
-- Recommendations: Maintain the gate for v2. If a lib is needed, state whether the user must set up a linux-like env or can keep the "calling cmd from WSL" approach (`spec.md:87`).
+**fetch_pdb is a stub and VMD 1.9.3 has NO TLS:**
+- Risk: Phase 21 must implement real PDB fetch over `http` (VMD 1.9.3's http pkg lacks tls) — plaintext download of demo structures; RCSB redirects to HTTPS. A downgrade/cleartext concern, plus the v1 lesson that SSL workarounds (`check_hostname=False`) are recorded debt.
+- Files: `vmd/lib/demos.tcl:102` (stub comment), root `AGENTS.md` (v1 Phase 9 SSL fallback debt note in STATE v1 reference).
+- Status: **open** (Phase 21 design decision: bundled-only fallback vs plaintext http vs external downloader).
 
-**Path traversal / unsanitized user-input paths (low risk):**
-- Risk: `cmd.load(user_input_path)` is called for user-provided PDB files. Per `.planning/research/PITFALLS.md:351`, this is a local desktop plugin so risk is low, but path sanitization + `CmdException` handling is the defensive pattern.
-- Files: `biochemeleon/demos.py` (`load_demo`, `fetch_pdb`); `biochemeleon/__init__.py` (`_on_start` target resolution).
-- Current mitigation: `demos.to_windows_path()` converts `/mnt/c/...` → `C:\...` only for WSL mount paths (returns other paths unchanged). PyMOL's `cmd.load` raises `CmdException` on missing files; the plugin catches and surfaces via `QMessageBox.warning`.
-- Recommendations: Validate file extension + catch `CmdException` to give a clean error (per PITFALLS.md:351).
+**Attribution / citation verification (spec constraint, standing gate):**
+- Risk: any new demo PDB without a human-verified DOI + license violates `spec.md` ("Do NOT make up anything").
+- Files: `vmd/data/demos/SOURCES.md` (reused from v1: RCSB CC0, MemProtMD CC-BY 4.0, SASBDB free-with-attribution), `pymol/biochemeleon/data/demos/SOURCES.md`.
+- Status: **open** (standing process gate for Phases 21+).
+
+**Unbraced `expr` (injection + perf) — gated by convention, not automation:**
+- `vmd/AGENTS.md` Tcl 8.5 gotchas mandate `[expr {$a + $b}]`; the 8.6-idiom grep gate does NOT check expr bracing. All reviewed lib code braces exprs (`vmd/lib/splice.tcl`, `vmd/lib/generators.tcl` verified). Status: **open** (latent; a future hygiene gate could grep for unbraced expr in `vmd/lib/`).
 
 ---
 
 ## Performance Bottlenecks
 
-**100k+ atom membrane proteins (1GZM, 3GP6 with full DPPC membrane) — Pitfall 12:**
-- Problem: `cmd.get_model(target_obj)` copies the entire structure into Python — RAM spikes to multiple GB and the call takes 10+ seconds on a 100k+ atom membrane protein. Per-hider neighbor search in Python loops takes another 10+ seconds each. "Start" appears to freeze; on low-RAM machines PyMOL crashes.
-- Files: `biochemeleon/generators.py`, `biochemeleon/mutation.py` (any `cmd.get_model` call would be the bug; verify it's absent), `biochemeleon/game.py` (`GameController.start` insert loop).
-- Cause: `cmd.get_model` is O(total atoms) in Python; Python neighbor loops are O(hiders × atoms).
-- Improvement path: Per `.planning/research/PITFALLS.md:479-493`: never `cmd.get_model` on large objects — use `cmd.iterate(obj, '...', space=...)` (streams, no copy). For neighbor search use C-side selection: `cmd.select('_tmp_nbr', 'obj within 8 of [x,y,z]')`. For hider placement sample C-side: `cmd.select('_tmp_ca', 'obj and name CA')`, then `cmd.iterate` only Cα coords into a numpy array (memory: 100k × 3 × 8B ≈ 2.4 MB). Strip water + salt before bundling. Show a modeless `QProgressDialog` during fetch + load + strip + generate. Performance budget: Generate on 3GP6 < 30 s on mid-range laptop; click latency < 200 ms.
-- Current mitigation: v1 generators use `cmd.iterate` (not `cmd.get_model`) per the smoke-verified paths. The large demos (1GZM, 3GP6) are FETCHED ON DEMAND (not bundled) per Phase 9 — `demos.py` fetch path. Performance is bounded by the user's network + machine.
+**Full-suite gate is sequential-only (shared `$env(TEMP)` combined-PDB):**
+- Problem: parallel VMD smoke runs race on the fixed temp file (see Security above); a full gate is 44 sequential runs.
+- Files: `vmd/lib/mutation.tcl:610-614` (cause), `.planning/phases/17.1-*/17.1-13-SUMMARY.md` + `17.2-11-SUMMARY.md` (gate protocol records).
+- Cause: fixed temp filename + VMD's ~2 min startup per run (`timeout >= 330 s` per run is the standing rule).
+- Improvement path: per-process temp filename (molid/PID-derived) would unlock parallel gates and cut phase-gate wall time roughly by the core count. Status: **open** (measured: 17.2-11 gate ≈ 45 min; 17.2-10 ≈ 75 min for 13 runs).
 
-**`cmd.create('_bchm_backup', obj)` snapshot doubles RAM at Start:**
-- Problem: Every `GameController.start` snapshots the target via `cmd.create('_bchm_backup', target_obj, zoom=0)` BEFORE any mutation (`biochemeleon/backup.py:40-46`). For a 100k+ atom object this doubles RAM. Frequent restarts compound the allocation churn.
-- Files: `biochemeleon/backup.py:40-46` (`snapshot`), `biochemeleon/game.py` (`start` calls `backup.snapshot` first).
-- Cause: There is NO undo in PyMOL Open Source (`undocontext` is a no-op stub, `editor.py:25-36`); the backup is the ONLY recovery mechanism. Snapshot-once-at-Start + delete-on-unload is the canonical pattern (per PITFALLS.md:344).
-- Improvement path: Already optimal for the no-undo constraint — snapshot is mandatory. The only improvement is to delete the backup as soon as the game ends (cleanup/abort both call `backup.discard`). No further optimization possible without undo.
+**Tachyon render probes render whole scenes per check:**
+- Problem: the render-diff harness (`_render_bits` in `vmd/smoke/phase17_splice_smoke.tcl`, copied through the 17.2-05..08 tier smokes) empties every other rep via `mol modselect` + renders + restores, several times per smoke — each render is a full Tachyon export over the whole scene.
+- Files: `vmd/smoke/phase17_splice_smoke.tcl` (harness origin), all `vmd/smoke/phase17_*_smoke.tcl` copies.
+- Cause: `mol showrep off` is IGNORED in text mode (probe F6) — modselect-emptying is the only text-mode isolation.
+- Improvement path: none needed for correctness; keep probe reps LAST (highest index, no renumber) and prefer scene-diff over extra renders when adding checks. Also carry the pinned lesson: Tachyon export RADII ARE SCENE-SCALE-DEPENDENT — pin classes (uniformity + magnitude band), never absolute values across scenes (`vmd/smoke/phase17_dynbonds_smoke.tcl` 17.1-12 correction). Status: **known-behavior** (accepted harness cost).
+
+**Large molecules untested in v2 (1GZM/3GP6 class):**
+- Problem: v2 demos are ≤ ~558 atoms; the 100k+-atom fetch demos (1GZM/3GP6, cached at `cache/*.pdb.gz`) are a Phase 21 concern. `vmd/AGENTS.md` performance rules exist (never `$all_sel get {x y z}`; never block the event loop > 200 ms — Tcl is single-threaded, use `after 0` chunking) but are UNPROVEN at scale in v2.
+- Files: `vmd/lib/generators.tcl` + `vmd/lib/mutation.tcl` (per-candidate atomselect loops — O(hiders × atoms) selections in `make_residue_hiders`' per-residue N/CA/C/O/CB probe, `vmd/lib/mutation.tcl:279-291`), `cache/` (fetched 1GZM/3GP6/SASDPG4).
+- Improvement path: probe `make_residue_hiders` + `write_combined_pdb` on 1GZM before Phase 21 promises the < 30 s budget; the per-candidate 5-selection loop is the first thing to batch. Status: **open** (untested at scale).
 
 ---
 
 ## Fragile Areas
 
-**WSL/Windows runtime split (the single most common way to break things — `AGENTS.md:7`):**
-- Files: `AGENTS.md:7-25` (Environment section), `wsl2win_cp.sh` (84-byte staging script), `biochemeleon/demos.py:to_windows_path` (WSL→Windows path guard).
-- Why fragile: Dev shell is WSL Ubuntu (python3.6, no PyMOL, no Qt runtime). PyMOL 2.5.0 runs in a Windows conda env (`chemtools-win10` activated by `setenv.bat`). A WSL agent CANNOT run the interactive GUI and CANNOT use Qt (`pymol.Qt.*`) at runtime. Pure `pymol.cmd.*` paths CAN be run headlessly via `cmd.exe /c C:\src\run-conda-pymol.bat -cq <script>` (discovered Phase 3, 2026-08-06), but this is a discovered workaround, NOT a first-class setup. Windows PyMOL cannot resolve WSL paths — `demos.to_windows_path()` converts `/mnt/c/...` → `C:\...` only for WSL mount paths (returns other paths unchanged); a path that isn't converted is a latent failure.
-- Safe modification: Always `cd` into the staged Windows path (`tmp/bioCHEMeleon/`) before invoking `cmd.exe`. Wrap in `timeout 90` + `tail -50` to avoid hangs (~30s runtime for a phase smoke). Check exit code: 0 = clean, nonzero = crash. For any Qt/GUI work, defer to a human-verify checkpoint (no display in WSL).
-- Test coverage: GUI/Qt code is NOT automated (human-verify only — see "Test Coverage Gaps" below). Pure layer is unit-tested in WSL; cmd-coupled code is headless-smoke-tested via the bridge.
+**Byte-frozen files and diff-verified smoke templates:**
+- Files: `vmd/lib/mutation.tcl` (simple-tier procs byte-identical mandates: `make_placeholder_hiders`/`make_bonded_hiders`/`_hider_record`/`tag_sentinels`/`fetch_hider_indices`), `vmd/lib/game.tcl` (16-13 guard byte-identical), the 17.2-05..08 tier smokes (single-file template copies, "only tier swap" diff-verified pre-run).
+- Why fragile: byte-identity is an ACTIVE verification gate (`git diff <range> -- vmd/lib/` must be empty in several plan scopes); a "harmless" comment or reorder edit can break a gate or silently change a PRNG call sequence (see next item). The unparenthesized `within` defect (Tech Debt) survives BECAUSE of this mandate.
+- Safe modification: byte-frozen regions change only in a dedicated plan that owns re-pinning every dependent smoke in the same commit; template copies are regenerated from the template file, never hand-edited divergently.
 
-**Headless PyMOL bridge depends on a Windows-side file existing at a hardcoded path:**
-- Files: `AGENTS.md:13-22`, `wsl2win_cp.sh`, external `/mnt/c/src/run-conda-pymol.bat` (1638 bytes, Jun 9 2022).
-- Why fragile: The headless bridge command `cmd.exe /c C:\src\run-conda-pymol.bat -cq <script>` requires `C:\src\run-conda-pymol.bat` to exist on the Windows side at that exact path. If the user moves/renames/deletes that bat file, every headless smoke test in `smoke/phase*_smoke.py` (10 files) becomes unrunnable from WSL. The bridge also requires `wsl2win_cp.sh` to stage `biochemeleon/` → `tmp/bioCHEMeleon/` first; an unstaged or stale `tmp/bioCHEMeleon/` produces confusing failures.
-- Safe modification: Before relying on the bridge, `ls -la /mnt/c/src/run-conda-pymol.bat` + `bash wsl2win_cp.sh` + `ls tmp/bioCHEMeleon/biochemeleon/`. Document the bridge dependency in any new smoke test's header.
-- Test coverage: 10 headless smoke tests depend on this bridge; no test verifies the bridge itself exists.
+**PRNG-stream coupling across the generation flow:**
+- Files: `vmd/lib/generators.tcl` (seedless placement draws), `vmd/lib/splice.tcl:184` (`select_anchors` — global PRNG stream, no seed), `vmd/lib/setup_state.tcl` (`randomize_per_rep`), `vmd/lib/game.tcl` (tier loop calls generators in GAME_REPS order).
+- Why fragile: ALL generators draw from the GLOBAL PRNG with no seeds; smoke pinned numbers (atom counts, index sets, layout) hold only for identical call sequences in a fresh VMD process, and the Tcl 8.5.6 PRNG is stable per-build, NOT portable. Inserting ONE new generator call into the dispatch changes every downstream draw — pinned smoke expectations flip from green to red with zero engine changes.
+- Safe modification: new smoke assertions are draw-adaptive (observed-layout invariants; strict pins only as the full-generation special case — the established 17.2-10/17.2-11 pattern). Never add a PRNG-consuming call to the game flow without re-running the capstone.
 
-**PyMOL API pitfalls (the "easy to get wrong" list — each is a latent bug source):**
-- Files: `AGENTS.md:77-102` (Domain rules + Phase 3 mutation-safety rules), `.planning/research/PITFALLS.md` (545 lines, authoritative), `biochemeleon/mutation.py`, `biochemeleon/backup.py`, `biochemeleon/registry.py`.
-- Why fragile: The PyMOL 2.5.0 open-source API has many silent-failure modes. Each rule below has caught a real bug during Phase 3-11 verification:
-  - `cmd.pseudoatom()` returns `None` (`NoneType`) — NEVER rely on the return value for hider ids. Use `cmd.identify("obj and name <handle> and segi GAME", mode=0)` + `assert len(ids) == 1` (mode=0 returns the id list, NOT the fragile index). Source: `biochemeleon/mutation.py:88`; PITFALLS.md:429-434.
-  - `cmd.iterate` exposes the atom id as UPPERCASE `ID`, NOT lowercase `id` (the Python builtin → `NameError` or wrong value; `editing.py:1444-1449`). All iterate expressions must use uppercase symbols (`ID`, `MODEL`, `RESN`, `RESI`, `NAME`, `CHAIN`, `SEGI`, `B`, `RESV`). Source: `biochemeleon/mutation.py:124`; PITFALLS.md:457.
-  - `cmd.iterate` does NOT expose `x`/`y`/`z` coordinates (state-dependent; need `cmd.iterate_state`). `backup.verify_intact` uses `(resn, resi, name, chain, segi)` — count + identity multiset suffices because `cmd.create` copies coords bit-for-bit (RESEARCH §Q6 fallback). Source: `biochemeleon/backup.py:69-83`; PITFALLS.md:458.
-  - `cmd.iterate`/`cmd.alter` with `space=None` pollutes the global `pymol.__dict__` (`editing.py:59-60`). ALWAYS use `space={'stored': ...}` (hygienic dict). Source: `biochemeleon/backup.py:80-83`, `biochemeleon/mutation.py:124`; PITFALLS.md:340, PITFALLS.md:501.
-  - B-factor selector `b -999` is MALFORMED ("Selector-Error: Malformed selection") and SILENTLY matches nothing (no exception — returns `[]`, a dangerous failure mode). The sentinel VALUE stays `-999` (set in `insert_hider`/cleanup docstrings); only the SELECTOR uses the comparison `b < 0` (matches `-999.0`). Source: `biochemeleon/mutation.py:113` (`fetch_all_hider_ids`); PITFALLS.md:459.
-  - No `cmd.get_representations()` in PyMOL 2.5.0. Detect active reps with `cmd.count_atoms("{obj} and rep {rep}") > 0`. Source: `AGENTS.md:83`.
-  - `cmd.create(obj, seg, 1, 1)` is a NO-OP (Phase 5 05-06 spike). Single-call `cmd.create(existing, src)` IS a REPLACE (smoke-confirmed `n_after==n_before`), but `backup.restore` uses the explicit two-step `cmd.delete(target)` + `cmd.create(target, backup)` for an unambiguous failure path. Consult `tmp/pymol-src/modules/pymol/` (gitignored, readable from any worktree via the main-repo absolute path) when the API behaves unexpectedly. Source: `biochemeleon/backup.py:54-67`; PITFALLS.md:436-439.
-  - Registry MUST key on atom `id` (stable across add/delete + `.pse` reload; smoke-confirmed `pse_sent==[saved_id]`) — NEVER on `index` (fragile, shifts on insert/remove; `querying.py:1315`). Source: `biochemeleon/registry.py`; PITFALLS.md:110-124.
-  - `rep` is NOT recoverable from sentinels after `.pse` reload (the sentinel carries only `segi='GAME'` + `b=-999`; `reconstruct_from_sentinels` sets `rep=None`). Phase 8 `.bcm` sidecar reconciles `rep` via `HiderRegistry.reconcile_with_bcm` (pure, no pymol). ADDRESSED 2026-08-12 (Plan 08-01). Source: `biochemeleon/registry.py` (`reconcile_with_bcm`); `.planning/STATE.md:288`.
-  - **Chain values in selectors MUST be single-quoted** (Phase 11 membrane bug `0702563`): blank chains (`chain=''`, common in MemProtMD `1gzm`/`3gp6`/`sasdpg4`) produce a malformed unquoted selector that matches blank-chain atoms from EVERY object in the session. Use `'%s and chain \'%s\'' % (obj, chain)`, never `'%s and chain %s' % (obj, chain)`. Source: `biochemeleon/mutation.py` (6 selectors); `smoke/diag_phase11_dup_id.py` (repro).
-  - PyMOL rep-inheritance (Phase 5 05-09): a freshly-fetched protein has `cartoon` shown by DEFAULT on its polymer; newly-attached residues INHERIT the cartoon rep. A regression guard asserting `rep cartoon == 0` on GAME atoms is UNSOUND — cartoon comes from inheritance, not the explicit show. Assert the requested rep is on GAME atoms but NOT on the rest of the polymer. Source: `.planning/STATE.md:285`.
-- Safe modification: Read `AGENTS.md:77-102` + `.planning/research/PITFALLS.md` before any `cmd.*` call. Grep-gate the package after edits: `grep -rnE "import Tkinter|import tkinter|from tkinter|import Pmw|from Pmw|app\.root|grab_set|mainloop|Toplevel|menuBar\.addmenuitem|from PyQt5 import|import PyQt5" biochemeleon/` (MUST be 0) and `grep -rnE "\.exec_\(\)" biochemeleon/` (must be on QFileDialog/QMessageBox/`_show_help` QDialog only, NEVER on the main PluginDialog which uses `dialog.show()` at `biochemeleon/__init__.py:151`).
-- Test coverage: 10 headless smoke tests in `smoke/phase*_smoke.py` cover the cmd-coupled paths; pure-layer pitfall rules are pinned by 125 unit tests in `tests/`.
+**Ordering contracts in the dispatch composition root (`vmd/lib/game.tcl`):**
+- Why fragile: four load-bearing orderings, each comment-pinned with a failure mode: (1) `stamp_tier_codes` BEFORE `add_hider_reps` — a static single-frame molecule never re-evaluates cached rep selections on an atom-field change, so reps added before the user3 stamp cache empty selections forever (`vmd/lib/hiders.tcl`, game.tcl step 8); (2) `reconstruct_from_sentinels` ONCE then `assign_reps` — a second reconstruct CLEARS prior tiers (P8); (3) the file-layout slicing walk (17.2-09) depends on `write_combined_pdb` emitting simple records FIRST and one fetch index per residue hider (its CA) — reordering record emission mis-slices every tier; (4) `registry.tcl` is sourced EXACTLY ONCE (re-sourcing wipes `_records`; `namespace eval` re-runs on every source).
+- Files: `vmd/lib/game.tcl:220-330` (tier loop + steps 7-11), `vmd/lib/hiders.tcl`, `vmd/lib/registry.tcl`, `vmd/lib/mutation.tcl` (`write_combined_pdb` record order).
+- Safe modification: any change to record emission order, tier iteration, or source order in `vmd/biochemeleon.tcl` requires re-running `phase17_capstone_smoke.tcl` (the standing composition-root baseline, PASS x4) plus the dispatch smokes. Test coverage: capstone 5 rounds + dispatch + e2e smokes.
 
-**No undo (safety-critical invariant — PyMOL Open Source):**
-- Files: `biochemeleon/backup.py` (snapshot/restore/discard/verify_intact), `biochemeleon/game.py` (`start` snapshots BEFORE mutation; `cleanup`/`abort_on_error` restore), `tmp/pymol-src/modules/pymol/editor.py:25-36` (`undocontext` no-op stub).
-- Why fragile: PyMOL Open Source has NO undo/redo — `undocontext` is a no-op stub (`editor.py:25-36`). Every destructive op needs a `cmd.create('_bchm_backup', ...)` snapshot + restore-on-failure. `backup.snapshot` MUST precede any `mutation.insert_hider` — the backup is the ONLY recovery mechanism. Restore MUST be the two-step `cmd.delete(target)` + `cmd.create(target, backup)` (single-call `cmd.create(existing, backup)` is merge-vs-replace UNVERIFIED C-dispatched; smoke-confirmed REPLACE, but two-step stays for unambiguous failure path).
-- Safe modification: NEVER add a destructive `cmd.*` call without a preceding `backup.snapshot`. NEVER re-call `verify_intact` on a backup AFTER `cleanup()`/`abort_on_error()` discarded it — both already run `verify_intact`/`restore` + `discard` internally; re-calling raises `CmdException` on the deleted object. Assert the orchestrator's RETURN value, not a re-derivation.
-- Test coverage: `smoke/phase3_smoke.py` 24/24 ALL PASSED (criterion 4 both paths); `backup.py` lifecycle fully smoke-verified.
+**The GUI/Tk surface is structurally untestable headless:**
+- Files: `vmd/gui/dialog.tcl`, `vmd/gui/setup_tab.tcl`, `vmd/gui/game_tab.tcl`, `vmd/lib/pick_bridge.tcl` (C-side delivery).
+- Why fragile: Tk does not load in `-dispdev text`; text mode cannot fire a real pick. Every GUI-touching plan ends in a human-verify checkpoint — color/focus/timing/pick-delivery regressions are invisible to the entire headless gate (v1 lost several bugs to exactly this class).
+- Safe modification: every GUI edit ships with a checkpoint plan (pattern: 16-12/16-16/17.1-14/17.2-12); never claim a text-mode PASS proves C-side firing.
+- Test coverage: the pending 17.2-12 checkpoint IS the only verification of the residue-tier GUI surface.
 
-**Hider sentinel + cleanup rules (data-loss prevention):**
-- Files: `biochemeleon/mutation.py` (`insert_hider` sets `segi='GAME'` + `b=-999`; `cleanup_hiders` removes by `segi GAME` ALONE; `fetch_all_hider_ids` reads by `segi GAME and b < 0`), `biochemeleon/registry.py` (keyed by `(object, id)` tuple).
-- Why fragile: Cleanup MUST use `segi GAME` ALONE (sentinel-only; hiders are the only atoms with `segi=GAME`). NEVER use `hetatm`/`water`/`solvent`/`not polymer`/`resn PSD`/`HOH`/`DPPC`/`PC`/`OL` as the cleanup filter — these over-match and delete real ligands, ions, waters, and the entire DPPC membrane (Pitfall 9). NEVER cleanup by `resi`/`chain`/per-object `index` (unstable across deletions). The `b < 0` selector is for `fetch_all_hider_ids`/read paths; cleanup by `segi GAME` ONLY. Hiders MUST be inserted INTO the same PyMOL object (`cmd.pseudoatom(object=existing, ...)`), NEVER a separate object (else the player toggles one object to win — Pitfall 2).
-- Safe modification: Sentinel is `segi='GAME'` + `b=-999`. Any new cleanup path MUST scope by `segi GAME` + the target object. `cmd.sort(obj)` after `cmd.alter` of `segi`/`chain` is defensive (editing.py:1457: stale canonical order confounds later `create`/`byres`; `sort` reassigns `index` but preserves `id` — safe for the id-keyed registry).
-- Test coverage: `smoke/phase3_smoke.py` C2/C4; Pitfall 9 regression tests on membrane demos.
+**`AGENTS.md` tclsh claims are wrong in the current WSL shell:**
+- Issue: root `AGENTS.md:15` says "`tclsh` (Tcl 8.5/8.6) is available for tcl syntax checks and `tcltest` pure-layer unit tests" and `vmd/AGENTS.md:31-35` builds the Commands section on `tclsh`. Verified ABSENT (`command -v tclsh` fails, exit 1). Five session summaries (17.2-01/04/09/11/12) record "tclsh unavailable in this WSL session" — the actual syntax/pure-layer gate is headless VMD (load-gate source + definition-block run; tcltest UNDER VMD per the 13-01 decision).
+- Files: `AGENTS.md:15`, `vmd/AGENTS.md:31-35,51,64,74`.
+- Impact: an agent following the docs runs a nonexistent command; wasted cycles; some gates (pure-layer tcltest without VMD) are currently impossible.
+- Fix approach: reword both files to "tclsh may be absent; the authoritative gate is tcltest under headless VMD (13-01 pattern) + the load-gate source check." Also root `AGENTS.md:15` misstates the `opencode.json` denylist (`pip *`/`pip3 *`/`apt *`/`conda *` are `ask`-gated per `opencode.json:60-64`; only `rm *`/`rg *` are `deny` at lines 58-59). Status: **open** (doc fix).
 
-**Plugin entry point + modeless dialog (Pitfall 1 — Tk deprecation):**
-- Files: `biochemeleon/__init__.py:5` (`dialog = None` module-level singleton — GC prevention; MUST be module scope, not inside `__init_plugin__`), `biochemeleon/__init__.py:129` (`__init_plugin__(app=None)` — NOT legacy `__init__(self)`), `biochemeleon/__init__.py:151` (`dialog.show()` — modeless, NEVER `.exec_()`), `biochemeleon/__init__.py:144` (modeless comment).
-- Why fragile: PyMOL 2.x is Qt-based; Tkinter is deprecated with full expectation of removal by PyMOL 4.0 (per official PyMOL wiki). The main dialog MUST stay modeless (`dialog.show()`) so the 3D viewer stays interactive for the click-to-find loop. All Qt imports via `from pymol.Qt import QtWidgets` (auto-selects PyQt5/PySide2) — NEVER `from PyQt5 import`. `QFileDialog.exec_()` / `QMessageBox.exec_()` / `QDialog.exec_()` on child dialogs ARE allowed (3 current hits: `gui_game.py:345` `_finish_win`, `gui_game.py:404` `_finish_debrief`, `__init__.py:952` `_show_help`).
-- Safe modification: After any GUI edit, run `grep -rnE "\.exec_\(\)" biochemeleon/` — every hit MUST be on a child dialog, NEVER on the main PluginDialog. Run the Pitfall-1 grep — MUST be 0 matches package-wide.
-- Test coverage: Both grep gates are part of the WSL regression suite; exec_ gate currently at 3 (expected final state, all child dialogs).
+**The `pick_verify.tcl` driver is stale and must NOT be run:**
+- Files: `vmd/tests/pick_verify.tcl` (~136-139, ~255-261 read the REMOVED `hiders::hidden_rep`/`found_rep` namespace vars).
+- Impact: running it errors mid-session (the 17.1-07 blocker note). `rep_verify.tcl` is the ONLY supported GUI driver.
+- Status: **known-behavior** (deliberately left UNREPAIRED as a Phase-16 historical artifact, superseded by `vmd/tests/rep_verify.tcl`; STATE Pending Todos says fix-before-use if ever revived).
 
-**`rep <name>` selector + per-rep counts (rep-inheritance + regression-guard soundness):**
-- Files: `biochemeleon/demos.py` (`get_active_reps` uses `rep <name>` selector), `biochemeleon/registry.py` (`counts_by_rep`).
-- Why fragile: Per `.planning/STATE.md:285` (Blockers/Concerns `[05-09]`): a freshly-fetched protein has `cartoon` shown by DEFAULT on its polymer (~602 atoms) but NOT `ribbon`. Newly-attached polymer residues INHERIT the cartoon rep. So `count_atoms('obj and segi GAME and rep cartoon')` is nonzero for a cartoon-geometry hider REGARDLESS of which rep the explicit show call used. A regression guard asserting `rep cartoon == 0` on GAME atoms is UNSOUND. The correct way to verify a rep= forwarding fix: assert the requested rep is on GAME atoms but NOT on the rest of the polymer.
-- Safe modification: When asserting on `rep <X>` counts for newly-attached polymer residues, account for the polymer's DEFAULT reps. Use `ribbon` (not a default rep) as the discriminator when testing rep forwarding.
-- Test coverage: `smoke/phase5_smoke.py` section 5c (ribbon rep support); `smoke/phase4_1_smoke.py` mixed-rep counts.
+**STRIDE ss='L' caveat for cartoon tiers (accepted Option A):**
+- Issue: VMD has NO `ss='L'` (PyMOL vocabulary); per-atom ss is the `structure` keyword (T/C/H/G/E/B). A spliced GAM residue gets `T` from the LOAD-TIME STRIDE run and renders as a smooth coil/turn tube; `ssrecalc` is NEVER called in the generation flow (unnecessary + destructive — wipes manual `set structure` writes, Pitfall C2, prohibition block at `vmd/lib/splice.tcl:16-30` and enforced by the `mol ssrecalc` grep gate = 0).
+- Files: `vmd/lib/splice.tcl:16-30` (Option A decision block), `vmd/lib/game.tcl:246-248` (NEVER-ssrecalc comment), `vmd/lib/mutation.tcl:605-608`.
+- Impact (accepted): a single-residue hider renders as a tube regardless of manual ss overrides (≥ 3-residue helix rule) — the force-SS variant is explicitly out of scope/future polish. Cartoon window counts are STRIDE-shift-variant (22→6 observed with zero pathology) — smokes must assert the BOND scene-diff (A=all vs B=not resname GAM, cylinder delta ≥ 4/fake), never window counts.
+- Status: **known-behavior** (recorded decision, `17.2-RESEARCH-cartoon-stride.md`).
 
 ---
 
 ## Scaling Limits
 
-**Large fetched demos (1GZM helix, 3GP6 sheets with full DPPC membrane):**
-- Current capacity: 1GZM ~12k atoms (helix-only MemProtMD), 3GP6 ~19k atoms (sheets + DPPC). Phase 11 smoke `3gp6 dry (19221 atoms, all blank chain) game.start succeeds headlessly` (commit `0702563`).
-- Limit: Per `.planning/research/PITFALLS.md:479-493`, `cmd.get_model` on a 100k+ atom object with full solvation would OOM. The stripped/dry membrane demos (water + salt removed) stay under ~20k atoms and are tractable.
-- Scaling path: Strip water + salt + compress before bundling (per `spec.md:56`). Fetch large demos on-demand (Phase 9 `demos.py` fetch path), never bundle. Show a modeless `QProgressDialog` during fetch + load + strip + generate. Performance budget: Generate on 3GP6 < 30 s; click latency < 200 ms.
+**Multi-round GUI sessions accumulate molecules and intercept picks:**
+- Current capacity: molids are monotonic, never reused; each cleanup/guard-restart `mol new`s a restored original; nothing deletes stale copies.
+- Limit: the 17.1-14 session already needed manual hiding of the restored original; 17.2-12's checkpoint instructions warn about overlapping leftover 1k8p copies.
+- Scaling path: Phase 19 — hide/deselect (or delete) the restored original after guard cleanup; Game-tab Cleanup/Restart buttons.
 
-**Hider count vs object size:**
-- Current capacity: `hider_count_cap` in `biochemeleon/setup_state.py` caps hider count to a reasonable max per `spec.md:11`. The cap is computed from object atom count + rep complexity.
-- Limit: Per `.planning/research/PITFALLS.md:366-367`, a hider count too high for a small molecule makes the game unfindable; the player quits. The cap prevents this for bundled demos.
-- Scaling path: `setup_state.hider_count_cap` already adapts to object size; verify on any new demo before shipping.
+**Residue tiers need protein CA anchors — blank-chain and DNA-only scenes degrade to zero:**
+- Current capacity: `make_residue_hiders` rejects blank-chain anchors (`vmd/lib/mutation.tcl:272-275`) and errors on DNA-only scenes ("no protein anchors", caught by the supply-0 degrade at `vmd/lib/game.tcl:262-265`).
+- Limit: MemProtMD structures (1gzm/3gp6/sasdpg4 — ALL blank-chain, cached in `cache/`) would degrade EVERY residue tier (Cartoon/NewCartoon/Trace/Tube) to 0 records; 1k8p (DNA) likewise. Only simple tiers would play.
+- Scaling path: Phase 21 (fetch demos) must either pre-assign chain ids when staging membrane demos or accept simple-tier-only rounds on them; the supply-0 warn is the current honest signal.
+
+**Fake-resid block collision guard is a hard error:**
+- `splice::resid_block` errors when the block start (9001) is ≤ the scene's real-resid max (`vmd/lib/splice.tcl:160-165`). Current demos max ~500; a fetched structure with resids ≥ 9001 (large multi-chain assemblies, some CryoEM entries) would hard-error the residue tier mid-round rather than degrade.
+- Scaling path: Phase 21 — compute the block start from the scene's real max (the `real_max` parameter already exists).
 
 ---
 
 ## Dependencies at Risk
 
-**PyMOL 2.5.0 open-source API (single hard dependency):**
-- Risk: The plugin targets `pymol-open-source` 2.5.0 in conda. Several API contracts verified at the 2.5.0 runtime tier (Phase 3 smoke, 2026-08-06) may change in future PyMOL versions: `cmd.pseudoatom` returns `None`, `cmd.iterate` exposes `ID` uppercase, `cmd.iterate` has no `x/y/z`, `cmd.create(existing, src)` is REPLACE, `cmd.attach_amino_acid` lives in `pymol.editor` (not `cmd`), `undocontext` is a no-op stub.
-- Impact: A PyMOL version bump (e.g. 3.0+ removing Tkinter support, or changing `cmd.iterate` symbol casing) could silently break the plugin. The grep gates would NOT catch behavioral changes — only import/`exec_` changes.
-- Migration plan: Pin to PyMOL 2.5.0 for v1. For any version bump, re-run all 10 headless smoke tests + the human-verify checkpoint. Re-verify every API contract in `.planning/research/PITFALLS.md` "Phase 3 — Resolved Research Flags" against the new version. The `tmp/pymol-src/modules/pymol/` source tree is the authoritative reference for resolving surprises.
+**VMD 1.9.3 (2016 binary) — single hard dependency, heavily probe-pinned against THIS build:**
+- Risk: the codebase encodes dozens of binary-specific facts: Tcl 8.5.6 PRNG stream (stable per-build, NOT portable — `17.1-01` resolution (c)), element table quirks (P radius 1.80 / tan {0.5 0.5 0.2} — `17.1-11`), `within` trailing-expression swallowing, `molinfo set frame` not pinning, no mouse-mode query form, `save_state` not persisting beta/user/segid, `mol showrep off` ignored in text mode, UG Table 9.4 vs actual `vmd_pick_*` behavior.
+- Impact: a VMD upgrade (or a user on a different 1.9.x build) silently invalidates pinned smoke numbers and possibly behavioral contracts; the grep gates would NOT catch behavioral drift.
+- Migration plan: stay on 1.9.3. On ANY binary change: re-probe the PRNG seeds (17.1-01 seeds 173/41), re-pin element radii/colors from renders, re-run the full gate + a GUI checkpoint. `vmd-ref/` (gitignored) is the reference corpus.
 
-**Python 3.6 syntax constraint (dev shell):**
-- Risk: The WSL dev shell runs `python3.6` (3.6.9) for syntax checks + unit tests. Any 3.7+ syntax (walrus `:=`, f-string `=`, positional-only params) breaks the WSL gate. Per `.planning/STATE.md:294` (Blockers/Concerns `[03-01]`): "walrus `:=` is Python 3.8+; python3.6 is 3.6.9 — reaffirms the AGENTS.md constraint to avoid 3.7+ syntax."
-- Impact: A 3.7+ syntax edit would pass at runtime in Windows PyMOL (which uses a newer Python) but fail the WSL syntax gate, creating a false-negative test signal.
-- Migration plan: Keep v1 code at 3.6-compatible syntax. If the dev shell is upgraded, update `AGENTS.md` and re-run the full test suite.
+**`vmd-ref/` and `vmd/3rd_party_lib/` are gitignored:**
+- Risk: a fresh clone has no UG PDF, no bundled-plugin patterns, no core-script references; plans referencing `vmd-ref/` paths fail there.
+- Files: `vmd/AGENTS.md:21-26` (reference inventory), root `AGENTS.md` (git-ignored list).
+- Mitigation: re-derivable from the local VMD install; documented. Status: **known-behavior** (accepted trade).
 
-**External Python libraries (gated by spec.md):**
-- Risk: Any library beyond `pymol-open-source` (PyQt5 via `pymol.Qt`, numpy) requires user approval + vendoring into `./3rd_party_lib/` (gitignored) with the library's license noted (`spec.md:86-87`). v1 uses NO external libs beyond the shipped ones.
-- Impact: Adding a lib silently violates the spec. The `opencode.json` `pip *`/`apt *`/`conda *` `ask`-gate is the first line of defense.
-- Migration plan: For v2, if a lib is needed, write the list to a file + seek user approval + state whether the user must set up a linux-like env or can keep the "calling cmd from WSL" approach.
+**Python 3.6 dev-shell constraint (v1 + smoke tooling):**
+- Unchanged from the prior audit: 3.7+ syntax fails the WSL gate; keep v1 and any Python tooling at 3.6-compatible syntax. Status: **known-behavior**.
 
 ---
 
 ## Missing Critical Features
 
-**v2 VMD tcl script (deferred per `spec.md:58-61`):**
-- Problem: `spec.md` requires BOTH a PyMOL plugin (v1) AND a VMD tcl script (v2). v2 is deferred — `AGENTS.md:5` notes "v1 (PyMOL 2.5.0 plugin). v2 (VMD tcl script) is deferred per `spec.md`; this file is v1-scoped; revisit it when v2 research begins. When the active milestone becomes v2, flag that AGENTS.md needs a VMD/tcl-specific rewrite."
-- Blocks: The VMD half of the spec is not implemented. VMD has many more materials and representations; `spec.md:61` requires research to limit the representations this game could play on. `spec.md:60` requires seeking user approval for any additional vmd tcl lib (e.g. `tooltip.tcl`).
-- Fix approach: When v2 begins, rewrite `AGENTS.md` for VMD/tcl specifics. Re-research representation limits + tcl lib needs. Do NOT reuse the PyMOL-specific pitfall rules for VMD.
+**Remaining v2 roadmap phases (tracked in `.planning/ROADMAP.md`):**
+- Phase 18 (materials), Phase 19 (in-game actions: hint/reveal/restart/cleanup buttons, DIFF-01 reveal counter, DIFF-04 found-color picker — `REQUIREMENTS.md:145-146`), Phase 20-22 (persistence/fetch/in-game help incl. the "press p first" advice from 17.1-14), Phase 23 (multi-viewer docs). The Game tab currently exposes only Start + pick/rotate toggle; cleanup is console-only.
+- Status: **open** (scheduled, not defects).
 
-**`surface` representation (explicitly out of scope):**
-- Problem: `GAME_REPS = ['lines','sticks','spheres','cartoon','ribbon']` in `biochemeleon/setup_state.py` — `surface` is explicitly out of scope per `spec.md` and `AGENTS.md:82`. Per `.planning/research/PITFALLS.md:235`: "surface is a computed mesh over an object and doesn't 'blend' a foreign atom in any useful way."
-- Blocks: Players cannot play the game on `surface` representation.
-- Fix approach: Out of scope for v1. If v1.x/v2 adds surface, it requires a fundamentally different hider mechanism (computed mesh, not atom insertion).
+**Difficulty calibration — non-sphere tiers blend too well:**
+- Problem: 17.1-14 GUI finding — all 6 simple styles applied correctly, but non-sphere tiers blend INTO the default-Lines scene so well the user needed manual rep toggling to spot them. The 17.2-12 checkpoint adds the magnitude question for 1.0 Å splice bumps ("findable but subtle? record if 1.25 tuning is wanted; never ≥ 1.4" — the 1.43 Å hard envelope at `vmd/lib/splice.tcl:70` bounds any tuning).
+- Files: `vmd/lib/splice.tcl:70` (SPLICE_DISPLACEMENT), `vmd/lib/generators.tcl` (bond band constants), `.planning/phases/17.1-*/17.1-14-SUMMARY.md` (finding).
+- Blocks: game feel on default scenes; Phase 19/22 difficulty work owns it.
+- Status: **open** (recorded finding + pending checkpoint data).
+
+**Drop-ungeneratable-tiers + effective-total-recompute policy:**
+- Problem: the dispatch degrades supply-0 residue tiers to 0 records but keeps the round on the remaining tiers with the ORIGINAL effective total; smokes pinning the pre-degrade count go red (the dispatch step-8 flake). The recorded policy fix recompute the effective total after drops so request-side bookkeeping matches observed generation.
+- Files: `vmd/lib/game.tcl:262-265` (degrade site), `vmd/lib/rep_tiers.tcl` (`resolve_per_rep`/`effective_total`), `vmd/smoke/phase17_dispatch_smoke.tcl` (step 8).
+- Status: **open** (gap-closure candidate, recipe in `17.2-11-SUMMARY.md`).
 
 ---
 
 ## Test Coverage Gaps
 
-**GUI/Qt code is NOT automated (human-verify checkpoints only):**
-- What's not tested: `biochemeleon/__init__.py` (PluginDialog, `_on_start`, `_on_win`, `_show_help`, `_on_found_mgmt`), `biochemeleon/gui_setup.py` (SetupTab full UI), `biochemeleon/gui_game.py` (GameTab, `_finish_win`, `_finish_debrief`, `_show_all_hiders_for_debrief`, `_on_pick_color`), `biochemeleon/wizard.py` (PickWizard). None of these can be exercised in WSL — Qt needs a real display.
-- Files: `biochemeleon/__init__.py`, `biochemeleon/gui_setup.py`, `biochemeleon/gui_game.py`, `biochemeleon/wizard.py`.
-- Risk: Regressions in GUI/Qt code may not be caught until a human runs the Windows smoke test. Per `.planning/STATE.md:14` + `AGENTS.md:23`: "Qt/GUI smoke tests remain human-verify checkpoints." Several Phase 4/5/6/7/10 bugs (e.g. `c68a1a4` do_select routing, `9ec0c16` win-loop bugs, `01c48f6` win-display bugs, `c9c2169` hint color persistence + backup corruption) were caught ONLY at the human-verify checkpoint — headless smoke structurally cannot catch color-persistence / modal-timing / wizard-lifecycle / button-mode bugs.
-- Priority: HIGH — but inherent to the WSL/Windows split. Mitigation: every GUI-touching plan ends with a `checkpoint:human-verify` plan (Pattern: Phase 4 04-06, Phase 5 05-05, Phase 6 06-03, Phase 7 07-03, Phase 10 10-09).
+**The 17.2-12 GUI checkpoint is PENDING — the phase's last unverified surface:**
+- What's not tested: real-Tk rendering of cartoon-family bumps (blend verdicts a-g in `17.2-12-SUMMARY.md`), real-mouse C-side pick delivery on cartoon geometry, and the open CA vs N/C/O/CB pick-target question (the PICK VERDICT log lines answer it). Text-mode smokes deliberately do NOT claim real-mouse firing.
+- Files: `vmd/tests/rep_verify.tcl` (driver, pv_round3 + verdict logging built), `vmd/lib/pick_bridge.tcl`, `vmd/gui/game_tab.tcl`.
+- Risk: residue-tier GUI defects (blend quality, bump clickability, fallback delivery) surface only here.
+- Priority: **HIGH** — blocking Phase 17.2 closure.
 
-**cmd-coupled code verified only by headless smoke (manual staging required):**
-- What's not tested in WSL unit tests: `biochemeleon/demos.py`, `biochemeleon/backup.py`, `biochemeleon/mutation.py`, `biochemeleon/game.py` (controller wiring), `biochemeleon/persistence.py` (cmd-paths). These are cmd-coupled — `py_compile` is syntax-only, the unit tests exercise only the pure layer.
-- Files: `biochemeleon/demos.py`, `biochemeleon/backup.py`, `biochemeleon/mutation.py`, `biochemeleon/game.py`, `biochemeleon/persistence.py`.
-- Risk: Regressions in cmd-coupled code may not be caught until a headless smoke is run (which requires `bash wsl2win_cp.sh` + staging to `tmp/bioCHEMeleon/` + `cmd.exe /c C:\src\run-conda-pymol.bat -cq <script>`). The smoke tests are comprehensive (10 files: phase3..phase11 + phase4_1) but must be re-run manually after any cmd-coupled edit. Per `.planning/STATE.md:48`: "headless smoke cannot catch color-persistence bugs (count-back-to-orig passes even when colors stay wrong — the human-verify checkpoint catches what the smoke structurally cannot)."
-- Priority: MEDIUM — the headless bridge closes most of the gap, but color-state + modal-timing bugs remain human-only.
+**Residue-tier fallback picks verified only via direct `on_pick` calls:**
+- What's not tested: the C-side pick path re-targeting a bump click (N/C/O/CB) to the registered CA through the real GUI (`vmd/lib/game.tcl:513-531` `_resolve_pick`; `vmd/lib/game.tcl:584-598` on_pick fallback branch proven headlessly by direct invocation in 17.2-09/17.2-11 round D).
+- Priority: **HIGH** — same checkpoint closes it.
 
-**Color-persistence bugs structurally missed by headless smoke:**
-- What's not tested: Per `.planning/STATE.md:41` (Phase 6 06-03 bug 3): "hint orange color persists after cleanup + ROOT CAUSE backup corruption — cleanup() originally did sentinel-remove + verify + discard but did NOT restore hint()-colored real neighbor atoms to original colors. ROOT CAUSE: hint()'s `around`/`near` selection crossed object boundaries, coloring atoms in the _bchm_backup object (coordinate-identical copy) too, corrupting the backup's colors." The headless smoke's count-back-to-orig passed even though colors were wrong. The human-verify checkpoint caught it.
-- Files: `biochemeleon/game.py` (`hint()`, `cleanup()`), `biochemeleon/backup.py` (`restore`).
-- Risk: Any future code that colors real atoms (hint, reveal, found-recolor) + then relies on cleanup to restore colors could regress the same bug class if the selection crosses object boundaries. The fix pattern: `hint()` selection ends with `and <target_obj>` to restrict to target object only; cleanup via `backup.restore` (delete+create two-step) restores atom count AND original colors in one step.
-- Priority: MEDIUM — mitigation is in place (`hint_sele` helper scopes to target; `cleanup()` calls `backup.restore`), but the structural gap remains: headless smoke cannot catch color-state regressions.
+**GUI/Tk widgets and timers (standing structural gap, unchanged from v1):**
+- What's not tested: `vmd/gui/setup_tab.tcl` (19 procs), `vmd/gui/game_tab.tcl` (countdown/timer `after` chains, win box), `vmd/gui/dialog.tcl` (on_start/on_close). Headless smokes cover the loading layer only; widget behavior is human-verify.
+- Priority: **MEDIUM** — inherent to the WSL/Windows split; mitigated by the checkpoint pattern.
 
-**Headless smoke coverage of post-win cleanup-on-imported paths:**
-- What's not tested by early smokes: Per `.planning/STATE.md:180` (Phase 8 08-05): "The bug: cleanup() discards the post-import backup (backup.discard + _backup_name=None); subsequent Cleanup-on-imported or Restart-on-imported does `cmd.delete(target) + cmd.create(target, None)` — the create fails on a None/absent backup, leaving the target DELETED (empty scene)." The early smoke tested Restart/Cleanup-on-imported mid-game (backup intact) but NOT post-win (backup discarded), so the bug slipped to human-verify. Fix: `if not getattr(self._controller, '_is_imported', False): self._controller.cleanup()` in `_finish_win`.
-- Files: `biochemeleon/gui_game.py` (`_finish_win`, `_finish_debrief` cleanup gate).
-- Risk: Any future change to the cleanup-on-imported vs non-imported branching could regress the same bug class if the smoke doesn't cover the full lifecycle (start → play → WIN → cleanup/restart).
-- Priority: MEDIUM — smoke Section N now regression-tests both post-win paths (N1 win → cleanup-on-imported → count==orig; N2 win → restart-on-imported → count==orig+1). Pattern for future smokes: cover the full lifecycle, not just mid-game states.
+**2 pre-existing red smokes (standing known-reds):**
+- `vmd/smoke/phase17_dispatch_smoke.tcl` (step-8 draw-dependence) and `vmd/smoke/phase17_licorice_smoke.tcl` (P pins) — see Tech Debt. Any NEW red beyond these two is attributable to new changes (full-suite green baseline: `17.2-11`).
+- Priority: **MEDIUM** — recipes recorded; fix in the gap-closure plan.
+
+**Large-molecule paths never exercised in v2:**
+- What's not tested: generator/mutate performance and correctness on 10k+ atom structures (per-candidate selection loops, `%8.3f` overflow guards near |9999|, combined-PDB write time).
+- Files: `vmd/lib/mutation.tcl`, `vmd/lib/generators.tcl`, `vmd/lib/splice.tcl` (max_coord guard).
+- Priority: **LOW** until Phase 21 makes fetched demos playable.
 
 ---
 
-*Concerns audit: 2026-08-18 (v1 complete + verified; no open bugs; concerns describe fragility surface for maintenance + v2)*
+*Concerns audit: 2026-09-08 (v2 Phase 17.2 built + headless-green, GUI checkpoint pending; supersedes the 2026-08-18 v1-scoped audit — v1 items are archived with the shipped milestone, only standing process gates retained here)*

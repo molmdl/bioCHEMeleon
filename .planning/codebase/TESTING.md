@@ -1,382 +1,282 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-08-18
-
-## Test Framework
-
-**Runner:**
-- Python stdlib `unittest` (NO pytest, NO external test deps — `spec.md` forbids unapproved libs; `unittest` ships with Python 3.6.9).
-- No config file (`unittest` uses CLI args + the `tests/` package layout).
-
-**Assertion Library:**
-- `unittest.TestCase` methods (`assertEqual`, `assertNotEqual`, `assertIn`, `assertIsNone`, `assertIsNotNone`, `assertRaises`, `assertGreater`, `assertGreaterEqual`, `assertLess`, `assertLessEqual`, `assertIsInstance`, `assertAlmostEqual`, `assertTrue`, `assertFalse`, `assertNotIsInstance`).
-- `unittest.mock.MagicMock` (stdlib) for the `pymol`/`pymol.Qt` stub + callback verification.
-
-**Run Commands (from repo root):**
-```bash
-# All tests (discovers tests/test_*.py):
-python3.6 -m unittest discover -s tests -v          # 334 tests, ~0.06s
-
-# Single module (the AGENTS.md-cited command + one per module):
-python3.6 -m unittest tests.test_setup_state -v     # 125 tests
-python3.6 -m unittest tests.test_registry -v        # 102 tests
-python3.6 -m unittest tests.test_persistence -v     # 37 tests
-python3.6 -m unittest tests.test_generators -v      # 35 tests
-python3.6 -m unittest tests.test_game_controller -v # 35 tests
-
-# As a script (each test file ends with):
-#   if __name__ == '__main__':
-#       unittest.main(verbosity=2)
-python3.6 tests/test_setup_state.py
-
-# Syntax check (NOT imports — py_compile passes for cmd-coupled modules
-# even in WSL where `from pymol import cmd` would fail at import time):
-python3.6 -m py_compile biochemeleon/*.py
-```
-
-**Test count note:** `AGENTS.md` says "48 tests, currently green" — that count predates Phases 3–11. The current suite is **334 tests across 5 modules** (verified 2026-08-18: `Ran 334 tests in 0.063s OK`). Per-module: `test_setup_state.py`=125, `test_registry.py`=102, `test_persistence.py`=37, `test_generators.py`=35, `test_game_controller.py`=35.
-
-## Test File Organization
-
-**Location:**
-- Separate `tests/` directory at repo root (NOT co-located with source). Layout:
-  ```
-  tests/
-  ├── __init__.py                  # empty (makes tests/ a package)
-  ├── test_setup_state.py          # ↔ biochemeleon/setup_state.py (pure)
-  ├── test_registry.py             # ↔ biochemeleon/registry.py (pure)
-  ├── test_generators.py           # ↔ biochemeleon/generators.py (pure)
-  ├── test_persistence.py          # ↔ biochemeleon/persistence.py (pure)
-  └── test_game_controller.py      # ↔ biochemeleon/game.py (cmd-coupled, logic-only)
-  ```
-
-**Naming:**
-- `test_<module_under_test>.py` — mirrors the module. One test file per source module.
-- Test classes: `Test<Feature>` (e.g. `TestHiderRecord`, `TestHiderRegistryCore`, `TestBuildBcmDict`, `TestOnPickFragment`).
-- Test methods: `test_<behavior>` (e.g. `test_zero_atoms`, `test_idempotent_on_valid`, `test_reconstruct_clears_existing`, `test_fragment_real_trace_miss`).
-
-**Structure:**
-- Each test file opens with a module docstring stating: what it tests, the purity tier, the stub-pattern pointer (lines referencing `test_setup_state.py:13-15` / `test_registry.py:19-21`), and the run command. See `tests/test_registry.py:1-11`, `tests/test_generators.py:1-17`, `tests/test_persistence.py:1-11`.
-- Each file ends with `if __name__ == '__main__': unittest.main(verbosity=2)`.
-
-## The MagicMock Stub Pattern (CRITICAL — required for every WSL-runnable test file)
-
-`biochemeleon/__init__.py` does `from pymol.Qt import QtCore, QtGui, QtWidgets` and `from pymol import cmd` at MODULE LEVEL (line 156-157). So importing ANY `biochemeleon.*` module triggers `__init__.py`, which fails in WSL (no PyMOL installed). The fix: stub `pymol` + `pymol.Qt` via `sys.modules` BEFORE importing `biochemeleon.*`.
-
-**The canonical pattern (copy verbatim into every new WSL test file):**
-```python
-import os
-import sys
-import unittest
-from unittest.mock import MagicMock
-
-# Stub pymol so importing biochemeleon.* (whose __init__.py does
-# `from pymol.Qt import ...`) doesn't fail in WSL without PyMOL.
-if 'pymol' not in sys.modules:
-    sys.modules['pymol'] = MagicMock()
-    sys.modules['pymol.Qt'] = MagicMock()
-
-# Ensure repo root is on sys.path when run as a script
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-from biochemeleon.<module> import <names>
-```
-
-**Where it appears:** `tests/test_setup_state.py:13-15` (the origin, cited by AGENTS.md), `tests/test_registry.py:19-21`, `tests/test_generators.py:26-28`, `tests/test_persistence.py:24-26`, `tests/test_game_controller.py:24-26`.
-
-**Why:** PyMOL is not importable in WSL `python3.6` (it lives in the Windows conda env). The stub puts a `MagicMock` in `sys.modules['pymol']` and `sys.modules['pymol.Qt']` so `from pymol.Qt import ...` resolves to mock objects (attribute access returns more mocks — no `ImportError`). The `if 'pymol' not in sys.modules` guard is defensive: if a real PyMOL is present (Windows), don't clobber it.
-
-**Keep this stub pattern when adding WSL-runnable tests.** It is the load-bearing trick that makes the pure layer + game.py-logic testable from WSL.
-
-## What's WSL-Testable vs. What's NOT
-
-This split is the central testing constraint. It follows the purity tiers in `CONVENTIONS.md`.
-
-**WSL-runnable unit tests (pure layer — NO `from pymol`):**
-- `biochemeleon/setup_state.py` → `tests/test_setup_state.py` (125 tests).
-- `biochemeleon/registry.py` → `tests/test_registry.py` (102 tests).
-- `biochemeleon/generators.py` → `tests/test_generators.py` (35 tests).
-- `biochemeleon/persistence.py` → `tests/test_persistence.py` (37 tests).
-- `biochemeleon/game.py` → `tests/test_game_controller.py` (35 tests) — see "Testing cmd-coupled logic via mocked cmd" below.
-
-**NOT WSL-runnable (cmd-coupled at runtime OR Qt — verified by smoke tests / human checkpoints):**
-- `biochemeleon/demos.py`, `biochemeleon/backup.py`, `biochemeleon/mutation.py`, `biochemeleon/wizard.py` — `from pymol import cmd` at runtime; `py_compile` passes (syntax only) but importing runs PyMOL code.
-- `biochemeleon/__init__.py`, `biochemeleon/gui_setup.py`, `biochemeleon/gui_game.py` — `from pymol.Qt import ...`; need a real display.
-- Verified instead by headless smoke tests (`smoke/phase<N>_smoke.py`) run via Windows PyMOL, or human-verify checkpoints for GUI/Qt paths.
-
-## Testing cmd-Coupled Logic via Mocked cmd (`test_game_controller.py`)
-
-`biochemeleon/game.py` has `from pymol import cmd` at module top, but the sys.modules stub makes `cmd` a `MagicMock`. The tests exercise the play-loop LOGIC (on_pick / win / hint / reveal / _remaining / _mark_found) WITHOUT calling `start()` (which needs real `cmd.identify` returning a real id list).
-
-**The pattern:**
-```python
-from biochemeleon import game
-from biochemeleon.game import GameController
-from biochemeleon.registry import HIDER_STATUS_HIDDEN, HIDER_STATUS_FOUND
-
-class TestGameControllerOnPick(unittest.TestCase):
-    def setUp(self):
-        """Build a fresh GameController with a clean mock cmd history."""
-        self.gc = GameController('1ubq')
-        # Reset mock cmd call history (shared via sys.modules) so call_count
-        # assertions are isolated per test.
-        game.cmd.reset_mock()
-
-    def test_found(self):
-        self.gc.registry.register('1ubq', 100, 'spheres')   # MANUALLY populate
-        log = MagicMock(); rem = MagicMock(); win_cb = MagicMock()
-        self.gc.set_callbacks(log, rem, win_cb)
-        self.gc._start_time = 1000.0
-
-        self.gc.on_pick(100)                                  # exercise logic
-
-        rec = self.gc.registry.get('1ubq', 100)
-        self.assertEqual(rec.status, HIDER_STATUS_FOUND)
-        game.cmd.color.assert_called_once_with('green', "1ubq and id 100")
-        rem.assert_called_once_with(0)
-        win_cb.assert_called_once()
-```
-
-**Key rules (from `tests/test_game_controller.py:1-16` docstring):**
-- Construct `GameController('1ubq')` WITHOUT calling `start()` — `start()` needs real `cmd.identify` (the mock returns a `MagicMock` that fails `assert len(ids) == 1` in `mutation`).
-- MANUALLY populate the registry via `self.gc.registry.register(obj, id, rep, ...)`.
-- `game.cmd.reset_mock()` in `setUp` isolates `call_count` assertions per test (the mock is shared via `sys.modules`).
-- `game.cmd.count_atoms.return_value = 5` when a test needs the `> 0` gate to pass (a `MagicMock` default returns `NotImplemented` for `>`, breaking the gate). See `tests/test_game_controller.py:514`.
-- Inspect `game.cmd.color.call_args[0][0]` / `[0][1]` to assert the color + selection string (NOT just `assert_called_once`).
-
-## Test Structure
-
-**Suite Organization (real pattern from `tests/test_registry.py`):**
-```python
-class TestHiderRegistryQueries(unittest.TestCase):
-    """Test HiderRegistry by_rep / counts_by_rep / mark_found queries.
-
-    These are the per-rep counting + status-update methods needed for
-    success criterion 3 (per-rep counts) and Phase 4's click-to-find
-    handler (mark_found). Pure functions over the registry's in-memory
-    records.
-    """
-
-    def setUp(self):
-        """Build a registry with 3 hiders across 2 reps.
-
-        Fixture: ('1ubq', 1, 'spheres'), ('1ubq', 2, 'sticks'),
-                 ('1ubq', 3, 'spheres')
-        Keep direct references for insertion-order + status assertions.
-        """
-        self.reg = HiderRegistry()
-        self.r1 = self.reg.register('1ubq', 1, 'spheres')
-        self.r2 = self.reg.register('1ubq', 2, 'sticks')
-        self.r3 = self.reg.register('1ubq', 3, 'spheres')
-
-    def test_by_rep_returns_matching(self):
-        """by_rep('spheres') returns [r1, r3] in insertion order."""
-        out = self.reg.by_rep('spheres')
-        self.assertEqual(out, [self.r1, self.r3])
-```
-
-**Patterns:**
-- **Setup:** `setUp` builds a fresh `HiderRegistry()` / `GameController('1ubq')` per test; no shared state. Class docstring states the fixture; `setUp` docstring lists the exact records. See `tests/test_registry.py:299-310`, `tests/test_game_controller.py:45-51`.
-- **Teardown:** Rare — `addCleanup(shutil.rmtree, tmpdir, True)` in the `.bcmz` tempfile tests (`tests/test_persistence.py:368, 378`). No `tearDown` otherwise.
-- **subTest for parametric cases:** `for bad in ('', 'surface', 'mesh', 'dots', 'Spheres', 'LINES'): with self.subTest(rep=bad): with self.assertRaises(ValueError): HiderRecord(1, '1ubq', bad)` — see `tests/test_registry.py:66-70`. Also `for rep in GAME_REPS: with self.subTest(rep=rep): ...` (`tests/test_registry.py:74-77`, `:340-342`).
-- **Assertion messages:** `msg=` kwarg for non-obvious assertions — `self.assertEqual(..., msg="Entry %r has wrong keys: %r" % (did, set(entry.keys())))` (`tests/test_setup_state.py:124-125`). Critical for debugging the 100-seed loops.
-- **Seed-based determinism:** pure generators take a `seed` param; tests assert `seed=42` equals `seed=42` and differs from `seed=99` (`tests/test_generators.py:67-79`). `randomize_state(seed=...)` is deterministic; tests use `for seed in range(100):` to probe distribution (`tests/test_setup_state.py:450-478`).
-
-## Mocking
-
-**Framework:** `unittest.mock.MagicMock` (stdlib). No `unittest.mock.patch` decorator usage — stubs are set up imperatively at module load (the `sys.modules` pattern) and in `setUp`.
-
-**Patterns:**
-
-```python
-# (1) Module-level pymol stub (the load-bearing pattern — see above):
-if 'pymol' not in sys.modules:
-    sys.modules['pymol'] = MagicMock()
-    sys.modules['pymol.Qt'] = MagicMock()
-
-# (2) Callback mocks per-test:
-log = MagicMock()
-rem = MagicMock()
-win_cb = MagicMock()
-self.gc.set_callbacks(log, rem, win_cb)
-self.gc.on_pick(100)
-log.assert_called_once_with("Found one!")
-rem.assert_called_once_with(0)
-win_cb.assert_called_once()
-
-# (3) Mocked cmd return value + call-arg inspection:
-game.cmd.count_atoms.return_value = 5            # gate `> 0` passes
-game.cmd.color.assert_called_once_with('green', "1ubq and id 100")
-sele = game.cmd.color.call_args[0][1]
-self.assertIn('segi GAME and resi 3-3', sele)
-self.assertNotIn('id 100', sele)
-
-# (4) MockController stand-in for persistence tests (avoids real GameController):
-class MockController(object):
-    def __init__(self, target_obj='1ubq', started=True, reveal_count=1,
-                 hint_count=2, found_color='green', start_time=None):
-        self.target_obj = target_obj
-        self.registry = HiderRegistry()
-        self._started = started
-        self._reveal_count = reveal_count
-        # ... only the attrs build_bcm_dict reads
-```
-
-**What to Mock:**
-- `pymol` + `pymol.Qt` (always, in every test file — via `sys.modules`).
-- GUI callbacks (`on_log`, `on_remaining_changed`, `on_win`, `on_counts_changed`) — pass `MagicMock()` and assert call args.
-- `cmd.color`, `cmd.count_atoms`, `cmd.delete`, `cmd.create` — inspected via `game.cmd.<method>.call_args` / `.assert_called_once_with(...)`. Set `return_value` when the code reads a return (e.g. `count_atoms`).
-
-**What NOT to Mock:**
-- `HiderRegistry` / `HiderRecord` — these are the pure unit under test; instantiate them for real and assert their state.
-- `setup_state` constants (`GAME_REPS`, `DEMO_MANIFEST`, `DEFAULTS`) — import and assert against the real values (these ARE the contracts).
-- `persistence` functions (`build_bcm_dict`, `parse_bcm_dict`, `apply_bcm_dict`, `write_bcmz`, `read_bcmz`) — exercise them for real with a `MockController` + tempfile.
-
-## Fixtures and Factories
-
-**Test Data:**
-- No shared fixtures file. Each test class builds state inline in `setUp` or per-method. Fixtures are small and explicit (e.g. 3 records across 2 reps).
-- Helper methods for repeated construction:
-  ```python
-  # tests/test_registry.py: TestReconcileFromBcm._rebuilt
-  def _rebuilt(self, keys=None):
-      """Build a sentinel-rebuilt registry with the given (object, id) keys.
-      Defaults to [('o', 1), ('o', 2), ('o', 3)] — the canonical 3-sentinel
-      fixture mirroring the plan's behavior spec."""
-      if keys is None:
-          keys = [('o', 1), ('o', 2), ('o', 3)]
-      reg = HiderRegistry()
-      reg.reconstruct_from_sentinels(lambda: keys)
-      return reg
-
-  # tests/test_game_controller.py: TestOnPickFragment._register_fragment
-  def _register_fragment(self, hider_id=100, endpoint_resvs=(...), ...):
-      return self.gc.registry.register(obj, hider_id, rep, status=status,
-                                       endpoint_resvs=endpoint_resvs)
-  ```
-- The `MockController` class (`tests/test_persistence.py:43-60`) is the closest thing to a factory — a minimal stand-in for `GameController` with only the attrs `build_bcm_dict` reads. Lives in the test file (not a separate `conftest`/`fixtures` module).
-- `_sample_setup()` (`tests/test_persistence.py:63-71`) returns a representative `gui_setup.collect_state()` dict.
-
-**Location:**
-- All fixtures/helpers live IN the test files (no `tests/conftest.py`, no `tests/fixtures/`). Keeps each test file self-contained.
-
-## Coverage
-
-**Requirements:** None enforced numerically (no `coverage.py`, no CI threshold). Coverage is STRUCTURAL by module tier:
-- Pure layer (`setup_state`, `registry`, `generators`, `persistence`): high unit-test coverage — every public function + class has tests; edge cases (empty/None/zero/bounds) are explicitly probed.
-- `game.py` logic (on_pick / win / hint / reveal / _remaining / _mark_found / counters / cleanup-reset): covered by `test_game_controller.py` via mocked cmd.
-- `game.py` cmd paths (`start`, `import_state`), `backup.py`, `mutation.py`, `demos.py`, `wizard.py`: covered by headless smoke tests (Windows), NOT WSL unit tests.
-- GUI (`__init__.py`, `gui_setup.py`, `gui_game.py`): human-verify checkpoints (the Qt paths can't run in WSL).
-
-**View Coverage:**
-```bash
-# (Not configured — no coverage.py in the stack. If added later:)
-python3.6 -m coverage run -m unittest discover -s tests
-python3.6 -m coverage report -m
-```
-
-## Test Types
-
-**Unit Tests:**
-- The 334-test WSL suite. Scope: one pure function / class method at a time. Examples: `test_zero_atoms` (one `hider_count_cap` call), `test_reconstruct_clears_existing` (one `reconstruct_from_sentinels` call). Fast (0.06s total).
-
-**Integration Tests (WSL-tier):**
-- Round-trip tests that chain multiple units WITHOUT PyMOL:
-  - `tests/test_persistence.py::TestBcmRoundTrip` — `build_bcm_dict` → JSON dumps → `parse_bcm_dict` → assert scalars preserved.
-  - `tests/test_persistence.py::TestBuildApplyRoundTrip` — `build_bcm_dict` (ctrl1) → `reconstruct_from_sentinels` (ctrl2) → `apply_bcm_dict` (ctrl2) → assert ctrl2 state + registry records match ctrl1.
-  - `tests/test_registry.py::TestReconcileFromBcm::test_round_trip_to_dict_reconstruct_reconcile` — register → `to_dict` → `reconstruct_from_sentinels` (fake) → `reconcile_with_bcm(to_dict['hiders'])` → records match.
-  - `tests/test_game_controller.py` — `GameController` + `HiderRegistry` + mocked `cmd` exercising the play loop end-to-end (miss / found / already-found / win / hint / reveal).
-
-**Smoke Tests (NOT in `tests/` — in `smoke/`):**
-- Headless PyMOL scripts run via Windows PyMOL: `smoke/phase<N>_smoke.py` (phase3, phase4, phase4_1, phase5, phase6, phase7, phase8, phase9, phase10, phase11) + `smoke/diag_<topic>.py` diagnostics + `smoke/verify_<topic>.py` verification.
-- Run pattern (from `AGENTS.md` Environment):
-  ```bash
-  bash wsl2win_cp.sh                          # stage biochemeleon/ -> tmp/bioCHEMeleon/
-  mkdir -p tmp/bioCHEMeleon/smoke && cp smoke/phase3_smoke.py tmp/bioCHEMeleon/smoke/
-  cd tmp/bioCHEMeleon && timeout 90 cmd.exe /c "C:\\src\\run-conda-pymol.bat -cq smoke\\phase3_smoke.py" 2>&1 | tail -50
-  # exit 0 = clean; nonzero = crash.
-  ```
-- These verify the cmd-coupled layer at the real PyMOL 2.5.0 runtime tier (the WSL unit tests cannot). The Phase 3 smoke (`smoke/phase3_smoke.py`) is the canonical "ALL PASSED, exit 0" reference and resolved the research UNVERIFIED flags (see `.planning/research/PITFALLS.md` "Phase 3 — Resolved Research Flags").
-
-**E2E / GUI Tests:**
-- Not automated. GUI/Qt paths (`pymol.Qt.*` at runtime) need a real display — a WSL agent cannot run them. They are human-verify checkpoints (the developer opens the plugin via `setenv.bat` → `pymol` and walks the Setup/Game tabs).
-
-## Common Patterns
-
-**Async Testing (N/A):**
-- No async/await in the codebase. The async large-demo fetch (`_resolve_large_demo` in `__init__.py`) uses a `threading.Thread` worker + `QTimer.singleShot` drain — tested only via the human-verify / smoke path, NOT WSL unit tests (it's Qt+cmd-coupled).
-
-**Error Testing:**
-```python
-# ValueError for invalid rep (caller bug):
-with self.assertRaises(ValueError):
-    HiderRecord(1, '1ubq', 'surface')
-
-# KeyError for duplicate (object, id):
-with self.assertRaises(KeyError):
-    reg.register('1ubq', 1, 'spheres')
-    reg.register('1ubq', 1, 'sticks')
-
-# AttributeError from __slots__ (unknown attribute):
-with self.assertRaises(AttributeError):
-    rec.unknown_field = 42
-
-# ValueError from persistence parse (wrong magic / unsupported version):
-with self.assertRaises(ValueError):
-    parse_bcm_dict(json.dumps({'magic': 'OTHER', 'version': 1}))
-with self.assertRaises(ValueError):
-    parse_bcm_dict('not json')
-```
-
-**Backward-Compat Testing (a recurring theme — Phase 11 added alt-conf fields):**
-```python
-# A Phase 8 sidecar (no alt-conf fields) loads on Phase 11 code with defaults:
-d = {'version': 1, 'hiders': [
-    {'id': 100, 'object': '1ubq', 'rep': 'spheres', 'status': 'hidden'}]}
-reg = HiderRegistry.from_dict(d)
-rec = reg.get('1ubq', 100)
-self.assertFalse(rec.is_altconf)        # default
-self.assertIsNone(rec.endpoint_resvs)   # default
-self.assertEqual(rec.alt_tag, '')       # default
-
-# to_dict omits defaults (compact sidecar; backward-compatible):
-rec = HiderRecord(100, '1ubq', 'spheres')
-d = rec.to_dict()
-self.assertNotIn('is_altconf', d)
-self.assertNotIn('endpoint_resvs', d)
-self.assertNotIn('alt_tag', d)
-```
-
-**No-version-bump contract (Phase 11):**
-```python
-# build_bcm_dict always emits version == 1 for BOTH alt-conf and non-alt-conf:
-mc_alt = MockController()
-mc_alt.registry.register('1ubq', 100, 'cartoon', is_altconf=True,
-                         endpoint_resvs=(2, 4), alt_tag='B')
-d_alt = build_bcm_dict(mc_alt, _sample_setup(), 'checkpoint')
-self.assertEqual(d_alt['version'], 1)   # NO version bump (research §8)
-```
-
-**List ↔ Tuple Coercion (JSON has no tuples):**
-```python
-# endpoint_resvs serializes as a list; reconcile coerces back to a tuple
-# so `rv1 < resv < rv2` works (lists fail `<` in py3):
-d2 = parse_bcm_dict(json.dumps(d))
-self.assertEqual(d2['registry']['hiders'][0]['endpoint_resvs'], [2, 4])  # list
-self.assertIsInstance(d2['registry']['hiders'][0]['endpoint_resvs'], list)
-apply_bcm_dict(mc2, d2)
-rec = mc2.registry.get('1ubq', 100)
-self.assertIsInstance(rec.endpoint_resvs, tuple)   # coerced
-self.assertEqual(rec.endpoint_resvs, (2, 4))
-```
-
-**When adding a new test file:**
-1. Copy the MagicMock stub block (the 3-line `sys.modules['pymol']` / `['pymol.Qt']` guard + `sys.path.insert`).
-2. Add a module docstring stating the purity tier, the stub-pattern pointer (cite the line numbers in `test_setup_state.py` / `test_registry.py`), and the run command.
-3. One `Test<Feature>` class per logical group; `setUp` for shared fixture; `test_<behavior>` methods with behavior-stating docstrings.
-4. End with `if __name__ == '__main__': unittest.main(verbosity=2)`.
-5. Add the file to the "per-module" run commands list above.
+**Analysis Date:** 2026-09-08 (supersedes 2026-08-22 version — Phases 16, 17.1, 17.2 of the v2 VMD port landed since)
+
+## Two Test Stacks
+
+| | v1 PyMOL (SHIPPED) | v2 VMD (ACTIVE) |
+|---|---|---|
+| Framework | Python 3.6 `unittest` | `tcltest` under **headless VMD** |
+| Location | `pymol/tests/` (5 files) | `vmd/tests/` (6 `.test` files) + `vmd/smoke/` (31 `.tcl` files) |
+| Count | **346 tests, all green** (`Ran 346 tests in 0.078s OK`, verified 2026-09-08) | **205 suite tests** + 31 smokes (29 green, 2 known draw-dependent flakes) |
+| GUI | human-verify checkpoints | human-verify checkpoints (Tk auto-driver) |
 
 ---
 
-*Testing analysis: 2026-08-18*
+# PART A — v2 VMD Testing — ACTIVE
+
+## Test Framework
+
+**Runner: headless VMD — NOT tclsh.**
+
+> **`tclsh` is NOT available in this WSL session** (verified 2026-09-08: `command not found`; only the `libtcl8.6` shared library is installed, no shell binary). The stale "tclsh is available in WSL" statement in `vmd/AGENTS.md` Commands section no longer holds. EVERY test and smoke runs under `vmd -dispdev text -e`. Suite files may still carry an "or standalone tclsh if installed" comment line (e.g. `vmd/tests/test_setup_state.test:4`) — ignore it; use the VMD runner.
+
+- Tcl 8.5.6 inside VMD 1.9.3 (Windows build; WSL alias `vmd` → `vmd.exe`).
+- `tcltest` ships inside VMD's Tcl (`package require tcltest` works under `-dispdev text`).
+- No config file; conventions live in the file headers and `.planning/phases/` plan docs.
+
+**Run commands (the canonical forms):**
+
+```bash
+# 0. ONE-TIME staging (repo root) — VMD needs a Windows-visible copy:
+mkdir -p tmp/biochemeleon-vmd && cp -r vmd tmp/biochemeleon-vmd/
+
+# 1. A single tcltest suite (headless VMD, from the staging root):
+bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/tests/test_setup_state.test -eofexit < /dev/null'
+
+# 2. A smoke (usually with a timeout + grep of the essentials):
+timeout 300 bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/smoke/phase17_splice_smoke.tcl -eofexit < /dev/null' 2>&1 | grep -E "BCHM_SMOKE_RESULT|ERROR\)|bad switch"
+
+# 3. tcl syntax check of a lib file (load with no error — pure files only):
+#    no tclsh available — use a headless VMD one-liner or the suite run itself.
+```
+
+Rules baked into those commands:
+- `bash -ic` loads the WSL alias; `< /dev/null` prevents the console hang; run from a `/mnt/c/...` cwd (Windows VMD cannot resolve WSL-external paths; the staging copy under `tmp/` IS Windows-visible).
+- `-eofexit` makes VMD exit at stdin EOF.
+- **Suite runs must be SEQUENTIAL** — mutation's shared `$env(TEMP)/biochemeleon_game.pdb` forbids parallel VMD instances (17.1-13 gate protocol note, `.planning/STATE.md:149`).
+
+## Marker Parsing (NEVER trust exit codes)
+
+VMD does NOT propagate tcl exit codes (`$?` is always 0) and `vmd -e` **catches top-level errors and CONTINUES** (possible false-PASS). Every suite/smoke therefore prints a machine-parseable marker line, and the harness scans the FULL log:
+
+- Suites: `BCHM_TEST_RESULT Total=<n> Passed=<n> Failed=<n> Skipped=<n>` (`vmd/tests/test_setup_state.test:314-318`).
+- Smokes: `BCHM_SMOKE_RESULT PASS=1 FAIL=none` or `PASS=0 FAIL=<comma-list>` (`vmd/smoke/phase13_smoke.tcl:51-53` through `phase17_e2e_smoke.tcl:810-815` — identical harness in all 31 files).
+
+**False-PASS detection — scan for `bad switch` IN ADDITION to `ERROR)`:**
+```bash
+... 2>&1 | grep -E "BCHM_SMOKE_RESULT|ERROR\)|bad switch"
+```
+A clean run shows exactly one marker line, zero `ERROR)`, zero `bad switch`, and ends with `Exiting normally`. The `bad switch` scan exists because VMD/Tk error paths can print switch-usage errors without an `ERROR)` prefix. Every phase-17 smoke header documents this ("the regexp -- false-PASS lesson", e.g. `vmd/smoke/phase17_capstone_smoke.tcl:103-106`).
+
+**`regexp --` corollary:** any log-scanning regexp whose pattern starts with `-` MUST use `regexp --` (`vmd/smoke/phase15_mutation_smoke.tcl:88`, `phase17_cpk_smoke.tcl:163-166`).
+
+## Test File Organization
+
+**Suites — `vmd/tests/test_<module>.test`** (one per PURE lib module; mol-coupled code is NEVER tcltest-tested):
+
+| Suite | Tests | Covers |
+|---|---|---|
+| `vmd/tests/test_setup_state.test` | 47 | setup schema, validate_state clamps, randomize_per_rep/state, format_remaining |
+| `vmd/tests/test_registry.test` | 37 | registry records, DI reconstruction, resid-block API (17.2-02) |
+| `vmd/tests/test_generators.test` | 26 | sphere/bonded placement geometry |
+| `vmd/tests/test_rep_tiers.test` | 49 | tier dispatch, kind/style_args, resolve_per_rep (widened 17.2-03) |
+| `vmd/tests/test_game_logic.test` | 15 | state machine, countdown, drift-free timer, log model |
+| `vmd/tests/test_splice.test` | 31 | residue-splice geometry (17.2-01) |
+| **Total** | **205** | 6/6 Failed=0 at the 17.2-11 full-suite gate |
+
+**Smokes — `vmd/smoke/phase<N>_<topic>_smoke.tcl`** (31 files, phase-prefixed: 1 phase13, 2 phase14, 4 phase15, 8 phase16, 16 phase17). Smokes verify the mol-coupled layer at the real VMD 1.9.3 runtime tier. Current full-suite gate: **29/31 PASS=1** (the 2 flakes below).
+
+**GUI drivers — `vmd/tests/<topic>_verify.tcl`** (Tk-gated, no `.test` suffix, no marker — NOT part of the headless gate; their load-gate skip is exercised inside `phase16_pick_smoke`).
+
+## Suite Structure (copy this skeleton)
+
+From `vmd/tests/test_setup_state.test` (the pattern all 6 follow):
+
+```tcl
+# vmd/tests/test_<module>.test
+# tcltest suite for the pure-layer <module> module.
+# Run under headless VMD: bash -ic 'cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/tests/test_<module>.test -eofexit < /dev/null'
+
+package require tcltest
+namespace import ::tcltest::*
+configure -verbose {start pass body error}
+
+# Source the pure layer. Under `vmd -e`, [info script] is EMPTY (the probe
+# verified this), so use [pwd] (VMD cwd = the staging root) to locate files.
+source [file join [pwd] vmd lib <module>.tcl]
+
+# --- optional pure test helpers (e.g. vec_close in test_splice.test) ---
+
+test <behavior_name> {} -body {
+    ::biochemeleon::<module>::<proc> <args>
+} -result <exact>
+
+# CRITICAL: read numTests BEFORE cleanupTests (cleanupTests resets the array).
+# Print the machine-parseable marker — VMD does NOT propagate tcl exit codes.
+set total $::tcltest::numTests(Total)
+set passed $::tcltest::numTests(Passed)
+set failed $::tcltest::numTests(Failed)
+set skipped $::tcltest::numTests(Skipped)
+puts "BCHM_TEST_RESULT Total=$total Passed=$passed Failed=$failed Skipped=$skipped"
+cleanupTests
+```
+
+Patterns:
+- Test names are behavior sentences in snake_case: `validate_state_clamps_hider_count_to_cap`, `block_survives_reconstruct`, `randomize_per_rep_seed_determinism`.
+- `-result` asserts EXACT values (strings/lists/numbers) — `expr {...}` returning 1/0 for predicate tests.
+- Section banners with phase IDs separate eras of a suite: `# Phase 14: validate_state (full impl) — ~13 cases` (`test_setup_state.test:68-71`), and note which tests a later phase inverted (`test_rep_tiers.test:51-53` "inverted by 17.2-03 seam widening").
+- No explicit `exit` in suites — see suite_driver.tcl below.
+
+## Smoke Structure (copy this harness)
+
+From `vmd/smoke/phase17_e2e_smoke.tcl` (and all 31):
+
+```tcl
+set failures [list]
+proc _bail {tag msg} { upvar 1 failures f; lappend f "$tag:$msg" }
+proc _feq {a b} { ... }   ;# eps float compare
+
+# Defensive init so a failed earlier step never masks as a substitution error.
+set orig_molid -1
+set gs [list]
+
+# Source lib files in dependency order ([pwd]-relative). registry sourced
+# EXACTLY ONCE (re-sourcing would WIPE _records).
+foreach {nm path} [list \
+    setup_state [file join [pwd] vmd lib setup_state.tcl] \
+    registry    [file join [pwd] vmd lib registry.tcl] \
+    ... ] { source $path }
+
+# ... steps: per-step catch + _bail "name:exp=X got=Y" ...
+
+# ---- Report: marker + exit ----
+puts "E2E_INFO <evidence echo>"
+set nfail [llength $failures]
+if {$nfail == 0} { puts "BCHM_SMOKE_RESULT PASS=1 FAIL=none" } \
+else { puts "BCHM_SMOKE_RESULT PASS=0 FAIL=[join $failures ,]" }
+exit
+```
+
+Smoke conventions:
+- **Explicit `exit` at the end** (suites lack it — that's why the gate needs the driver wrapper).
+- **NO TEST HOOKS into lib internals for e2e smokes** — public-surface smokes drive only `game::start_game` / `game::on_pick` / `game::cleanup` + registry READ procs, and the runner GREPS the smoke for banned internal proc names (must find ZERO) — `vmd/smoke/phase17_e2e_smoke.tcl:80-86`.
+- **Source order mirrors the entry** minus GUI files: setup_state, registry, generators, game_logic, rep_tiers, demos, backup, mutation, hiders, game.
+- **Tachyon render technique** (17.1-08 template, 17.2-04 harness origin in `phase17_splice_smoke.tcl`): `axes location off` first; probe rep added LAST (highest index — deleting it never renumbers earlier reps) and deleted after each render; every OTHER rep emptied by `modselect` to a null selection (`mol showrep` is IGNORED in text mode — probe F6) and restored after; baseline-zero render (selection `index 999999`) proves the parser counts the real scene; primitive tokens (FCylinder/STri/TriStrip/Sphere) parsed with `\m` word-boundary regexes so "TriStrip" can never false-match "STri".
+- **Single-frame collapse loader:** 1znf ships 2 models — a frame-0-pinned `writepdb` round-trip precedes rounds so every coordinate read/write is deterministic frame-0 geometry (the 17.2-04 fix `c54d77c`).
+
+## The Full-Suite Gate Procedure (as executed 17.2-11)
+
+```bash
+# Fresh staging per gate run:
+mkdir -p tmp/<gate-dir> && cp -r vmd tmp/<gate-dir>/
+
+# 1. Suites — via the staging-only driver (suites have NO explicit exit):
+#    tmp/<gate-dir>/suite_driver.tcl = "source the suite by name, then exit";
+#    the suite name is sed-swapped per run.
+#    WHY: under `vmd -e ... -eofexit < /dev/null` VMD's text console HANGS
+#    past stdin EOF over the WSL->Windows pipe (first 17.2-11 suite run
+#    COMPLETED 47/47 in-log, then hung — 17.2-11-SUMMARY Rule-3 deviation).
+bash -ic 'cd tmp/<gate-dir> && vmd -dispdev text -e suite_driver.tcl -eofexit < /dev/null'
+#    Per suite: parse BCHM_TEST_RESULT (Failed=0), zero ERROR)/bad switch, clean exit.
+
+# 2. Smokes — all 31, one command each, per-file log:
+timeout 300 bash -ic 'cd tmp/<gate-dir> && vmd -dispdev text -e vmd/smoke/<name>.tcl -eofexit < /dev/null' > <log> 2>&1
+#    Per log: PASS=1 + zero ERROR) + zero "bad switch" + `Exiting normally`.
+
+# 3. Code gates (on the repo, not staging):
+grep -rnE "\blmap\b|\btry\b|\bthrow\b|\btailcall\b|\bcoroutine\b|\byield\b|\bfinally\b" vmd/lib/ vmd/gui/   # -> 0
+grep -rnE "grab set" vmd/gui/                                                                                # -> 0
+grep -rn "mol ssrecalc" vmd/lib/ | grep -v "^\S*:\s*#"                                                       # -> 0
+```
+
+**PASS=1 x3 convention:** any new or changed smoke needs 3 consecutive PASS=1 runs before "green" is declared — the runs exercise different PRNG draws (`splice-smoke-run1..25.log` at repo root shows the 17.2-04 evidence chain). All gate runs SEQUENTIAL (shared `$env(TEMP)` combined-PDB). Reference gate record: `.planning/phases/17.2-cartoon-newcartoon-generators/17.2-11-SUMMARY.md` (44 logs, 205/205 suites, 29/31 smokes).
+
+## GUI Human-Verify Checkpoints (the Tk split)
+
+Tk loads ONLY in GUI mode (`-dispdev win`) — text mode cannot render widgets or fire real picks. GUI behavior is verified by a **Tk-guarded auto-driver** the human sources in a real VMD GUI.
+
+**Canonical driver: `vmd/tests/rep_verify.tcl`** (extended by 17.2-12; modeled on `pick_verify.tcl` from 16-12, which itself stays UNREPAIRED as a Phase-16 historical artifact):
+- **Tk guard if-wrap** at file top: `if {![info exists ::tk_version]} { vmdcon -warn ...; return }` — sourcing under `-dispdev text` no-ops with ONE warn line (an if-wrap is ONE command in both source and -e evaluation) — `rep_verify.tcl:62-64`.
+- **Headless probe knob:** `set ::pv_probe 1` before sourcing defines all `pv_*` procs + resolves paths but SKIPS the GUI session (definition check without a display) — `rep_verify.tcl:631-635`.
+- **`pv_*` observer/driver procs:** `pv_log` (timestamped append to `rep_verify_log.txt` + `vmdcon -info` echo), `pv_observe` (pick observer with the `{args}` signature — a positional signature makes VMD's own write FAIL and lose the pick; every value read is catch-guarded with a `?` placeholder), `pv_observe_fallback` (17.2-12 READ-ONLY resid + `hider_for_resid` verdict logging), `pv_state` (idempotent full state dump incl. per-tier rep read-backs), `pv_round2`/`pv_round3` (lock-scene + Cartoon rounds via `validate_state` → `apply_state` → `on_start` — always the REAL GUI path), `pv_cleanup`/`pv_cleanup_check`, `pv_report`, `pv_instructions`.
+- **Paste-safety rule:** the human's whole job is pasting ONE-LINE commands (`source vmd/tests/rep_verify.tcl`, `pv_round2`, `pv_round3`, `pv_report`, `pv_cleanup`) and pressing `p` once per round (the LOCKED first-click quirk: pasted `mouse mode pick*` never arms delivery — only the hotkey dispatch path does). Everything else is auto-logged to `tmp/biochemeleon-vmd/rep_verify_log.txt` (open-append + flush per line).
+- **Session hygiene:** re-sourcing resets `::pv_finds`/`::pv_rounds` counters but the log FILE is append-only (history survives); `::pv_gs` cleanup stash refreshes per round (round-3 unsets it — stale molids would fail `pv_cleanup` harmlessly, `rep_verify.tcl:404-408`).
+
+## Mocking and Fakes
+
+**Tcl has no mock framework** — the codebase uses four hand-rolled patterns:
+
+**1. Dependency-injection fakes (pure-layer suites).** Pure procs accept command prefixes; tests inject `[list apply ...]` lambdas:
+```tcl
+# vmd/tests/test_registry.test:20 — fake sentinel iterator:
+::biochemeleon::registry::reconstruct_from_sentinels [list apply {{} { return {5 10 15} }}]
+# Bound-arg prefix (proves {*} expands multi-element command words), :69:
+[list apply {{fake_molid} { return {7 8} }} "dummy_molid"]
+```
+
+**2. Clock injection (game_logic).** `clock seconds` cannot be stubbed, so timer procs take an OPTIONAL trailing `now` argument (empty = use `[clock seconds]`); tests inject fixed epochs (epoch 1000, now 1065 → elapsed 65). Production callers never pass it — `vmd/lib/game_logic.tcl` "TEST INJECTION" block.
+
+**3. Explicit-seed PRNG discipline (Pitfall 4).** Tcl's PRNG is GLOBAL per-interpreter and state persists across tcltest cases. Every randomized call in tests passes an EXPLICIT seed, and the seeds are PROBED against this VMD binary's 8.5.6 PRNG so pinned expectations hold deterministically — `vmd/tests/test_rep_tiers.test:7-17` documents the probe table (seed 173 → sum exactly 10 as `{Tube 3 Cartoon 6 CPK 1}`; seed 42 → exactly 3; seeds 1..20 union covers all 10 GAME_REPS) and the re-probe rule ("re-probe on any binary OR DOMAIN change — 17.2-03 widened the randomize domain, which changes every draw"). Seed-determinism pairs (`seed 42` twice equal; `seed 1` vs `seed 2` different) appear in every randomized suite section.
+
+**4. Recording callbacks (smokes).** Callback targets are GLOBALS written by injected 1-arg/0-arg/2-arg procs — `::LOG_LOG` and `::WINS` are lists (lappend recorders), `::REM_TICKS` is a scalar `{incr}` (the only zero-arg-safe recorder) — `vmd/smoke/phase17_e2e_smoke.tcl:133-139`. Assertions then check `status_of`, `remaining_by_rep`, log-line text, and win_cb firing counts.
+
+**Fake domain fixtures (not "mocks" but crafted atom state):**
+- Fake resid block: hider residues at resids 9001+k (disjoint from real demo resids ≤ ~500); registry's `hider_for_resid` zips resid → the block's CA index; 9005/9999 are the miss cases (`rep_verify.tcl:244-253`, `phase17_e2e_smoke.tcl:26-27`).
+- Sentinel atoms: fake GAM atoms with CA-only `beta -999.0`, `segid GAME`, chain from the anchor (simple tiers hard-code chain G) — asserted via `atomselect "resname GAM and beta < 0"`.
+- `rt_rec` helper (`vmd/tests/test_rep_tiers.test:32-33`): builds backup-shaped `{style sel color material}` 4-element records with a fixed color/material.
+
+**What NOT to fake:** the real atomselect/`mol` layer in smokes — smokes exist precisely to exercise it at the real runtime tier. Pure-layer suites must NEVER need it (that's what DI is for).
+
+## Draw-Adaptive Assertion Pattern (17.2-10/17.2-11 convention)
+
+Generation is random; assertions must survive every draw branch:
+- **Request-side pins assert UNCONDITIONALLY** (per_rep stashed verbatim GAME_REPS-ordered, P9 `hider_count == effective_total`, dict shape).
+- **Layout pins assert OBSERVED-layout invariants** (sentinel count == registry count, resid zip `9001+i` == i-th CA in file order, 4-5 atom strides) — draw-independent at any generated count.
+- **Strict exact pins assert ONLY when the draw generated in full** (idealized atom-count formula `orig + simple×1 + residue×5` asserted "whenever the draw generated in full with every anchor carrying CB").
+- Rationale: a literal `{Cartoon 3}` pin flakes when `randomize_per_rep`'s subset contract can underspend (`c = randint(0, n)`) — documented as the 17.1-13 PLAN-DETAIL precedent and re-applied in 17.2-11 rounds D/E.
+
+## Known Flaky / Pre-Existing Red Smokes (as of 2026-09-08)
+
+Characterized in 17.2-11 (both SMOKE-side assertion defects, engine correct; zero lib changes; recorded for a gap-closure plan — do NOT treat as regressions):
+
+1. **`vmd/smoke/phase17_dispatch_smoke.tcl` step-8** (known since 17.2-03/17.2-09): failing asserts `reg2_count:exp=5 got=0` / `rbr3_sum` / `idxs2_count` — the bare 2-arg randomize draw on 1k8p (DNA) can include residue tier `Tube` → `Warning) ... could not generate -- dropped` → 0-1 generated vs the pinned 5. Draw-dependent (3/3 red in the 17.2-11 session; 2/3 earlier). Fix recipe: drop-ungeneratable-tiers + effective-total recompute + the 17.2-10 draw-adaptive rewrite.
+2. **`vmd/smoke/phase17_licorice_smoke.tcl`** (pre-existing P-pin defect): pins element VDW radius P 1.55 and P color tan `{0.5 0.5 0.31}`; VMD's actual table reads P radius 1.80 and renders `{0.5 0.5 0.2}`. Draw-dependent (2/3 red — only when a 1k8p backbone-P anchor draws; the smoke's own lines 164-168 anticipated the re-pin). Fix recipe: re-pin P radius 1.80 + the observed P color (or assert the color family).
+
+Everything else is green: 29/31 smokes PASS=1, 205/205 suite tests, all three grep gates zero (17.2-11 gate, fresh staging).
+
+## TDD Workflow (how tests get written)
+
+- **RED → GREEN → REFACTOR at plan granularity:** `test(17.2-01): add failing residue-splice geometry suite` (the suite sources a not-yet-existing module and EXPECTS the failure — `vmd/tests/test_splice.test:12-13`) → `feat(17.2-01): pure residue-splice geometry module` → follow-up `fix(17.2-04)` commits.
+- Suite count transitions are recorded in summaries (rep_tiers 32 → 49; gate 147 → 164 → 205).
+- Parallel plans commit on isolated `exec/NN-MM` worktree branches; merged in dependency order (root `AGENTS.md` protocol).
+
+---
+
+# PART B — v1 PyMOL Testing — SHIPPED (condensed)
+
+**Run commands (repo root):**
+```bash
+python3.6 -m unittest discover -s tests -v    # 346 tests, ~0.08s, all green (verified 2026-09-08)
+python3.6 -m unittest tests.test_setup_state -v   # 125
+python3.6 -m unittest tests.test_registry -v      # 102
+python3.6 -m unittest tests.test_generators -v    # 47  (grew from 35)
+python3.6 -m unittest tests.test_persistence -v   # 37
+python3.6 -m unittest tests.test_game_controller -v  # 35
+```
+
+**The MagicMock stub pattern** (the load-bearing trick — `pymol/biochemeleon/__init__.py` imports `pymol.Qt` at module level, which fails in WSL):
+```python
+if 'pymol' not in sys.modules:
+    sys.modules['pymol'] = MagicMock()
+    sys.modules['pymol.Qt'] = MagicMock()
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from biochemeleon.<module> import <names>
+```
+- Present at the top of all 5 test files in `pymol/tests/`; `game.cmd.reset_mock()` in `setUp` isolates call-count assertions; set `return_value`s when code reads returns.
+- v1 smokes (`pymol/smoke/phase<N>_smoke.py`) run via Windows PyMOL headless (`bash wsl2win_cp.sh` staging → `cmd.exe /c C:\\src\\run-conda-pymol.bat -cq smoke\\<file>.py`); GUI paths are human-verify checkpoints.
+- Error testing: `assertRaises(ValueError)` for invalid rep, `KeyError` for duplicate keys, `ValueError` for bad sidecar magic/version.
+- Determinism: pure generators take `seed`; tests assert same-seed equality / different-seed difference and probe distributions with `for seed in range(100)` loops.
+
+---
+
+## Where to Add New Tests (v2)
+
+1. **New PURE lib module** → `vmd/tests/test_<module>.test` following the suite skeleton above (marker block at the end; `[pwd]`-relative source; explicit seeds for anything randomized). Add its count to the gate table in the phase summary.
+2. **New mol-coupled behavior** → extend the relevant `vmd/smoke/phase<N>_<topic>_smoke.tcl` or add `phase<N+1>_<topic>_smoke.tcl` with the standard harness (`_bail` + marker + `exit` + full-log-scan comment); run PASS=1 x3 sequentially.
+3. **New GUI surface** → extend `vmd/tests/rep_verify.tcl` (a new `pv_*` proc + an instructions line), then declare the human-verify checkpoint in the plan; a text-mode `-e` run of the driver (or `::pv_probe 1`) must show one warn line / probe line and zero errors.
+4. **Never** run tcltest via tclsh (absent) and never trust `$?` — parse the marker, scan the full log for `ERROR)` + `bad switch`, require `Exiting normally`.
+
+---
+
+*Testing analysis: 2026-09-08*

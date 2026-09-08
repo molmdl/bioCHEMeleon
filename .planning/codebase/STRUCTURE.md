@@ -1,223 +1,210 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-08-18
+**Analysis Date:** 2026-09-08
 
 ## Directory Layout
 
 ```
-bioCHEMeleon/                      # repo root (git repo)
-├── biochemeleon/                  # the importable plugin package (12 .py modules, FLAT — no subpackages)
-│   ├── __init__.py                # COMPOSITION ROOT: __init_plugin__, PluginDialog, HELP_HTML, all button wiring
-│   ├── setup_state.py             # PURE: game config schema, GAME_REPS, DEMO_MANIFEST, PDB_POOL, validation
-│   ├── registry.py                # PURE: HiderRecord + HiderRegistry + sentinel reconstruction (DI)
-│   ├── generators.py              # PURE: hider geometry (sphere/line-stick/cartoon positions + segment pick)
-│   ├── persistence.py             # PURE: .bcm sidecar assembly + .bcmz archive I/O
-│   ├── backup.py                  # cmd: snapshot/restore/discard/verify_intact
-│   ├── mutation.py                # cmd: insert_hider/fetch_all_hider_ids/cleanup_hiders + per-rep dispatchers
-│   ├── demos.py                   # cmd: demo loader + WSL→Windows path + fetch_pdb + get_active_reps
-│   ├── wizard.py                  # cmd: PickWizard (Wizard subclass) — click→on_pick bridge
-│   ├── game.py                    # cmd orchestrator: GameController (composition root of cmd layer)
-│   ├── gui_setup.py               # Qt+cmd: SetupTab + PyMOLObjectCombo
-│   ├── gui_game.py                # Qt: GameTab (rolling log/timer/remaining/countdown/win/debrief)
-│   └── data/demos/                # 6 bundled demo PDBs + SOURCES.md (committed)
-├── tests/                         # pure-layer unit tests (5 files; WSL-runnable via sys.modules stub)
-│   ├── __init__.py
-│   ├── test_setup_state.py
-│   ├── test_registry.py
-│   ├── test_generators.py
-│   ├── test_persistence.py
-│   └── test_game_controller.py
-├── smoke/                         # PyMOL smoke + diagnostic scripts (run headlessly via Windows cmd.exe)
-├── .planning/                     # GSD workflow — the source of truth for scope/state
-│   ├── PROJECT.md, ROADMAP.md, STATE.md, REQUIREMENTS.md, config.json
-│   ├── research/                  # ARCHITECTURE.md, STACK.md, PITFALLS.md, FEATURES.md, SUMMARY.md
-│   ├── phases/<NN-name>/         # NN-MM-PLAN.md + NN-MM-SUMMARY.md per plan (11 phases + 4.1)
-│   ├── codebase/                  # ← THIS analysis (ARCHITECTURE.md, STRUCTURE.md)
-│   ├── debug/                     # pending/ + resolved/ debug notes
-│   └── quick/                     # quick-task subdirs (e.g. 001-parallel-execution-...)
-├── Pymol-script-repo/             # GIT-IGNORED reference plugins (learning material)
-├── tmp/                           # GIT-IGNORED (pymol-src mirror, staged Windows copies, exec worktrees)
-├── 3rd_party_lib/                 # GIT-IGNORED vendored libs (if any approved)
-├── setenv.bat                     # Windows cmd.exe: activates conda env chemtools-win10 (does NOT launch PyMOL)
-├── run-conda-pymol.bat             # Windows: runs headless PyMOL with args (C:\src\run-conda-pymol.bat -cq <script>)
-├── wsl2win_cp.sh                  # WSL bash: copies biochemeleon/ → tmp/bioCHEMeleon/ for Windows PyMOL
-├── opencode.json                  # agent command denylist (pip*, apt*, conda*, rm*)
-├── biochemeleon.zip               # GIT-IGNORED staged fallback install artifact
-├── spec.md                        # project spec + constraints
-├── AGENTS.md                      # high-signal agent notes (READ FIRST)
-├── README.md                      # install + usage
-├── DATA_SOURCES.md                # demo PDB source attributions
-├── LICENSE                        # project license
-└── LICENSE_pymol-open-source       # PyMOL open-source license
+bioCHEMeleon/                        # repo root (git repo) — multi-viewer monorepo
+├── AGENTS.md                        # shared/environment agent notes (READ FIRST); points to viewer AGENTS.md
+├── spec.md                          # project spec: gameplay + per-viewer requirements + demo list
+├── pymol/                           # v1 PyMOL 2.5.0 plugin — SHIPPED, FROZEN
+│   ├── AGENTS.md                    # v1 domain rules, commands, pitfall gates
+│   ├── biochemeleon/                # the importable plugin package (12 flat .py modules)
+│   │   ├── __init__.py              # COMPOSITION ROOT: __init_plugin__, PluginDialog, button wiring
+│   │   ├── setup_state.py           # PURE: schema, GAME_REPS, DEMO_MANIFEST, validation
+│   │   ├── registry.py              # PURE: HiderRecord/HiderRegistry + sentinel reconstruction (DI)
+│   │   ├── generators.py            # PURE: hider geometry (sphere/line-stick/cartoon)
+│   │   ├── persistence.py           # PURE: .bcm sidecar + .bcmz archive I/O
+│   │   ├── backup.py                # cmd: snapshot/restore/discard/verify_intact
+│   │   ├── mutation.py              # cmd: insert_hider (pseudoatom in-place) + per-rep dispatch
+│   │   ├── demos.py                 # cmd: demo loader, fetch_pdb, to_windows_path
+│   │   ├── wizard.py                # cmd: PickWizard (click→on_pick bridge)
+│   │   ├── game.py                  # cmd orchestrator: GameController
+│   │   ├── gui_setup.py             # Qt: SetupTab + PyMOLObjectCombo
+│   │   ├── gui_game.py              # Qt: GameTab (log/timer/remaining/countdown/win)
+│   │   └── data/demos/              # 6 bundled demo PDBs + SOURCES.md (CANONICAL demo set)
+│   ├── tests/                       # pure-layer unittest suites (WSL-runnable via sys.modules stubs)
+│   └── smoke/                       # phase*_smoke.py + diag_*.py diagnostics (headless via cmd.exe)
+├── vmd/                             # v2 VMD 1.9.3 tcl script — ACTIVE milestone (v2.0)
+│   ├── AGENTS.md                    # v2 domain rules (Tcl 8.5, PDB-rebuild, pick mechanism, gates)
+│   ├── biochemeleon.tcl             # ENTRY: re-source guard + namespace + source chain + menu registration
+│   ├── pkgIndex.tcl                 # optional packaged-install form (package ifneeded biochemeleon 2.0)
+│   ├── wsl2win_cp.sh                # stages vmd/ → tmp/biochemeleon-vmd/ for headless Windows VMD
+│   ├── lib/                         # 12 modules: 6 PURE + 5 mol bridges + 1 composition root
+│   │   ├── setup_state.tcl          # PURE: GAME_REPS, DEMO_MANIFEST, validate/randomize, hider_count_cap
+│   │   ├── registry.tcl             # PURE: hider registry (index-keyed) + DI sentinel reconstruction
+│   │   ├── generators.tcl           # PURE: sphere_positions, bonded placement, seeded sample
+│   │   ├── game_logic.tcl           # PURE: round state machine (idle→countdown→playing→won), timer, log
+│   │   ├── rep_tiers.tcl            # PURE: N-tier dispatch (IMPLEMENTED_TIERS, TIER_KINDS, resolve_per_rep)
+│   │   ├── splice.tcl               # PURE: residue-splice geometry (perp_vector, assemble_record, atom_record)
+│   │   ├── demos.tcl                # mol: load_demo, fetch_pdb, to_vmd_path, save/load_setup
+│   │   ├── backup.tcl               # mol: snapshot/apply/restore (viewpoint + reps + original PDB path)
+│   │   ├── mutation.tcl             # mol: PDB-rebuild engine (make_*_hiders, write_combined_pdb, mutate)
+│   │   ├── hiders.tcl               # mol: N-tier hidden/found rep pairs, stamp_tier_codes, mark_found_visual
+│   │   ├── pick_bridge.tcl          # mol: pick_event trace → game::on_pick; labelpoll fallback; mouse modes
+│   │   └── game.tcl                 # COMPOSITION ROOT: start_game (4-arg tier dispatch), cleanup, on_pick
+│   ├── gui/                         # Tk+ttk layer (GUI-only; cannot run in -dispdev text)
+│   │   ├── dialog.tcl               # open_dialog (modeless notebook), on_close, on_start
+│   │   ├── setup_tab.tcl            # Setup tab: target/hiders/difficulty groups, collect/apply_state
+│   │   └── game_tab.tcl             # Game tab: start_round, countdown, tick, on_log_line, on_win
+│   ├── smoke/                       # 31 headless end-to-end smokes, phase-prefixed (phase13–17)
+│   ├── tests/                       # 6 pure-layer tcltest suites + 2 GUI verify auto-drivers
+│   └── data/demos/                  # copies of the 6 demo PDBs + SOURCES.md (reused from v1)
+├── chimeraX/                        # EMPTY placeholder (.gitkeep) — future milestone candidate
+├── .planning/                       # GSD workflow — source of truth for scope/state (committed)
+│   ├── PROJECT.md / ROADMAP.md / STATE.md / REQUIREMENTS.md / config.json
+│   ├── research/                    # STACK.md, ARCHITECTURE.md, PITFALLS.md, FEATURES.md, SUMMARY.md
+│   ├── phases/<NN-name>/            # NN-MM-PLAN.md + NN-MM-SUMMARY.md (+ RESEARCH/VERIFICATION/UAT)
+│   ├── milestones/                  # v1-ROADMAP.md, v1-REQUIREMENTS.md, v1-MILESTONE-AUDIT.md
+│   ├── codebase/                    # ← THIS analysis (ARCHITECTURE.md, STRUCTURE.md, etc.)
+│   ├── debug/ + quick/              # debug notes; quick-task rationale
+├── Pymol-script-repo/               # GIT-IGNORED v1 reference plugins
+├── vmd-ref/                         # GIT-IGNORED v2 reference (VMD UG PDF, bundled plugins, core scripts)
+├── 3rd_party_lib/                   # GIT-IGNORED v1 vendored libs
+├── vmd/3rd_party_lib/               # GIT-IGNORED v2 vendored libs (empty; tooltip.tcl NOT needed)
+├── tmp/                             # GIT-IGNORED: biochemeleon-vmd/ staging, smoke logs, probe scripts
+├── cache/                           # GIT-IGNORED
+├── setenv.bat / run-conda-pymol.bat # Windows: conda env activation + headless PyMOL runner (v1)
+├── wsl2win_cp.sh                    # root-level v1 staging script (→ tmp/bioCHEMeleon/)
+├── opencode.json                    # agent command denylist (pip*, apt*, conda*, rm*)
+├── README.md / DATA_SOURCES.md / LICENSE / LICENSE_pymol-open-source
+├── bioCHEMeleon_v1*.zip             # GIT-IGNORED release artifacts
+└── reg-*.log, splice-smoke-run*.log, dbg_pin.tcl   # scratch probes (repo-root litter; not part of the build)
 ```
 
 ## Directory Purposes
 
-**`biochemeleon/`:**
-- Purpose: the importable PyMOL plugin package. Flat — all 12 modules are siblings (no `gui/`+`game/`+`pymol_io/` subpackages; the nested sketch in `.planning/research/ARCHITECTURE.md` was NOT the shipped shape).
-- Contains: 12 `.py` modules + `data/demos/`.
-- Key files: `__init__.py` (entry + GUI composition root), `game.py` (cmd orchestrator), `setup_state.py`+`registry.py`+`generators.py`+`persistence.py` (pure layer), `backup.py`+`mutation.py`+`demos.py`+`wizard.py` (cmd bridges), `gui_setup.py`+`gui_game.py` (Qt).
+**`vmd/` (active milestone):**
+- Purpose: the v2 VMD port — a sourced tcl extension, organized as `lib/` (engine) + `gui/` (Tk) + `smoke/` + `tests/` + `data/`.
+- Contains: 1 entry script + `pkgIndex.tcl`, 12 lib modules, 3 GUI modules, 31 smokes, 8 test files, demo PDBs.
+- Key rule: the entry (`vmd/biochemeleon.tcl`) sources the lib chain in a FIXED dependency order; `registry.tcl` is sourced exactly once.
 
-**`tests/`:**
-- Purpose: WSL-runnable pure-layer unit tests (125 tests). Each file stubs `pymol`/`pymol.Qt` via `sys.modules` before importing `biochemeleon.*` (because `__init__.py` does `from pymol.Qt import ...` at module level).
-- Contains: 5 `test_*.py` files + `__init__.py`.
-- Key files: `test_setup_state.py` (90), `test_registry.py` (54), `test_generators.py` (21), `test_game_controller.py` (18), `test_persistence.py`.
+**`vmd/lib/`:**
+- Purpose: the game engine, split pure/mol by the strict dependency direction (see ARCHITECTURE.md).
+- Purity split within the directory: `setup_state.tcl`, `registry.tcl`, `generators.tcl`, `game_logic.tcl`, `rep_tiers.tcl`, `splice.tcl` are PURE (no `mol`, no `tk`); `demos.tcl`, `backup.tcl`, `mutation.tcl`, `hiders.tcl`, `pick_bridge.tcl` are mol bridges; `game.tcl` is the composition root (sources nothing).
 
-**`smoke/`:**
-- Purpose: PyMOL integration smoke tests + ad-hoc diagnostics. Pure `pymol.cmd.*` (NO Qt) so they run headlessly from WSL via `cmd.exe /c C:\\src\\run-conda-pymol.bat -cq`.
-- Contains: `phase<N>_smoke.py` (per-phase round-trip verification), `diag_*.py` + `verify_*.py` (ad-hoc).
-- Key files: `phase3_smoke.py` through `phase11_smoke.py`, `phase4_1_smoke.py`, `phase10_smoke.py`.
+**`vmd/smoke/`:**
+- Purpose: headless end-to-end verification of mol-coupled behavior (pure tcl cannot prove `mol`/`atomselect` semantics). Run from the staged copy `tmp/biochemeleon-vmd/`.
+- Contains: 31 scripts, phase-prefixed: `phase13_*` (entry bootstrap), `phase14_*` (setup/mol bridges), `phase15_*` (backup/mutation/registry/game), `phase16_*` (core loop: entry/gametab/hiders/onpick/pick/placement/restart), `phase17_*` (tiers: bonded/cartoon/capstone/cpk/dispatch/dynbonds/e2e/licorice/lines/newcartoon/points/residue_dispatch/splice/tiers/trace/tube).
+- Pattern: each smoke sources the lib files in dep order directly (mirrors the entry, NOT the entry itself — avoids GUI/dialog baggage), asserts with PASS/FAIL prints, and must end `Exiting normally` with 0 `ERROR)` / bad-switch lines in the log.
+
+**`vmd/tests/`:**
+- Purpose: pure-layer unit suites + GUI verification drivers.
+- Contains: 6 tcltest suites (`test_setup_state.test` 47, `test_registry.test` 37, `test_generators.test` 26, `test_rep_tiers.test` 49, `test_game_logic.test` 15, `test_splice.test` 31 — 205 tests total) + 2 Tk-guarded auto-drivers (`pick_verify.tcl` — Phase-16 pick checkpoint, superseded by `rep_verify.tcl`; `rep_verify.tcl` — the consolidated 17.1/17.2 GUI rep-verify driver with `pv_round2`/`pv_round3`/`pv_report`/`pv_cleanup` commands).
+
+**`vmd/data/demos/`:**
+- Purpose: committed copies of the 6 demo PDBs (`1k8p` `1xdn` `1znf` `2qbz` `4wb3` `5e54`) + `SOURCES.md`. PDBs are viewer-agnostic; the canonical source set lives in `pymol/biochemeleon/data/demos/`.
+
+**`pymol/` (shipped, frozen):**
+- Purpose: v1 plugin. Flat package `pymol/biochemeleon/` (12 sibling modules — no subpackages), plus `tests/` (5 pure suites, WSL-runnable) and `smoke/` (headless scripts + `diag_*.py` diagnostics).
+- Reference for v2: `pymol/AGENTS.md` documents the original pitfall gates; v2 mirrors its layering 1:1 in tcl.
 
 **`.planning/`:**
-- Purpose: GSD ("get-shit-done") workflow — the source of truth for scope and state. Read before non-trivial work.
-- Contains: `PROJECT.md`/`ROADMAP.md`/`STATE.md`/`REQUIREMENTS.md` (top-level), `research/` (verified PyMOL API behavior + pitfalls), `phases/<NN-name>/` (per-plan PLAN+SUMMARY), `codebase/` (this analysis), `debug/`, `quick/`.
-- Key files: `.planning/research/PITFALLS.md` (load-bearing PyMOL pitfalls), `.planning/research/ARCHITECTURE.md` (composition-root rationale), `.planning/STATE.md` (current position — large file, read first ~200 lines only).
+- Purpose: GSD workflow state — `PROJECT.md`, `ROADMAP.md` (v1 ✅ / v2.0 phases 13-23 🚧 / chimeraX candidate), `STATE.md` (current position: Phase 17.2, 12/12 plans built, GUI checkpoint pending), `REQUIREMENTS.md` (54 v2 reqs), `research/` (verified VMD API behavior + pitfalls), `phases/<NN-name>/` (per-plan PLAN/SUMMARY/RESEARCH/VERIFICATION docs), `milestones/` (v1 archive), `codebase/` (this analysis).
 
-**`biochemeleon/data/demos/`:**
-- Purpose: 6 bundled small demo PDBs (offline demos work without network) + source attributions.
-- Contains: `1znf.pdb`, `1xdn.pdb`, `5e54.pdb`, `1k8p.pdb`, `2qbz.pdb`, `4wb3.pdb` + `SOURCES.md`.
-- Generated: No. Committed: Yes (with sources in `SOURCES.md` + repo-root `DATA_SOURCES.md`).
-
-**`Pymol-script-repo/` (GIT-IGNORED):**
-- Purpose: reference open-source PyMOL plugins for learning how to write plugins (`optimize.py`, `outline.py`, `show_contacts.py`, etc. were consulted for the Qt/plugin patterns).
-- Generated: No. Committed: No (gitignored).
-
-**`tmp/` (GIT-IGNORED):**
-- Purpose: the PyMOL 2.5.0 open-source module mirror (`tmp/pymol-src/modules/pymol/` — readable from any worktree via the main-repo absolute path for API verification), staged Windows-facing copies (`tmp/bioCHEMeleon/`), and parallel-execution worktrees (`tmp/exec-NN-MM`).
-- Generated: Yes (by `wsl2win_cp.sh` / orchestrator worktree protocol). Committed: No.
+**`chimeraX/`:**
+- Purpose: empty placeholder for a future ChimeraX port (per `.planning/ROADMAP.md`). Contains only `.gitkeep`. No research, no code.
 
 ## Key File Locations
 
 **Entry Points:**
-- `biochemeleon/__init__.py:129` — `__init_plugin__(app=None)` (PyMOL plugin loader entry).
-- `biochemeleon/__init__.py:141` — `run_plugin_gui()` (lazy singleton dialog + modeless `show()`).
-- `biochemeleon/__init__.py:160` — `PluginDialog` class (GUI composition root).
+- `vmd/biochemeleon.tcl`: v2 entry — guard, namespace, source chain, `biochemeleon` console proc, `biochemeleon_tk_cb`, `vmd_install_extension ... "Visualization/bioCHEMeleon"`.
+- `vmd/pkgIndex.tcl`: optional `package require` install form.
+- `vmd/gui/dialog.tcl`: `open_dialog` (what the menu item actually calls).
+- `pymol/biochemeleon/__init__.py`: v1 entry (`__init_plugin__`, `run_plugin_gui`, `PluginDialog`).
 
 **Configuration:**
-- `biochemeleon/setup_state.py` — `GAME_REPS` (5 reps), `DEMO_MANIFEST`, `PDB_POOL` (33 RCSB entries), `DEFAULTS` (11-key schema), `SETUP_FORMAT`, `TIER_LABELS`, `STRIP_RESN_MEMPROTMD`.
-- `biochemeleon/backup.py` — `BACKUP_PREFIX = '_bchm_backup'`.
-- `biochemeleon/game.py` — `HINT_RADIUS = 5.0`, `HINT_COLOR = 'orange'`.
-- `opencode.json` — agent command denylist (`pip*`, `apt*`, `conda*`, `rm*`).
-- `.planning/config.json` — GSD config (e.g. `parallelization`).
+- `vmd/lib/setup_state.tcl`: `GAME_REPS` (10 reps), `SETUP_FORMAT`, `DEFAULTS`, `DEMO_MANIFEST` (the schema constants every other module reads).
+- `vmd/lib/rep_tiers.tcl`: `IMPLEMENTED_TIERS` + `TIER_KINDS` + `style_args` (the per-tier generator routing table).
+- `vmd/lib/splice.tcl`: splice constants (`RESID_BASE 9001`, `SPLICE_DISPLACEMENT 1.0`, `MIN_ANCHOR_SEP 5.0`).
+- `vmd/lib/mutation.tcl`: sentinel constants (`HID_RESNAME GAM`, `HID_BETA -999`, `HID_SEGID GAME`).
+- `vmd/lib/generators.tcl`: bonded-placement constants (`D_MIN 1.2`, `D_MAX 1.6`, `MIN_SEP_HIDER 4.0`).
+- `spec.md`, `AGENTS.md` (root), `vmd/AGENTS.md`, `pymol/AGENTS.md`: requirements + constraints.
 
 **Core Logic:**
-- `biochemeleon/game.py:15` — `GameController` (cmd orchestrator; `start`/`on_pick`/`hint`/`reveal_one`/`reveal_all`/`win`/`cleanup`/`abort_on_error`/`import_state`/`reconstruct_registry`).
-- `biochemeleon/registry.py:56` — `HiderRecord`; `:164` — `HiderRegistry`; `:515`/`:537` — `build_found_selection`/`group_found_by_rep`.
-- `biochemeleon/mutation.py` — `insert_hider`/`insert_hider_for_rep`/`insert_line_stick_hider`/`insert_cartoon_hider`/`insert_cartoon_segment_hider`/`fetch_all_hider_ids`/`cleanup_hiders`/`cartoon_hider_resi_range`.
-- `biochemeleon/backup.py` — `snapshot`/`restore`/`discard`/`verify_intact`.
-- `biochemeleon/wizard.py:34` — `PickWizard` (click→`on_pick` bridge).
-- `biochemeleon/generators.py` — `generate_sphere_positions`/`generate_line_stick_offsets`/`pick_terminal_residues`/`pick_segments`/`generate_middle_displacement`.
-
-**GUI:**
-- `biochemeleon/gui_setup.py:67` — `SetupTab`; `:47` — `PyMOLObjectCombo`.
-- `biochemeleon/gui_game.py:18` — `GameTab` (rolling log + timer + remaining + countdown + win + debrief + found-hider management).
-- `biochemeleon/__init__.py:14` — `HELP_HTML` (rich-text help shown in the modal `_show_help` QDialog).
+- `vmd/lib/game.tcl`: the round lifecycle + pick scoring (`start_game`/`cleanup`/`restart`/`on_pick`/`_resolve_pick`).
+- `vmd/lib/mutation.tcl`: the PDB-rebuild engine (the v1→v2 keystone).
+- `vmd/lib/registry.tcl`: hider state (single source of truth).
+- `vmd/lib/pick_bridge.tcl`: click delivery mechanism.
 
 **Testing:**
-- `tests/test_setup_state.py`, `tests/test_registry.py`, `tests/test_generators.py`, `tests/test_persistence.py`, `tests/test_game_controller.py`.
-- `smoke/phase3_smoke.py` … `smoke/phase11_smoke.py`, `smoke/phase4_1_smoke.py`, `smoke/phase10_smoke.py`.
-
-**Build/Run Scripts:**
-- `setenv.bat` — Windows conda env activator (does NOT launch PyMOL).
-- `run-conda-pymol.bat` — Windows headless PyMOL launcher (`-cq` flags).
-- `wsl2win_cp.sh` — WSL→Windows package stager.
+- Pure suites: `vmd/tests/test_*.test` (tcltest; run via `tclsh` in WSL or the staged headless VMD suite driver).
+- Smokes: `vmd/smoke/phase*_smoke.tcl` (headless VMD on the staged copy).
+- GUI drivers: `vmd/tests/rep_verify.tcl` (current), `vmd/tests/pick_verify.tcl` (superseded, unrepaired).
+- v1 tests: `pymol/tests/test_*.py`; v1 smokes: `pymol/smoke/*.py`.
 
 ## Naming Conventions
 
-**Files (modules):**
-- lowercase snake_case `.py`: `setup_state.py`, `gui_setup.py`, `gui_game.py`, `test_setup_state.py`.
-- Pure-layer modules use single nouns/domains (`registry.py`, `generators.py`, `persistence.py`); cmd bridges use the verb/noun of their cmd role (`backup.py`, `mutation.py`, `demos.py`, `wizard.py`); GUI modules are prefixed `gui_` (`gui_setup.py`, `gui_game.py`).
+**Files:**
+- tcl modules: `snake_case.tcl`, one namespace per file, module name == namespace suffix (`vmd/lib/rep_tiers.tcl` → `::biochemeleon::rep_tiers`).
+- v2 smokes: `phase<NN>_<topic>_smoke.tcl` (e.g. `phase17_residue_dispatch_smoke.tcl`); GUI drivers: `<name>_verify.tcl`.
+- v2 unit suites: `test_<module>.test` (tcltest, NOT `.tcl`).
+- v1 modules: `snake_case.py`, flat package; v1 tests: `test_<module>.py`; v1 smokes: `phase<NN>_smoke.py` + `diag_<topic>.py`.
 
-**Package vs display name:**
-- Importable package: lowercase `biochemeleon`. Display name shown to users: mixed-case `bioCHEMeleon` (window title, menu item, help HTML).
+**Namespaces:**
+- Everything v2 lives under `::biochemeleon::*` — one child namespace per module: `::biochemeleon::setup_state`, `::biochemeleon::registry`, `::biochemeleon::generators`, `::biochemeleon::game_logic`, `::biochemeleon::rep_tiers`, `::biochemeleon::splice`, `::biochemeleon::demos`, `::biochemeleon::backup`, `::biochemeleon::mutation`, `::biochemeleon::hiders`, `::biochemeleon::pick_bridge`, `::biochemeleon::game`, `::biochemeleon::setup_tab`, `::biochemeleon::game_tab`; dialog-level procs (`open_dialog`, `on_start`, `on_close`) sit directly in `::biochemeleon`.
+- Global user command: `biochemeleon` (unqualified, defined by the entry).
+- Every namespace declares `namespace export <public procs>` — the export list documents the public contract (callers use fully-qualified names; `namespace import` is not used in production code).
 
-**Directories:**
-- lowercase: `biochemeleon/`, `tests/`, `smoke/`, `.planning/`, `data/demos/`.
-- Phase dirs use `NN-name-with-hyphens`: `.planning/phases/03-mutation-safety-hider-registry-foundation/`.
+**Procs:** `snake_case`; private helpers prefixed `_` (`_resolve_pick`, `_on_event`, `_hider_record`, `_cross`); GUI builders `build_*`; widget handlers `do_*`/`on_*`.
 
-**Classes:**
-- PascalCase: `PluginDialog`, `SetupTab`, `GameTab`, `PyMOLObjectCombo`, `GameController`, `HiderRecord`, `HiderRegistry`, `PickWizard`, `ReconcileMismatches`.
-
-**Functions/methods:**
-- snake_case: `__init_plugin__`, `run_plugin_gui`, `start`, `on_pick`, `mark_found`, `reconstruct_from_sentinels`, `build_bcm_dict`, `to_windows_path`, `insert_hider_for_rep`.
-- Private/internal prefixed `_`: `_on_start`, `_prepare_and_start`, `_continue_after_large_demo_fetch`, `_resolve_large_demo`, `_mark_found`, `_show_help`, `_remaining`.
-
-**Constants:**
-- UPPER_SNAKE: `GAME_REPS`, `DEMO_MANIFEST`, `PDB_POOL`, `DEFAULTS`, `SETUP_FORMAT`, `BACKUP_PREFIX`, `HIDER_STATUS_HIDDEN`, `HIDER_STATUS_FOUND`, `HINT_RADIUS`, `HINT_COLOR`, `HELP_HTML`, `TIER_LABELS`, `STRIP_RESN_MEMPROTMD`.
-
-**Tests:**
-- `tests/test_<module>.py` mirrors the module under test (pure layer only): `test_setup_state`, `test_registry`, `test_generators`, `test_persistence`, `test_game_controller`.
-- Test classes: `Test<Area>` (e.g. `TestHiderCountCap`, `TestGameControllerHintReveal`).
-
-**Smoke scripts:**
-- `smoke/phase<N>_smoke.py` — per-phase integration smoke (e.g. `phase3_smoke.py`, `phase4_1_smoke.py`, `phase10_smoke.py`).
-- `smoke/diag_*.py` + `smoke/verify_*.py` — ad-hoc diagnostics/verifications.
+**Constants:** `UPPER_SNAKE` namespace variables, one `variable` declaration per line (the multi-name `variable a b` form is a scalar set, not two declarations — the 14-04 lesson).
 
 ## Where to Add New Code
 
-**New pure logic (no pymol, no Qt — WSL-unit-testable):**
-- Add to: `biochemeleon/setup_state.py` (config schema/validation/formatting), `biochemeleon/registry.py` (registry data model), `biochemeleon/generators.py` (geometry/selection), or `biochemeleon/persistence.py` (sidecar/archive).
-- Tests: `tests/test_<module>.py` (mirror the module; use the `sys.modules` pymol/pymol.Qt stub pattern from `tests/test_registry.py`).
-- Constraint: NO `from pymol import cmd` and NO `from pymol.Qt import` in these modules. Keep them WSL-unit-testable.
+**New pure module (v2):**
+- Implementation: `vmd/lib/<name>.tcl` — stdlib tcl 8.5 ONLY (no `mol`, no `tk`, no 8.6 idioms), `namespace eval ::biochemeleon::<name>`, `namespace export` the contract.
+- Wire-up: add ONE `source [file join $_dir lib <name>.tcl]` line in `vmd/biochemeleon.tcl` in the PURE block (before the mol bridges) if the mol layer must call it; state the dependency in the module header comment.
+- Tests: `vmd/tests/test_<name>.test` (tcltest; source under `[file join [pwd] vmd lib <name>.tcl]` — under `vmd -e`, `[info script]` is EMPTY).
 
-**New cmd-coupled bridge logic (calls `cmd.*`, standalone):**
-- Add to: `biochemeleon/backup.py` (snapshot/restore lifecycle), `biochemeleon/mutation.py` (insertion/cleanup), `biochemeleon/demos.py` (demo loading + path utilities), or `biochemeleon/wizard.py` (click handling).
-- Constraint: do NOT import sibling bridges (keep them standalone). A bridge MAY import from the pure layer (`from .setup_state import ...`) — bridge→pure is allowed; bridge→bridge is not.
-- Verify via: a new section in `smoke/phase<N>_smoke.py` (pure `pymol.cmd.*`, headless-runnable) OR a new `smoke/diag_*.py`.
+**New representation tier (v2):**
+- Tier table: add the rep to `IMPLEMENTED_TIERS` + `TIER_KINDS` in `vmd/lib/rep_tiers.tcl` and to `style_args` (explicit cutoff args if any).
+- Generator: a `make_<kind>_hiders`-style proc in `vmd/lib/mutation.tcl` (or extend the existing one); pure geometry goes in `vmd/lib/generators.tcl`/`splice.tcl`.
+- Dispatch: extend the per-tier loop in `vmd/lib/game.tcl::start_game` (steps 4–14) if introducing a NEW kind; new tiers of an EXISTING kind need no game.tcl change (the tables drive it).
+- Verify: tier smoke `vmd/smoke/phase<NN>_<rep>_smoke.tcl` + suite updates in `vmd/tests/test_rep_tiers.test` (re-probe the pinned PRNG seeds — any domain widening changes every draw).
 
-**New orchestrator logic (wires bridges + registry):**
-- Add to: `biochemeleon/game.py` (`GameController` methods). Use DI to keep the registry pure (inject cmd-coupled callables as parameters, like `reconstruct_from_sentinels(iterate_fn)`).
-- Tests: `tests/test_game_controller.py` (construct `GameController` WITHOUT calling `start()`; manually populate the registry; mock `cmd` + callbacks).
+**New GUI tab/panel (v2):**
+- Implementation: `vmd/gui/<name>_tab.tcl`, namespace `::biochemeleon::<name>_tab`, `build {parent}` entry proc.
+- Wire-up: `source` it at the TOP LEVEL of `vmd/gui/dialog.tcl` (NEVER inside a proc body — `[info script]` is empty at call time) and add the tab to the notebook in `open_dialog`.
 
-**New GUI (Qt widgets / button wiring):**
-- New tab widget: a new `gui_<area>.py` module exposing a `QWidget` subclass; lazy-import it inside `PluginDialog.__init__` (mirrors `from .gui_setup import SetupTab` at `__init__.py:177`).
-- New button on an existing tab: add the `QPushButton` in `gui_setup.py`/`gui_game.py` and wire `btn.clicked.connect(self._on_<verb>)` in `PluginDialog.__init__` (mirrors `self.setup_tab.start_btn.clicked.connect(self._on_start)` at `__init__.py:201`).
-- Constraint: Qt imports via `from pymol.Qt import QtWidgets` ONLY (NEVER raw `PyQt5`). The main `PluginDialog` stays modeless (`dialog.show()`, NEVER `.exec_()`). Modal `.exec_()` is allowed ONLY on child `QMessageBox`/`QFileDialog`/`QDialog`.
-- Verify via: a `smoke/phase<N>_smoke.py` section exercising the underlying cmd path (Qt itself needs a human-verify checkpoint in a real Windows PyMOL session).
+**New mol-bridge capability (v2):**
+- Implementation: extend the owning bridge (`demos.tcl` for loading/paths, `backup.tcl` for scene state, `mutation.tcl` for atom/PDB changes, `hiders.tcl` for reps/visuals, `pick_bridge.tcl` for input) — do NOT create cross-bridge imports; if two bridges need shared logic, it belongs in the pure layer or `game.tcl`.
 
-**New utilities / shared helpers:**
-- Pure helpers → the relevant pure module (`setup_state.py` / `registry.py`).
-- cmd helpers → the relevant bridge (`backup.py` / `mutation.py` / `demos.py`).
-- Cross-cutting constants → `setup_state.py` (the pure layer is the canonical home for `GAME_REPS`/`DEMO_MANIFEST` so pure functions can reference them without importing cmd-coupled modules).
+**New smoke (v2):**
+- Location: `vmd/smoke/phase<NN>_<topic>_smoke.tcl`; copy the newest smoke's harness structure (source chain in dep order, PASS/FAIL counters, `Exiting normally`). Run it from the staged copy: `bash vmd/wsl2win_cp.sh` then `bash -ic "cd tmp/biochemeleon-vmd && vmd -dispdev text -e vmd/smoke/<file> -eofexit < /dev/null"`.
 
-**New demo PDBs:**
-- Bundled (small): add the `.pdb` to `biochemeleon/data/demos/` + an entry in `DEMO_MANIFEST` (`setup_state.py`) + a citation in `biochemeleon/data/demos/SOURCES.md` and repo-root `DATA_SOURCES.md`.
-- Fetched (large, MemProtMD/SASBDB): add a manifest entry with `source` field; cache is gitignored (fetched on demand by `demos.load_demo` → `_resolve_large_demo`).
+**New demo PDB:**
+- Canonical: `pymol/biochemeleon/data/demos/` + attribution in `pymol/biochemeleon/data/demos/SOURCES.md` (human-approved sources only); copy into `vmd/data/demos/` and add the entry to `DEMO_MANIFEST` in `vmd/lib/setup_state.tcl` (and v1's `setup_state.py` if shipped in both).
+
+**Utilities:**
+- Shared pure helpers (math, list/dict): the owning pure module (`generators.tcl` geometry, `splice.tcl` vector math, `setup_state.tcl` list sampling) — keep private helpers `_`-prefixed and unexported.
+
+**v1 additions:** only if a shipped-v1 bug warrants a fix — the milestone is frozen; `pymol/AGENTS.md` gates apply.
 
 ## Special Directories
 
-**`biochemeleon/data/demos/`:**
-- Purpose: bundled small demo PDBs + `SOURCES.md` attributions.
-- Generated: No. Committed: Yes.
+**`tmp/`:**
+- Purpose: headless-run staging and artifacts — `tmp/biochemeleon-vmd/` (the staged `vmd/` copy that Windows VMD runs from; the ONLY cwd headless smokes/suites run from), smoke logs, probe scripts, v1 staging (`tmp/bioCHEMeleon/`), `tmp/pymol-src/` (v1 API reference mirror).
+- Generated: Yes (rebuild with `bash vmd/wsl2win_cp.sh` / `bash wsl2win_cp.sh`). Committed: NO (git-ignored).
 
-**`.planning/research/`:**
-- Purpose: verified PyMOL API behavior + the pitfalls behind the grep gates (read before non-trivial PyMOL work).
-- Generated: No (research artifacts). Committed: Yes.
+**`vmd-ref/`:**
+- Purpose: VMD 1.9.3 reference material — `ug.pdf` (User's Guide), `plugins/` (5 curated bundled tcl plugins: clonerep, ramaplot, autoionize, viewmaster, mergestructs — the extension-pattern references), `scripts/` (17 VMD core tcl scripts), `tooltip/` (tklib tooltip, license reference only). Use THESE paths in plans, never `/mnt/c/Program Files (x86)/...`.
+- Generated: No. Committed: NO (git-ignored; UIUC license).
 
-**`.planning/phases/<NN-name>/`:**
-- Purpose: per-plan `NN-MM-PLAN.md` + `NN-MM-SUMMARY.md` (+ optional `RESEARCH.md`/`VERIFICATION.md`/`UAT.md`/`AUDIT.md`).
-- Generated: Yes (by `/gsd-plan-phase` and `/gsd-execute-phase`). Committed: Yes (`commit_docs: true`).
+**`vmd/3rd_party_lib/` and `3rd_party_lib/`:**
+- Purpose: vendored external libs if ever user-approved (v2 currently needs NONE — tooltip.tcl is not needed).
+- Generated: No. Committed: NO (git-ignored); any vendored lib must ship its license terms.
 
-**`.planning/debug/`:**
-- Purpose: `pending/` + `resolved/` debug notes (e.g. `phase11-cartoon-ribbon-hider-keyerror.md`).
-- Generated: Yes (during debugging). Committed: Yes.
+**`Pymol-script-repo/`:**
+- Purpose: v1 learning reference (community plugins). Generated: No. Committed: NO.
 
-**`.planning/quick/`:**
-- Purpose: quick-task subdirs (`001-parallel-execution-worktree-protocol/`, `002-fix-rg-to-grep-in-agents-md/`).
-- Generated: Yes (by `/gsd-quick`). Committed: Yes.
+**`pymol/smoke/__pycache__/`, `pymol/tests/__pycache__/`:**
+- Python bytecode. Generated: Yes. Committed: NO (`*.pyc` ignored).
 
-**`tmp/` (GIT-IGNORED):**
-- Purpose: `pymol-src/` mirror (API verification), staged Windows copies (`bioCHEMeleon/`), parallel-exec worktrees (`exec-NN-MM`).
-- Generated: Yes. Committed: No.
-
-**`Pymol-script-repo/` (GIT-IGNORED):**
-- Purpose: reference plugins consulted for Qt/plugin patterns.
-- Generated: No. Committed: No.
-
-**`3rd_party_lib/` (GIT-IGNORED):**
-- Purpose: vendored approved libs (with license noted), if any non-PyMOL dependency is approved.
-- Generated: No. Committed: No.
+**Repo-root scratch (`reg-*.log`, `splice-smoke-run*.log`, `dbg_pin.tcl`, `bioCHEMeleon_v1*.zip`):**
+- Probe/debug litter from 17.2 sessions and release artifacts; NOT part of any build or test path. The zips are git-ignored; the logs/dbg_pin.tcl are currently untracked scratch — do not import from them.
 
 ---
 
-*Structure analysis: 2026-08-18*
+*Structure analysis: 2026-09-08*
