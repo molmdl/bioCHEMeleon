@@ -188,7 +188,7 @@ Plans:
 **Goal**: VMD's material system can be used as a blending dimension for hiders, beyond reps — the spec's explicit exploration target.
 **Depends on**: Phase 17.2 (reps solid before materials layered on)
 **Requirements**: MATERIAL-01, MATERIAL-02
-**Plans**: TBD
+**Plans**: 15 plans
 
 **Success Criteria** (what must be TRUE):
 1. Hiders can be rendered with VMD materials (Glass/Translucent/custom GameBlend) via `mol modmaterial`, creating a material-based blend visually distinct from rep-based blending.
@@ -196,7 +196,21 @@ Plans:
 3. A game round with material-blend hiders is playable end-to-end (generate → click-to-find → win).
 
 Plans:
-- [ ] 18-01: TBD
+- [ ] 18-01-PLAN.md — Setup-state schema: curated GAME_MATERIALS + DEFAULT_MATERIAL + DEFAULTS keys + randomize (+suite)
+- [ ] 18-02-PLAN.md — hiders.tcl mat_specs: per-pair mol modmaterial + P-1 material read-back + tier_materials
+- [ ] 18-03-PLAN.md — validate_state material_blending/per_mat cleaning (silent-garbage defense, +suite)
+- [ ] 18-04-PLAN.md — materials.tcl: GameBlend recipe (ensure_gameblend, single owner) + pure resolve_per_mat (+suite)
+- [ ] 18-05-PLAN.md — demos.tcl per_mat save/load + old-.bcm backward-compat + phase14 round-trip regression
+- [ ] 18-06-PLAN.md — setup_tab widgets: blending toggle + per-rep material menubuttons + grey-out coupling
+- [ ] 18-07-PLAN.md — game.tcl 5-arg seam: resolve + warn-degrade + ensure + mat_specs + 5-key game_state + restart (+onpick regression)
+- [ ] 18-08-PLAN.md — setup_tab collect/apply per_mat wiring + save-diff reporter
+- [ ] 18-09-PLAN.md — Entry source line + phase18 core materials smoke (GameBlend VDW round + Tachyon token proof + blending-off)
+- [ ] 18-10-PLAN.md — dialog.tcl on_start 5-arg threading + toggle gating
+- [ ] 18-11-PLAN.md — Multi-material coexistence + residue-class materials smoke (distinct Opacity tokens, Stride-noise rules)
+- [ ] 18-12-PLAN.md — Capstone extension: blending + blending-off + lock-scene blending rounds
+- [ ] 18-13-PLAN.md — rep_verify driver pv_round4 + material logging (GATED on 17.2-12 close)
+- [ ] 18-14-PLAN.md — FULL-SUITE green gate (7 suites + 33 smokes, sequential)
+- [ ] 18-15-PLAN.md — GUI human-verify checkpoint: materials round + pick-through/transmode/pedagogy questions (LAST, autonomous:false)
 
 ### Phase 19: In-game Actions
 
