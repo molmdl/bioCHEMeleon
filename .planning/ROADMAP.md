@@ -215,9 +215,9 @@ Plans:
 ### Phase 19: In-game Actions
 
 **Goal**: The player has the full set of in-game actions — hint, reveal, found-management, restart, cleanup — all acting on the proven core loop.
-**Depends on**: Phase 16 (core loop), Phase 17.2 (generators)
+**Depends on**: Phase 16 (core loop), Phase 17.2 (generators) — executes after Phase 18 (plans target the post-18 5-arg/5-key seam)
 **Requirements**: GAME-05, GAME-06, GAME-07, GAME-08, GAME-10, BTN-06, DIFF-01, DIFF-04
-**Plans**: TBD
+**Plans**: 16 plans (research: 19-RESEARCH-mechanisms/integration/gui)
 
 **Success Criteria** (what must be TRUE):
 1. Hint recolors the N atoms/residues around a hider (via `atomselect "within 5 of index N"` + an added rep) without revealing the hider itself.
@@ -227,7 +227,24 @@ Plans:
 5. The reveal counter tracks total reveals used across the game.
 
 Plans:
-- [ ] 19-01: TBD
+- [ ] 19-01-PLAN.md — Registry enumeration seam: hidden_indices/found_indices (TDD) [GAME-06/08 pool+counts]
+- [ ] 19-02-PLAN.md — game_logic reveal/hint counters + log kinds revealed/revealed_all/hint (TDD) [DIFF-01, DIFF-02 fwd-compat]
+- [ ] 19-03-PLAN.md — GAME_FOUND_COLORS palette constants in setup_state [DIFF-04 lib half]
+- [ ] 19-04-PLAN.md — hiders bridge: set_found_color/set_found_visible/add_hint_rep + found_colorid + R7 probe [GAME-08/05 lib]
+- [ ] 19-05-PLAN.md — game.tcl hint/reveal_one/reveal_all + _score_found/_win_flow shared tail + state gate [GAME-05/06/07]
+- [ ] 19-06-PLAN.md — 17.1-14 guard fix: mol off the restored original + restart smoke stage-C adaptation
+- [ ] 19-08-PLAN.md — Game-tab action buttons + Reveals label + reset_view_state/end_round + desync probe-first [GAME-05/06/07/10, BTN-06, DIFF-01]
+- [ ] 19-09-PLAN.md — Found-hider dropdown + GAME_FOUND_COLORS palette menubutton [GAME-08, DIFF-04]
+- [ ] 19-10-PLAN.md — Dialog handlers on_hint/on_reveal_*/on_restart/on_cleanup/on_found_* + WM_DELETE cleanup adoption
+- [ ] 19-11-PLAN.md — phase16 gametab/entry load-gate extensions (new procs/widgets/handlers)
+- [ ] 19-12-PLAN.md — phase19_actions_smoke.tcl permanent headless action proof (PASS=1 x3)
+- [ ] 19-13-PLAN.md — Setup-Reset expectation-mismatch hint label (16-12 defect, minimal)
+- [ ] 19-14-PLAN.md — rep_verify.tcl pv_round5 actions round (HARD-GATED on 18-13 landing)
+- [ ] 19-15-PLAN.md — FULL-SUITE green gate, counts derived at execution time (PHASE HEADLESS-GREEN)
+- [ ] 19-16-PLAN.md — actions_verify.tcl GUI session driver (pv_a_* family, 3-paste budget)
+- [ ] 19-17-PLAN.md — GUI human-verify checkpoint (G1-G12) + doc close-out (LAST, autonomous:false)
+
+*(No 19-07 — scope folded into 19-04/19-05 during planning; numbering skips 06→08 by design.)*
 
 ### Phase 20: Persistence (Combined-PDB + .bcm JSON)
 
@@ -306,7 +323,7 @@ Plans:
 | 17.1. Rep Setup Infrastructure & Simple Rep Generators | v2.0 | 14/14 | ✓ Complete | 2026-09-05 |
 | 17.2. Cartoon/NewCartoon Generators | v2.0 | 0/12 | Planned | - |
 | 18. Materials Exploration | v2.0 | 0/TBD | Not started | - |
-| 19. In-game Actions | v2.0 | 0/TBD | Not started | - |
+| 19. In-game Actions | v2.0 | 0/16 | Planned | - |
 | 20. Persistence | v2.0 | 0/TBD | Not started | - |
 | 21. Large Fetched Demos & Attribution | v2.0 | 0/TBD | Not started | - |
 | 22. Polish, Help & Endgame | v2.0 | 0/TBD | Not started | - |
