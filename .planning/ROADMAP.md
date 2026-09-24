@@ -267,16 +267,31 @@ Plans:
 **Goal**: Large membrane-protein and glycoprotein demos can be fetched, processed, and loaded with full attribution — reusing v1's human-approved citations.
 **Depends on**: Phase 17.2 (generators), Phase 20 (persistence to test against)
 **Requirements**: DEMO-02, DEMO-03, DEMO-04, DIFF-05
-**Plans**: TBD
+**Plans**: 10 plans (7 waves; research: 21-RESEARCH-{v1-carryover,vmd-fetch-mechanics,sources-and-integration}.md — all probe-verified)
+
+**Planning decisions (2026-09-25):**
+- Cache location = `vmd/data/demos/cache/` (the faithful script-relative reading of SC1's `data/demos/cache/`; the viewer tree has no root `data/`).
+- EVIDENCE-BACKED DEVIATION on SC1's "compress": VMD 1.9.3 Windows cannot read gzipped PDBs (probeB/probeB2) — strip-then-cache plain PDB (total ~4 MB, gitignored); deviation recorded in the manifest comment + DATA_SOURCES.md, approved at the 21-10 checkpoint.
+- Transport = `exec curl` (System32 curl 8.13.0; Tcl http has no tls; `mol pdbload` dead upstream) — blocking for smokes, `open |curl` + `fileevent` for the GUI.
+- Network-flake-proof headless gate: deterministic fixtures + bogus-host error paths + SKIPPED-NO-NETWORK verdicts (never hard FAIL on ENOENT/6/7/28).
 
 **Success Criteria** (what must be TRUE):
-1. The large demos (1GZM, 3GP6 from MemProtMD) fetch on demand, strip water/salt, compress, and cache to `data/demos/cache/`.
+1. The large demos (1GZM, 3GP6 from MemProtMD) fetch on demand, strip water/salt, compress, and cache to `data/demos/cache/`. *(compress = the plain-PDB deviation above)*
 2. The glycoprotein demo (SASBDB) fetches on demand with its source and IDs cited in documentation.
 3. Difficulty-tiered demo metadata (Easy/Hard/Challenge/Very challenging) is surfaced in the demo sub-menu.
 4. Large-molecule performance is handled (strip water, narrow selects, `after 0` chunking for >200ms work, warn the user before Start on molecules >~20k atoms, cap hider count as a function of atom count).
 
 Plans:
-- [ ] 21-01: TBD
+- [ ] 21-01-PLAN.md — Pure manifest + tiers: 3 fetched entries (fetch schema), TIER_LABELS, bundled_demo_ids (TDD)
+- [ ] 21-02-PLAN.md — fetch.tcl transport: curl argv, integrity gate, error taxonomy, blocking get (TDD + live probe)
+- [ ] 21-03-PLAN.md — fetch.tcl cache layout + atomic promotion + non-blocking download engine (TDD + async smoke)
+- [ ] 21-04-PLAN.md — DATA_SOURCES.md: 1GZM heading fix + v2 processing note (approval routed to 21-10)
+- [ ] 21-05-PLAN.md — demos.tcl fetched bridge: load_demo branch, load_cached_demo, strip_and_cache, fetch_and_cache + smoke
+- [ ] 21-06-PLAN.md — setup_tab tier-cascade demo menu + fetched-aware select_demo + info label + load-gate smoke
+- [ ] 21-07-PLAN.md — fetch_dialog.tcl async orchestration + progress UI + cancel + entry wiring + smoke
+- [ ] 21-08-PLAN.md — dialog.tcl on_start continuation split + >20k warn + re-entrancy + regression sweep
+- [ ] 21-09-PLAN.md — Capstone: metadata + pipeline + large-demo game rounds (F7 alt-conf check) + FULL-SUITE gate
+- [ ] 21-10-PLAN.md — ONE consolidated checkpoint: demo_verify.tcl driver + GUI verify + 4 approvals (autonomous: false)
 
 ### Phase 22: Polish, Help & Endgame
 
@@ -325,7 +340,7 @@ Plans:
 | 18. Materials Exploration | v2.0 | 0/TBD | Not started | - |
 | 19. In-game Actions | v2.0 | 0/16 | Planned | - |
 | 20. Persistence | v2.0 | 0/TBD | Not started | - |
-| 21. Large Fetched Demos & Attribution | v2.0 | 0/TBD | Not started | - |
+| 21. Large Fetched Demos & Attribution | v2.0 | 0/10 | Planned | - |
 | 22. Polish, Help & Endgame | v2.0 | 0/TBD | Not started | - |
 | 23. Documentation (Multi-viewer READMEs) | v2.0 | 0/TBD | Not started | - |
 
