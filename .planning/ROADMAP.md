@@ -251,7 +251,7 @@ Plans:
 **Goal**: Game state can be saved to a shareable file and reloaded, preserving hiders, registry, timer, and setup — `save_state` alone is insufficient (drops beta/user/segid).
 **Depends on**: Phase 16-19 (a full game is playable before saving is meaningful)
 **Requirements**: GAME-09, GAME-04, BTN-05
-**Plans**: 14 plans (7 waves; research: 20-RESEARCH-{v1-carryover-format,vmd-mechanics,integration-gui}.md — probe-verified + seam-pinned)
+**Plans**: 14 plans (8 waves; research: 20-RESEARCH-{v1-carryover-format,vmd-mechanics,integration-gui}.md — probe-verified + seam-pinned)
 
 **Planning decisions (2026-09-26):**
 - resid-block restore = re-derive from the reloaded CA resids (multi-atom GAM check disambiguates the shared 9001), sidecar block as fallback; the block is still emitted (lossless + fallback data).
