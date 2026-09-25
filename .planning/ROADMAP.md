@@ -251,7 +251,15 @@ Plans:
 **Goal**: Game state can be saved to a shareable file and reloaded, preserving hiders, registry, timer, and setup — `save_state` alone is insufficient (drops beta/user/segid).
 **Depends on**: Phase 16-19 (a full game is playable before saving is meaningful)
 **Requirements**: GAME-09, GAME-04, BTN-05
-**Plans**: TBD
+**Plans**: 14 plans (7 waves; research: 20-RESEARCH-{v1-carryover-format,vmd-mechanics,integration-gui}.md — probe-verified + seam-pinned)
+
+**Planning decisions (2026-09-26):**
+- resid-block restore = re-derive from the reloaded CA resids (multi-atom GAM check disambiguates the shared 9001), sidecar block as fallback; the block is still emitted (lossless + fallback data).
+- Save is blocked in the `won` state with a clear message (divergence from v1, pinned); an imported `won` state applies as-is — no auto-fired win.
+- Imported-game Cleanup/Restart = "restore to imported initial state" (documented divergence from v1's hider removal).
+- The "Saved checkpoint to ..." line flows through the model via a new `info` log kind in game_logic (log_append whitelist extension).
+- Zip = System32 tar.exe `--format zip` (NEVER `tar -a`), PowerShell fallback, pure-Tcl STORE documented last resort — approval recorded in 20-04 user_setup + confirmed at the 20-14 checkpoint.
+- Beta -999 writepdb overflow (probe-discovered defect: 79-char lines, element X / segid GAM on reload) fixed by pre-clamping to -99.9 → writepdb → restore -999 (20-04).
 
 **Success Criteria** (what must be TRUE):
 1. Save writes a combined-PDB (real + hider atoms via `atomselect writepdb`) + a hand-rolled `.bcm` JSON sidecar (registry, timer, found-status, setup, reveal counts, original PDB path), zipped into a `.bcmz`.
@@ -260,7 +268,20 @@ Plans:
 4. The JSON is hand-rolled (no `json` package in VMD 1.9.3 — emit/parse with tcl 8.5 `dict`) and round-trips correctly (save → load preserves all fields).
 
 Plans:
-- [ ] 20-01: TBD
+- [ ] 20-01-PLAN.md — bcm_json.tcl: probe-verified JSON codec lift + LS type + suite (TDD)
+- [ ] 20-02-PLAN.md — persistence.tcl: v2 sidecar schema build/parse/convert/IO + suite (TDD)
+- [ ] 20-03-PLAN.md — registry.tcl: reconcile_with_bcm + bulk snapshot accessors + suite (TDD)
+- [ ] 20-04-PLAN.md — persistence_mol.tcl: beta-clamp write_game_pdb + tar .bcmz write/read gates
+- [ ] 20-05-PLAN.md — game.tcl save_game orchestration (drift-recheck + probe)
+- [ ] 20-06-PLAN.md — game.tcl load_game + _replay_bcm + restart-on-imported (drift-recheck + probe)
+- [ ] 20-07-PLAN.md — dialog _prepare_setup extraction + on_export_game + Setup-tab button
+- [ ] 20-08-PLAN.md — game_tab resume_elapsed seam + Save/Import begin-row + gametab smoke ext
+- [ ] 20-09-PLAN.md — on_save_game/on_import_game handlers + game_logic info log kind
+- [ ] 20-10-PLAN.md — entry wiring (3 source lines) + entry/gametab load-gate refresh
+- [ ] 20-11-PLAN.md — phase20_persistence_smoke.tcl full round-trip proof (PASS=1 x3)
+- [ ] 20-12-PLAN.md — FULL-SUITE green gate, counts derived at execution (HEADLESS-GREEN)
+- [ ] 20-13-PLAN.md — persistence_verify.tcl GUI session driver (pv_p_* family, 3-paste budget)
+- [ ] 20-14-PLAN.md — consolidated human-verify checkpoint (G1-G10) + doc close-out (LAST, autonomous:false)
 
 ### Phase 21: Large Fetched Demos & Attribution
 
